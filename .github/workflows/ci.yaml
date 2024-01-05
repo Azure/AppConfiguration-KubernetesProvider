@@ -21,9 +21,9 @@ jobs:
     - name: Run Test
       run:  |
         echo 'Install evntest tool'
-        GOBIN=${{github.workspace}} go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+        GOBIN=$GITHUB_WORKSPACE go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
         echo 'List files in GOBIN'
         ls -l $GOBIN
         echo 'Run tests'
-        KUBEBUILDER_ASSETS=$($GOBIN/setup-envtest use 1.19 -p path) CGO_ENABLED=0 go test ./... -coverprofile cover.out
-        ls -l $KUBEBUILDER_ASSETS  
+        KUBEBUILDER_ASSETS=$($GITHUB_WORKSPACE/setup-envtest use 1.19 -p path) CGO_ENABLED=0 go test ./... -coverprofile cover.out
+        ls -l $KUBEBUILDER_ASSETS       

@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "az-appconfig-k8s-provider.labels" . | nindent 4 }}
+  name: {{ include "az-appconfig-k8s-provider.fullname" . }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "az-appconfig-k8s-provider.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "az-appconfig-k8s-provider.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - args:
+        - --leader-elect
+        {{- if .Values.logVerbosity }}
+        - -v={{ .Values.logVerbosity }}
+        {{- end }}
+        command:
+        - /manager
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        {{- if .Values.env.azureClientId }}
+        - name: AZURE_CLIENT_ID
+          value: {{ .Values.env.azureClientId }}
+        {{- end }}
+        {{- if .Values.env.azureTenantId }}
+        - name: AZURE_TENANT_ID
+          value: {{ .Values.env.azureTenantId }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        volumeMounts:
+        - mountPath: /controller_manager_config.yaml
+          name: manager-config
+          subPath: controller_manager_config.yaml
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      serviceAccountName:  {{ include "az-appconfig-k8s-provider.serviceAccountName" . }} # appconfig-controller-manager
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - configMap:
+          name: {{ .Values.configMap.name }}
+        name: manager-config

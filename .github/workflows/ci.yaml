@@ -22,5 +22,7 @@ jobs:
       run:  |
         echo 'Install evntest tool'
         go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+        echo 'Show intalled binaries'
+        ls -l $GOPATH/bin
         echo 'Run tests'
-        KUBEBUILDER_ASSETS=$(./setup-envtest use 1.19 -p path) CGO_ENABLED=0 go test ./... -coverprofile cover.out
+        KUBEBUILDER_ASSETS=$($GOPATH/bin/setup-envtest use 1.19 -p path) CGO_ENABLED=0 go test ./... -coverprofile cover.out

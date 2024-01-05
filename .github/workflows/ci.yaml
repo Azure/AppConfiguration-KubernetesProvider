@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       outputDirectory: ${{ github.workspace }}/out
-      envtest: ${{ github.workspace }}/setup-envtest
 
     steps:
     - uses: actions/checkout@v3
@@ -24,6 +23,7 @@ jobs:
     - name: Run Test
       run:  |
         echo 'Install evntest tool'
-        GOBIN=${{ env.outputDirectory }} go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+        GOBIN=${{ github.workspace }} go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
         echo 'Run tests'
-        KUBEBUILDER_ASSETS=$(${{ env.envtest }} use 1.19 -p path) CGO_ENABLED=0 go test ./... -coverprofile cover.out
+        echo $ENVTEST
+        KUBEBUILDER_ASSETS=$($ENVTEST use 1.19 -p path) CGO_ENABLED=0 go test ./... -coverprofile cover.out

@@ -1,0 +1,67 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: appconfig-manager-role
+rules:
+- apiGroups:
+  - azconfig.io
+  resources:
+  - azureappconfigurationproviders
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - azconfig.io
+  resources:
+  - azureappconfigurationproviders/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - azconfig.io
+  resources:
+  - azureappconfigurationproviders/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: appconfig-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: appconfig-manager-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "az-appconfig-k8s-provider.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}

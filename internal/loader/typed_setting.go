@@ -15,23 +15,23 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func createTypedSettings(settings map[string]*string, isJsonContentTypeMap map[string]bool, dataOptions *acpv1.ConfigMapDataOptions) (map[string]string, error) {
-	if settings == nil {
+func createTypedSettings(unformattedSettings *UnformattedSettings, dataOptions *acpv1.ConfigMapDataOptions) (map[string]string, error) {
+	if unformattedSettings.KeyValueSettings == nil {
 		return nil, errors.New("settings cannot be nil")
 	}
 
-	if isJsonContentTypeMap == nil {
+	if unformattedSettings.IsJsonContentTypeMap == nil {
 		return nil, errors.New("isJsonContentTypeMap cannot be nil")
 	}
 
 	result := make(map[string]string)
-	if len(settings) == 0 {
+	if len(unformattedSettings.KeyValueSettings) == 0 {
 		return result, nil
 	}
 
 	if dataOptions == nil || dataOptions.Type == acpv1.Default || dataOptions.Type == acpv1.Properties {
 		tmpSettings := make(map[string]string)
-		for k, v := range settings {
+		for k, v := range unformattedSettings.KeyValueSettings {
 			if v != nil {
 				tmpSettings[k] = *v
 			} else {
@@ -49,11 +49,11 @@ func createTypedSettings(settings map[string]*string, isJsonContentTypeMap map[s
 	// dataOptions.Type = json or yaml
 	root := &Tree{}
 	parsedSettings := make(map[string]interface{})
-	for k, v := range settings {
+	for k, v := range unformattedSettings.KeyValueSettings {
 		var value interface{} = nil
 		if v != nil {
 			value = *v
-			if isJsonContentTypeMap[k] {
+			if unformattedSettings.IsJsonContentTypeMap[k] {
 				var out interface{}
 				err := json.Unmarshal([]byte(*v), &out)
 				if err != nil {
@@ -74,20 +74,18 @@ func createTypedSettings(settings map[string]*string, isJsonContentTypeMap map[s
 		parsedSettings = root.build()
 	}
 
-	if dataOptions.Type == acpv1.Json {
-		jsonStr, err := json.Marshal(parsedSettings)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to marshal key-values to json: %s", err.Error())
+	if unformattedSettings.FeatureFlagSettings != nil {
+		if typedFeatureFlagSettings, err := unmarshalFeatureFlagSettings(unformattedSettings.FeatureFlagSettings); err != nil {
+			return nil, err
+		} else {
+			parsedSettings[FeatureManagementSectionName] = typedFeatureFlagSettings
 		}
-		result[dataOptions.Key] = string(jsonStr)
 	}
 
-	if dataOptions.Type == acpv1.Yaml {
-		yamlStr, err := yaml.Marshal(parsedSettings)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to marshal key-values to yaml: %s", err.Error())
-		}
-		result[dataOptions.Key] = string(yamlStr)
+	if typedStr, err := createJsonYamlTypeData(parsedSettings, dataOptions); err != nil {
+		return nil, err
+	} else {
+		result[dataOptions.Key] = typedStr
 	}
 
 	return result, nil
@@ -117,4 +115,81 @@ func isJsonContentType(contentType *string) bool {
 	contentTypeStr := strings.ToLower(strings.Trim(*contentType, " "))
 	matched, _ := regexp.MatchString("^application\\/(?:[^\\/]+\\+)?json(;.*)?$", contentTypeStr)
 	return matched
+}
+
+func UnmarshalConfigMap(existingConfigMapSetting *map[string]string, dataOptions *acpv1.ConfigMapDataOptions) (interface{}, map[string]interface{}, error) {
+	allSettings := make(map[string]interface{})
+	existingConfigMapData := (*existingConfigMapSetting)[dataOptions.Key]
+	var typedFeatureFlags interface{}
+	var err error
+
+	switch dataOptions.Type {
+	case acpv1.Yaml:
+		err = yaml.Unmarshal([]byte(existingConfigMapData), &allSettings)
+		if err != nil {
+			return nil, nil, err
+		}
+	case acpv1.Json:
+		err = json.Unmarshal([]byte(existingConfigMapData), &allSettings)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	if _, ok := allSettings[FeatureManagementSectionName]; ok {
+		typedFeatureFlags = allSettings[FeatureManagementSectionName]
+		delete(allSettings, FeatureManagementSectionName)
+	}
+
+	return typedFeatureFlags, allSettings, nil
+}
+
+func createJsonYamlTypeData(settings map[string]interface{}, dataOptions *acpv1.ConfigMapDataOptions) (string, error) {
+	switch dataOptions.Type {
+	case acpv1.Yaml:
+		yamlStr, err := yaml.Marshal(settings)
+		if err != nil {
+			return "", fmt.Errorf("Failed to marshal key-values to yaml: %s", err.Error())
+		}
+		return string(yamlStr), nil
+	case acpv1.Json:
+		jsonStr, err := json.Marshal(settings)
+		if err != nil {
+			return "", fmt.Errorf("Failed to marshal key-values to json: %s", err.Error())
+		}
+		return string(jsonStr), nil
+	}
+
+	return "", nil
+}
+
+func unmarshalFeatureFlagSettings(featureFlagSettings interface{}) (interface{}, error) {
+	if featureFlagSettings == nil {
+		return nil, nil
+	}
+
+	switch featureFlagSettings.(type) {
+	// feature flag settings from existing configMap
+	case map[string]interface{}:
+		return featureFlagSettings, nil
+	// feature flag settings from appconfig store
+	case []*string:
+		featureFlagSlice := featureFlagSettings.([]*string)
+		var typedSlice []interface{}
+		for _, v := range featureFlagSlice {
+			if v != nil {
+				var out interface{}
+				err := json.Unmarshal([]byte(*v), &out)
+				if err != nil {
+					return nil, fmt.Errorf("Failed to unmarshal feature flag settings: %s", err.Error())
+				}
+				typedSlice = append(typedSlice, out)
+			}
+		}
+		return map[string]interface{}{
+			FeatureFlagSectionName: typedSlice,
+		}, nil
+	default:
+		return nil, fmt.Errorf("Unsupported feature flag settings type: %T", featureFlagSettings)
+	}
 }

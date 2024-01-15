@@ -131,6 +131,36 @@ spec:
                   the configuration key-values from.
                 format: uri
                 type: string
+              featureFlag:
+                description: AzureAppConfigurationFeatureFlagOptions defines the options
+                  of fetching feature flags from AppConfiguration.
+                properties:
+                  refresh:
+                    description: Defines the settings for refresh.
+                    properties:
+                      enabled:
+                        default: false
+                        type: boolean
+                      interval:
+                        format: duration
+                        type: string
+                    required:
+                    - interval
+                    type: object
+                  selectors:
+                    items:
+                      description: KeyValueSelector defines the filters when fetching
+                        the data from Azure AppConfiguration
+                      properties:
+                        keyFilter:
+                          type: string
+                        labelFilter:
+                          type: string
+                      required:
+                      - keyFilter
+                      type: object
+                    type: array
+                type: object
               secret:
                 description: AzureKeyVaultReference defines the authentication type
                   used to Azure KeyVault resolve KeyVaultReference
@@ -289,6 +319,9 @@ spec:
                 description: RefreshStatus defines last refresh time of configmap
                   and secret when dynamic feature is enabled
                 properties:
+                  lastFeatureFlagRefreshTime:
+                    format: date-time
+                    type: string
                   lastKeyVaultReferenceRefreshTime:
                     format: date-time
                     type: string

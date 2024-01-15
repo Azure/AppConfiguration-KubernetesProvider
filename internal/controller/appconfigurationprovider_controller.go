@@ -56,6 +56,7 @@ type ReconciliationState struct {
 	SentinelETags                             map[acpv1.Sentinel]*azcore.ETag
 	NextSentinelBasedRefreshReconcileTime     metav1.Time
 	NextKeyVaultReferenceRefreshReconcileTime metav1.Time
+	NextFeatureFlagRefreshReconcileTime       metav1.Time
 	CachedSecretReferences                    map[string]loader.KeyVaultSecretUriSegment
 }
 
@@ -192,7 +193,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		ResolveSecretReference: nil,
 	}
 
-	if err := processor.PopulateSettings(&existingSecret); err != nil {
+	if err := processor.PopulateSettings(&existingConfigMap, &existingSecret); err != nil {
 		return reconciler.requeueWhenGetSettingsFailed(ctx, provider, err)
 	}
 

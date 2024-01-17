@@ -108,7 +108,7 @@ spec:
                     type: object
                   selectors:
                     items:
-                      description: KeyValueSelector defines the filters when fetching
+                      description: KeyLabelSelector defines the filters when fetching
                         the data from Azure AppConfiguration
                       properties:
                         keyFilter:
@@ -149,7 +149,7 @@ spec:
                     type: object
                   selectors:
                     items:
-                      description: KeyValueSelector defines the filters when fetching
+                      description: KeyLabelSelector defines the filters when fetching
                         the data from Azure AppConfiguration
                       properties:
                         keyFilter:

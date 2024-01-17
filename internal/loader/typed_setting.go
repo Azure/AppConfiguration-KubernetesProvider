@@ -6,7 +6,6 @@ package loader
 import (
 	acpv1 "azappconfig/provider/api/v1"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -15,23 +14,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func createTypedSettings(unformattedSettings *UnformattedSettings, dataOptions *acpv1.ConfigMapDataOptions) (map[string]string, error) {
-	if unformattedSettings.KeyValueSettings == nil {
-		return nil, errors.New("settings cannot be nil")
-	}
-
-	if unformattedSettings.IsJsonContentTypeMap == nil {
-		return nil, errors.New("isJsonContentTypeMap cannot be nil")
-	}
-
+func createTypedSettings(rawSettings *RawSettings, dataOptions *acpv1.ConfigMapDataOptions) (map[string]string, error) {
 	result := make(map[string]string)
-	if len(unformattedSettings.KeyValueSettings) == 0 {
+	if len(rawSettings.KeyValueSettings) == 0 && rawSettings.FeatureFlagSettings == nil {
 		return result, nil
 	}
 
 	if dataOptions == nil || dataOptions.Type == acpv1.Default || dataOptions.Type == acpv1.Properties {
 		tmpSettings := make(map[string]string)
-		for k, v := range unformattedSettings.KeyValueSettings {
+		for k, v := range rawSettings.KeyValueSettings {
 			if v != nil {
 				tmpSettings[k] = *v
 			} else {
@@ -49,11 +40,11 @@ func createTypedSettings(unformattedSettings *UnformattedSettings, dataOptions *
 	// dataOptions.Type = json or yaml
 	root := &Tree{}
 	parsedSettings := make(map[string]interface{})
-	for k, v := range unformattedSettings.KeyValueSettings {
+	for k, v := range rawSettings.KeyValueSettings {
 		var value interface{} = nil
 		if v != nil {
 			value = *v
-			if unformattedSettings.IsJsonContentTypeMap[k] {
+			if rawSettings.IsJsonContentTypeMap[k] {
 				var out interface{}
 				err := json.Unmarshal([]byte(*v), &out)
 				if err != nil {
@@ -74,12 +65,8 @@ func createTypedSettings(unformattedSettings *UnformattedSettings, dataOptions *
 		parsedSettings = root.build()
 	}
 
-	if unformattedSettings.FeatureFlagSettings != nil {
-		if typedFeatureFlagSettings, err := unmarshalFeatureFlagSettings(unformattedSettings.FeatureFlagSettings); err != nil {
-			return nil, err
-		} else {
-			parsedSettings[FeatureManagementSectionName] = typedFeatureFlagSettings
-		}
+	if rawSettings.FeatureFlagSettings != nil {
+		parsedSettings[FeatureManagementSectionName] = rawSettings.FeatureFlagSettings
 	}
 
 	if typedStr, err := createJsonYamlTypeData(parsedSettings, dataOptions); err != nil {
@@ -117,10 +104,12 @@ func isJsonContentType(contentType *string) bool {
 	return matched
 }
 
-func UnmarshalConfigMap(existingConfigMapSetting *map[string]string, dataOptions *acpv1.ConfigMapDataOptions) (interface{}, map[string]interface{}, error) {
+// UnmarshalConfigMap is used for scenarios related to feature flag refresh.
+// Currently, only supports feature flag settings in JSON/YAML formats.
+func UnmarshalConfigMap(existingConfigMapSetting *map[string]string, dataOptions *acpv1.ConfigMapDataOptions) (map[string]interface{}, map[string]interface{}, error) {
 	allSettings := make(map[string]interface{})
 	existingConfigMapData := (*existingConfigMapSetting)[dataOptions.Key]
-	var typedFeatureFlags interface{}
+	var typedFeatureFlags map[string]interface{}
 	var err error
 
 	switch dataOptions.Type {
@@ -136,8 +125,8 @@ func UnmarshalConfigMap(existingConfigMapSetting *map[string]string, dataOptions
 		}
 	}
 
-	if _, ok := allSettings[FeatureManagementSectionName]; ok {
-		typedFeatureFlags = allSettings[FeatureManagementSectionName]
+	if featureFlagSection, ok := allSettings[FeatureManagementSectionName].(map[string]interface{}); ok {
+		typedFeatureFlags = featureFlagSection
 		delete(allSettings, FeatureManagementSectionName)
 	}
 
@@ -161,35 +150,4 @@ func createJsonYamlTypeData(settings map[string]interface{}, dataOptions *acpv1.
 	}
 
 	return "", nil
-}
-
-func unmarshalFeatureFlagSettings(featureFlagSettings interface{}) (interface{}, error) {
-	if featureFlagSettings == nil {
-		return nil, nil
-	}
-
-	switch featureFlagSettings.(type) {
-	// feature flag settings from existing configMap
-	case map[string]interface{}:
-		return featureFlagSettings, nil
-	// feature flag settings from appconfig store
-	case []*string:
-		featureFlagSlice := featureFlagSettings.([]*string)
-		var typedSlice []interface{}
-		for _, v := range featureFlagSlice {
-			if v != nil {
-				var out interface{}
-				err := json.Unmarshal([]byte(*v), &out)
-				if err != nil {
-					return nil, fmt.Errorf("Failed to unmarshal feature flag settings: %s", err.Error())
-				}
-				typedSlice = append(typedSlice, out)
-			}
-		}
-		return map[string]interface{}{
-			FeatureFlagSectionName: typedSlice,
-		}, nil
-	default:
-		return nil, fmt.Errorf("Unsupported feature flag settings type: %T", featureFlagSettings)
-	}
 }

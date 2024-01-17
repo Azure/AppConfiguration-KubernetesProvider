@@ -59,7 +59,7 @@ func TestIsJsonContentType(t *testing.T) {
 
 func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 	key1Value := "value1"
-	fileStyleSettingString1, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString1, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1": &key1Value,
 		},
@@ -74,7 +74,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 	assert.Nil(t, err)
 
 	emptyString := ""
-	fileStyleSettingString2, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString2, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"empty": &emptyString,
 		},
@@ -89,7 +89,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 	assert.Nil(t, err)
 
 	jsonKeyValue := "{\"vKey1\":{\"vKey2\":\"value3\"}}"
-	fileStyleSettingString3, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString3, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"jsonKey": &jsonKeyValue,
 		},
@@ -103,7 +103,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 	assert.Equal(t, "jsonKey={\"vKey1\":{\"vKey2\":\"value3\"}}", fileStyleSettingString3["test"])
 	assert.Nil(t, err)
 
-	fileStyleSettingString4, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString4, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"jsonKey": &jsonKeyValue,
 		},
@@ -118,7 +118,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 	assert.Nil(t, err)
 
 	doublequotationValue := "\"\""
-	fileStyleSettingString5, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString5, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"doublequotation": &doublequotationValue,
 		},
@@ -133,7 +133,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 	assert.Nil(t, err)
 
 	multipleLineJsonValue := "{\n\t\"a\":\"json\",\n\t\"b\":{\n\t\t\"c\":{\n\t\t\t\"d\": \"test\"\n\t\t},\n\t\t\"f\":[1,2,3]\n\t}\n}"
-	fileStyleSettingString6, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString6, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"multipleLineJson": &multipleLineJsonValue,
 		},
@@ -147,7 +147,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 	assert.Equal(t, "multipleLineJson={\n\t\"a\":\"json\",\n\t\"b\":{\n\t\t\"c\":{\n\t\t\t\"d\": \"test\"\n\t\t},\n\t\t\"f\":[1,2,3]\n\t}\n}", fileStyleSettingString6["test"])
 	assert.Nil(t, err)
 
-	fileStyleSettingString7, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString7, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1": nil,
 		},
@@ -163,7 +163,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 }
 
 func TestCreateFileStyleSettings(t *testing.T) {
-	fileStyleSettingString1, err := createTypedSettings(&UnformattedSettings{KeyValueSettings: make(map[string]*string), IsJsonContentTypeMap: make(map[string]bool)}, &acpv1.ConfigMapDataOptions{
+	fileStyleSettingString1, err := createTypedSettings(&RawSettings{KeyValueSettings: make(map[string]*string), IsJsonContentTypeMap: make(map[string]bool)}, &acpv1.ConfigMapDataOptions{
 		Type: acpv1.Yaml,
 		Key:  "test",
 	})
@@ -171,21 +171,12 @@ func TestCreateFileStyleSettings(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func TestPassedSettingIsNull(t *testing.T) {
-	fileStyleSettingString1, err := createTypedSettings(&UnformattedSettings{}, &acpv1.ConfigMapDataOptions{
-		Type: acpv1.Yaml,
-		Key:  "test",
-	})
-	assert.NotNil(t, err)
-	assert.Nil(t, fileStyleSettingString1)
-}
-
 func TestConfigMapDataOptionsIsNull(t *testing.T) {
 	key1Value := "value1"
 	key2_subkey1Value := "1"
 	emptyValue := ""
 	key3Value := "{\"vKey1\":{\"vKey2\":\"value3\"}}"
-	settings, err := createTypedSettings(&UnformattedSettings{
+	settings, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1":         &key1Value,
 			"key2_subkey1": &key2_subkey1Value,
@@ -214,7 +205,7 @@ func TestCreateFileStyleSettingsWithYamlFormat(t *testing.T) {
 	key2_subkey1Value := "1"
 	emptyValue := ""
 	key3Value := "{\"vKey1\":{\"vKey2\":\"value3\"}}"
-	fileStyleSettingString1, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString1, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1":         &key1Value,
 			"key2_subkey1": &key2_subkey1Value,
@@ -237,7 +228,7 @@ func TestCreateFileStyleSettingsWithYamlFormat(t *testing.T) {
 	key1Value = "[\"value1\",\"value2\"]"
 	key2Value := "\"value2\""
 	key3Value = "\"value3\""
-	fileStyleSettingString2, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString2, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1": &key1Value,
 			"key2": &key2Value,
@@ -256,7 +247,7 @@ func TestCreateFileStyleSettingsWithYamlFormat(t *testing.T) {
 	assert.Nil(t, err)
 
 	key1Value = "{\"vKey1\":{\"vKey2\":\"value3\"}}"
-	fileStyleSettingString3, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString3, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1": &key1Value,
 			"key2": nil,
@@ -278,7 +269,7 @@ func TestCreateFileStyleSettingsWithJsonFormat(t *testing.T) {
 	key2_subkey1Value := "1"
 	emptyValue := ""
 	key3Value := "{\"vKey1\":{\"vKey2\":\"value3\"}}"
-	fileStyleSettingString1, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString1, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1":         &key1Value,
 			"key2_subkey1": &key2_subkey1Value,
@@ -303,7 +294,7 @@ func TestCreateFileStyleSettingsWithJsonFormat(t *testing.T) {
 	key1Value = "[\"value1\",\"value2\"]"
 	key2Value := "\"value2\""
 	key3Value = "\"value3\""
-	fileStyleSettingString2, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString2, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1": &key1Value,
 			"key2": &key2Value,
@@ -322,7 +313,7 @@ func TestCreateFileStyleSettingsWithJsonFormat(t *testing.T) {
 	assert.Nil(t, err)
 
 	key1Value = "{\"vKey1\":{\"vKey2\":\"value3\"}}"
-	fileStyleSettingString3, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString3, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1": &key1Value,
 		},
@@ -337,7 +328,7 @@ func TestCreateFileStyleSettingsWithJsonFormat(t *testing.T) {
 	assert.Nil(t, err)
 
 	jsonStringValue := "\"{\\\"vKey1\\\":{\\\"vKey2\\\":\\\"value3\\\"}}\""
-	fileStyleSettingString4, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString4, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"jsonString": &jsonStringValue,
 		},
@@ -361,7 +352,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	value5 := "1"
 	value6 := ""
 	value7 := "{\"vKey1\":{\"vKey2\":\"value3\"}}"
-	fileStyleSettingString1, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString1, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey1":         &value1,
 			"key1.subKey2":         &value2,
@@ -388,7 +379,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	assert.Equal(t, "{\"empty\":\"\",\"key1\":{\"subKey1\":\"value1\",\"subKey2\":\"value2\",\"subKey3\":[{\"test1\":\"value4\"},{\"test2\":\"value5\"}]},\"key2\":{\"subkey1\":\"1\"},\"key3\":{\"vKey1\":{\"vKey2\":\"value3\"}},\"key4\":null}", fileStyleSettingString1["test"])
 	assert.Nil(t, err)
 
-	fileStyleSettingString2, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString2, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey1":             &value1,
 			"key1.subKey2":             &value2,
@@ -414,7 +405,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	assert.Equal(t, "{\"empty\":\"\",\"key1\":{\"subKey1\":\"value1\",\"subKey2\":\"value2\",\"subKey3\":{\"0\":{\"test1\":\"value4\",\"test2\":null},\"test2\":{\"test3\":\"value5\"}}},\"key2\":{\"subkey1\":\"1\"},\"key3\":{\"vKey1\":{\"vKey2\":\"value3\"}}}", fileStyleSettingString2["test"])
 	assert.Nil(t, err)
 
-	fileStyleSettingString3, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString3, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey1":             &value1,
 			"key1.subKey2":             &value2,
@@ -442,7 +433,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	value1 = "{\"vKey1\":{\"vKey2\":\"value3\"}}"
 	value2 = "value5"
 	value3 = "{\"vKey1\":{\"vKey2\":\"value3\"}}"
-	fileStyleSettingString4, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString4, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey3.0.test1": &value1,
 			"key1.subKey3.1.test3": &value2,
@@ -463,7 +454,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	assert.Nil(t, err)
 
 	anotherDelimiter := "_"
-	fileStyleSettingString5, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString5, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey3.0.test1": &value1,
 			"key1.subKey3.1.test3": &value2,
@@ -486,7 +477,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	value1 = "value1"
 	value2 = "value2"
 	value3 = "value6"
-	fileStyleSettingString6, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString6, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"_key1_subKey1":        &value1,
 			"key2___test_":         &value2,
@@ -506,7 +497,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	assert.Equal(t, "{\"\":{\"key1\":{\"subKey1\":\"value1\"}},\".key3\":{\"key4.key5\":{\"key6\":\"value6\"}},\"key2\":{\"\":{\"\":{\"test\":{\"\":\"value2\"}}}}}", fileStyleSettingString6["test"])
 	assert.Nil(t, err)
 
-	fileStyleSettingString7, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString7, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1_2": &value1,
 			"key1_1": &value2,
@@ -527,7 +518,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	value1 = "{\"vKey1\":{\"vKey2\":\"value3\"}}"
 	value2 = "value5"
 	value3 = "{\"vKey1\":{\"vKey2\":\"value3\"}}"
-	fileStyleSettingString8, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString8, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey3.0.test1": &value1,
 			"key1.subKey3.1.test3": &value2,
@@ -550,7 +541,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	value1 = "{\"vKey1\":\"value1\", \"vKey3\":\"value5\"}"
 	value2 = "value4"
 	value3 = "value3"
-	fileStyleSettingString9, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString9, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey1":       &value1,
 			"key1.subKey1.vKey2": &value2,
@@ -576,7 +567,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	value1 = "{}"
 	value2 = "value3"
 	value3 = "value4"
-	fileStyleSettingString10, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString10, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey1":       &value1,
 			"key1.subKey1.vKey1": &value2,
@@ -599,7 +590,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	value1 = "[\"test1\", \"test2\"]"
 	value2 = "value3"
 	value3 = "value4"
-	fileStyleSettingString11, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString11, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey1":       &value1,
 			"key1.subKey1.vKey1": &value2,
@@ -621,7 +612,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 
 	value1 = "[{\"vKey1\":\"test1\"},{\"vKey2\":\"test2\"}]"
 	value2 = "value3"
-	fileStyleSettingString12, err := createTypedSettings(&UnformattedSettings{
+	fileStyleSettingString12, err := createTypedSettings(&RawSettings{
 		KeyValueSettings: map[string]*string{
 			"key1.subKey1":         &value1,
 			"key1.subKey1.0.vKey1": &value2,

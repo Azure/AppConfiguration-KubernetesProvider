@@ -66,19 +66,19 @@ type ConfigurationGenerationParameters struct {
 
 // AzureAppConfigurationKeyValueOptions defines the options of fetching key-values from AppConfiguration.
 type AzureAppConfigurationKeyValueOptions struct {
-	Selectors       []KeyValueSelector                     `json:"selectors,omitempty"`
+	Selectors       []KeyLabelSelector                     `json:"selectors,omitempty"`
 	TrimKeyPrefixes []string                               `json:"trimKeyPrefixes,omitempty"`
 	Refresh         *DynamicConfigurationRefreshParameters `json:"refresh,omitempty"`
 }
 
 // AzureAppConfigurationFeatureFlagOptions defines the options of fetching feature flags from AppConfiguration.
 type AzureAppConfigurationFeatureFlagOptions struct {
-	Selectors []KeyValueSelector `json:"selectors,omitempty"`
+	Selectors []KeyLabelSelector `json:"selectors,omitempty"`
 	Refresh   *RefreshSettings   `json:"refresh,omitempty"`
 }
 
-// KeyValueSelector defines the filters when fetching the data from Azure AppConfiguration
-type KeyValueSelector struct {
+// KeyLabelSelector defines the filters when fetching the data from Azure AppConfiguration
+type KeyLabelSelector struct {
 	KeyFilter   string  `json:"keyFilter"`
 	LabelFilter *string `json:"labelFilter,omitempty"`
 }

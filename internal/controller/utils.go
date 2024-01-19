@@ -70,11 +70,9 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 		}
 
 		// Check if feature flag label filters are valid
-		if len(spec.FeatureFlag.Selectors) > 0 {
-			for i := range spec.FeatureFlag.Selectors {
-				if spec.FeatureFlag.Selectors[i].LabelFilter != nil && hasNonEscapedValueInLabel(*spec.FeatureFlag.Selectors[i].LabelFilter) {
-					return loader.NewArgumentError("spec.featureFlag.selectors", fmt.Errorf("non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters"))
-				}
+		for i := range spec.FeatureFlag.Selectors {
+			if spec.FeatureFlag.Selectors[i].LabelFilter != nil && hasNonEscapedValueInLabel(*spec.FeatureFlag.Selectors[i].LabelFilter) {
+				return loader.NewArgumentError("spec.featureFlag.selectors", fmt.Errorf("non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters"))
 			}
 		}
 

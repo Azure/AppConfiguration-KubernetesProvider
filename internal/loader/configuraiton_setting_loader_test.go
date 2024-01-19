@@ -415,15 +415,10 @@ func TestGetFilters(t *testing.T) {
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
 			Selectors: []acpv1.KeyLabelSelector{},
 		},
-		FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-			Selectors: []acpv1.KeyLabelSelector{},
-		},
 	}
 
 	keyValueFilters2 := getKeyValueFilters(testSpec2)
-	featureFlagFilters2 := getFeatureFlagFilters(testSpec2)
 	assert.Len(t, keyValueFilters2, 1)
-	assert.Len(t, featureFlagFilters2, 0)
 	assert.Equal(t, "*", keyValueFilters2[0].KeyFilter)
 	assert.Nil(t, keyValueFilters2[0].LabelFilter)
 

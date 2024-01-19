@@ -18,7 +18,7 @@ import (
 const (
 	MinimalSentinelBasedRefreshInterval time.Duration = time.Second
 	MinimalSecretRefreshInterval        time.Duration = time.Minute
-	MinimalFeatureFlagRefreshInterval   time.Duration = time.Second
+	MinimalFeatureFlagRefreshInterval   time.Duration = time.Minute
 )
 
 func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
@@ -63,6 +63,10 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 	if spec.FeatureFlag != nil {
 		if spec.Target.ConfigMapData == nil || spec.Target.ConfigMapData.Type == acpv1.Default || spec.Target.ConfigMapData.Type == acpv1.Properties {
 			return loader.NewArgumentError("spec.target.configMapData", fmt.Errorf("target.configMapData.type must be json or yaml when FeatureFlag is set"))
+		}
+
+		if len(spec.FeatureFlag.Selectors) == 0 {
+			return loader.NewArgumentError("spec.featureFlag.selectors", fmt.Errorf("featureFlag.selectors must be specified when FeatureFlag is set"))
 		}
 
 		// Check if feature flag label filters are valid

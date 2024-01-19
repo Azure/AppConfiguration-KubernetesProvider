@@ -485,6 +485,23 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.target.configMapData: target.configMapData.type must be json or yaml when FeatureFlag is set"))
 		})
 
+		It("Should return error if feature flag selector is not set", func() {
+			configMapName := "test-configmap"
+			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+					ConfigMapData: &acpv1.ConfigMapDataOptions{
+						Type: acpv1.Json,
+						Key:  "testKey",
+					},
+				},
+				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{},
+			}
+
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.featureFlag.selectors: featureFlag.selectors must be specified when FeatureFlag is set"))
+		})
+
 		It("Should return error if both endpoint and connectionStringReference are not set", func() {
 			configMapName := "test-configmap"
 			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{

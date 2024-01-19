@@ -292,6 +292,7 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 	go csl.getSettingsFunc(ctx, featureFlagFilters, csl.AppConfigClient, featureFlagSettingChan, errChan)
 
 	var featureFlagSettings []azappconfig.Setting
+	// featureFlagSection = {"featureFlags": [{...}, {...}]}
 	var featureFlagSection = map[string]interface{}{
 		FeatureFlagSectionName: make([]interface{}, 0),
 	}
@@ -594,7 +595,7 @@ func getKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1
 func getFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.KeyLabelSelector {
 	featureFlagFilters := make([]acpv1.KeyLabelSelector, 0)
 
-	if acpSpec.FeatureFlag != nil && len(acpSpec.FeatureFlag.Selectors) > 0 {
+	if acpSpec.FeatureFlag != nil {
 		featureFlagFilters = deduplicateFilters(acpSpec.FeatureFlag.Selectors)
 		for i := 0; i < len(featureFlagFilters); i++ {
 			featureFlagFilters[i].KeyFilter = FeatureFlagKeyPrefix + featureFlagFilters[i].KeyFilter

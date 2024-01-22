@@ -25,7 +25,7 @@ var (
 	EndpointName               string = "https://fake-endpoint"
 )
 
-func mockGetConfigurationSettings(ctx context.Context, filters []acpv1.KeyLabelSelector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
+func mockGetConfigurationSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
 	settingsToReturn := make([]azappconfig.Setting, 6)
 	settingsToEnd := make([]azappconfig.Setting, 0)
 	settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
@@ -39,7 +39,7 @@ func mockGetConfigurationSettings(ctx context.Context, filters []acpv1.KeyLabelS
 	c <- settingsToEnd
 }
 
-func mockGetConfigurationSettingsWithKV(ctx context.Context, filters []acpv1.KeyLabelSelector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
+func mockGetConfigurationSettingsWithKV(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
 	settingsToReturn := make([]azappconfig.Setting, 3)
 	settingsToEnd := make([]azappconfig.Setting, 0)
 	settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
@@ -50,7 +50,7 @@ func mockGetConfigurationSettingsWithKV(ctx context.Context, filters []acpv1.Key
 	c <- settingsToEnd
 }
 
-func mockGetConfigurationSettingsThrowError(ctx context.Context, filters []acpv1.KeyLabelSelector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
+func mockGetConfigurationSettingsThrowError(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
 	settingsToReturn := make([]azappconfig.Setting, 3)
 	err := errors.New("a fake error")
 	settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
@@ -351,17 +351,17 @@ func TestErrorWhenGetAllConfiguration(t *testing.T) {
 }
 
 func TestReverse(t *testing.T) {
-	empty := make([]acpv1.KeyLabelSelector, 0)
+	empty := make([]acpv1.Selector, 0)
 	reverse(empty)
 	assert.Empty(t, empty)
 	labelString := "test"
 
-	oneElement := []acpv1.KeyLabelSelector{{KeyFilter: "*", LabelFilter: &labelString}}
+	oneElement := []acpv1.Selector{{KeyFilter: "*", LabelFilter: &labelString}}
 	reverse(oneElement)
 	assert.Len(t, oneElement, 1)
 	assert.Equal(t, "*", oneElement[0].KeyFilter)
 
-	oddNumber := []acpv1.KeyLabelSelector{
+	oddNumber := []acpv1.Selector{
 		{KeyFilter: "one", LabelFilter: &labelString},
 		{KeyFilter: "two", LabelFilter: &labelString},
 		{KeyFilter: "three", LabelFilter: &labelString}}
@@ -371,7 +371,7 @@ func TestReverse(t *testing.T) {
 	assert.Equal(t, "two", oddNumber[1].KeyFilter)
 	assert.Equal(t, "one", oddNumber[2].KeyFilter)
 
-	evenNumber := []acpv1.KeyLabelSelector{
+	evenNumber := []acpv1.Selector{
 		{KeyFilter: "one", LabelFilter: &labelString},
 		{KeyFilter: "two", LabelFilter: &labelString},
 		{KeyFilter: "three", LabelFilter: &labelString},
@@ -388,13 +388,13 @@ func TestGetFilters(t *testing.T) {
 	labelString := "test"
 	testSpec := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.KeyLabelSelector{
+			Selectors: []acpv1.Selector{
 				{KeyFilter: "one", LabelFilter: &labelString},
 				{KeyFilter: "two", LabelFilter: &labelString},
 				{KeyFilter: "three", LabelFilter: &labelString}},
 		},
 		FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-			Selectors: []acpv1.KeyLabelSelector{
+			Selectors: []acpv1.Selector{
 				{KeyFilter: "one", LabelFilter: &labelString},
 				{KeyFilter: "two", LabelFilter: &labelString},
 			},
@@ -413,7 +413,7 @@ func TestGetFilters(t *testing.T) {
 
 	testSpec2 := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.KeyLabelSelector{},
+			Selectors: []acpv1.Selector{},
 		},
 	}
 
@@ -424,13 +424,13 @@ func TestGetFilters(t *testing.T) {
 
 	testSpec3 := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.KeyLabelSelector{
+			Selectors: []acpv1.Selector{
 				{KeyFilter: "one", LabelFilter: &labelString},
 				{KeyFilter: "two", LabelFilter: &labelString},
 				{KeyFilter: "one", LabelFilter: &labelString}},
 		},
 		FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-			Selectors: []acpv1.KeyLabelSelector{
+			Selectors: []acpv1.Selector{
 				{KeyFilter: "one", LabelFilter: &labelString},
 				{KeyFilter: "two", LabelFilter: &labelString},
 				{KeyFilter: "one", LabelFilter: &labelString}},
@@ -448,7 +448,7 @@ func TestGetFilters(t *testing.T) {
 
 	testSpec4 := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.KeyLabelSelector{
+			Selectors: []acpv1.Selector{
 				{KeyFilter: "one"},
 				{KeyFilter: "two", LabelFilter: &labelString},
 				{KeyFilter: "one"}},
@@ -466,7 +466,7 @@ func TestGetFilters(t *testing.T) {
 
 	testSpec5 := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.KeyLabelSelector{
+			Selectors: []acpv1.Selector{
 				{KeyFilter: "one"},
 				{KeyFilter: "one", LabelFilter: &labelString},
 			},
@@ -481,7 +481,7 @@ func TestGetFilters(t *testing.T) {
 
 	testSpec6 := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.KeyLabelSelector{
+			Selectors: []acpv1.Selector{
 				{KeyFilter: "one", LabelFilter: &labelString},
 				{KeyFilter: "one"},
 			},

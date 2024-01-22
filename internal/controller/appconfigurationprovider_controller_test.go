@@ -451,7 +451,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					ConfigMapName: configMapName,
 				},
 				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-					Selectors: []acpv1.KeyLabelSelector{
+					Selectors: []acpv1.Selector{
 						{
 							KeyFilter: "testKey",
 						},
@@ -474,7 +474,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-					Selectors: []acpv1.KeyLabelSelector{
+					Selectors: []acpv1.Selector{
 						{
 							KeyFilter: "testKeyFilter",
 						},

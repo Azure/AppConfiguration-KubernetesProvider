@@ -60,7 +60,7 @@ type ConfigurationSettingsRetriever interface {
 	ResolveKeyVaultReferences(ctx context.Context, kvReferencesToResolve map[string]KeyVaultSecretUriSegment, kvResolver ResolveSecretReference) (map[string][]byte, error)
 }
 
-type GetSettingsFunc func(ctx context.Context, filters []acpv1.KeyLabelSelector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
+type GetSettingsFunc func(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
 
 type ServicePrincipleAuthenticationParameters struct {
 	ClientId     string
@@ -448,7 +448,7 @@ func trimPrefix(key string, prefixToTrim []string) string {
 	return key
 }
 
-func getConfigurationSettings(ctx context.Context, filters []acpv1.KeyLabelSelector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
+func getConfigurationSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
 	nullString := "\x00"
 
 	for _, filter := range filters {
@@ -588,12 +588,12 @@ func getSecret(ctx context.Context, namespacedSecretName types.NamespacedName) (
 	return secretObject, nil
 }
 
-func getKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.KeyLabelSelector {
+func getKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
 	return deduplicateFilters(acpSpec.Configuration.Selectors)
 }
 
-func getFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.KeyLabelSelector {
-	featureFlagFilters := make([]acpv1.KeyLabelSelector, 0)
+func getFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
+	featureFlagFilters := make([]acpv1.Selector, 0)
 
 	if acpSpec.FeatureFlag != nil {
 		featureFlagFilters = deduplicateFilters(acpSpec.FeatureFlag.Selectors)
@@ -605,8 +605,8 @@ func getFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []ac
 	return featureFlagFilters
 }
 
-func deduplicateFilters(filters []acpv1.KeyLabelSelector) []acpv1.KeyLabelSelector {
-	var result []acpv1.KeyLabelSelector
+func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
+	var result []acpv1.Selector
 	findDuplicate := false
 
 	if len(filters) > 0 {
@@ -630,7 +630,7 @@ func deduplicateFilters(filters []acpv1.KeyLabelSelector) []acpv1.KeyLabelSelect
 		}
 		reverse(result)
 	} else {
-		result = append(result, acpv1.KeyLabelSelector{
+		result = append(result, acpv1.Selector{
 			KeyFilter:   "*",
 			LabelFilter: nil,
 		})
@@ -649,7 +649,7 @@ func compare(a *string, b *string) bool {
 	return strings.Compare(*a, *b) == 0
 }
 
-func reverse(arr []acpv1.KeyLabelSelector) {
+func reverse(arr []acpv1.Selector) {
 	for i, j := 0, len(arr)-1; i < j; i, j = i+1, j-1 {
 		arr[i], arr[j] = arr[j], arr[i]
 	}

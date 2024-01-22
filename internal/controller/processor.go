@@ -106,11 +106,11 @@ func (processor *AppConfigurationProviderProcessor) ProcessFeatureFlagRefresh(ex
 	}
 
 	processor.RefreshOptions.featureFlagRefreshNeeded = true
-	partiallyUpdatedSettings, err := (*processor.Retriever).RefreshFeatureFlagSettings(processor.Context, &existingConfigMap.Data)
+	featureFlagRefreshedSettings, err := (*processor.Retriever).RefreshFeatureFlagSettings(processor.Context, &existingConfigMap.Data)
 	if err != nil {
 		return err
 	}
-	processor.Settings = partiallyUpdatedSettings
+	processor.Settings = featureFlagRefreshedSettings
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	// Update next refresh time only if settings updated successfully
 	reconcileState.NextFeatureFlagRefreshReconcileTime = nextFeatureFlagRefreshReconcileTime
@@ -155,13 +155,13 @@ func (processor *AppConfigurationProviderProcessor) ProcessKeyValueRefresh(exist
 	if processor.Settings.ConfigMapSettings != nil {
 		existingConfigMapSettings = &processor.Settings.ConfigMapSettings
 	}
-	partiallyUpdatedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.ResolveSecretReference)
+	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.ResolveSecretReference)
 	if err != nil {
 		return err
 	}
 
-	processor.Settings = partiallyUpdatedSettings
-	reconcileState.CachedSecretReferences = partiallyUpdatedSettings.KeyVaultReferencesToCache
+	processor.Settings = keyValueRefreshedSettings
+	reconcileState.CachedSecretReferences = keyValueRefreshedSettings.KeyVaultReferencesToCache
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true

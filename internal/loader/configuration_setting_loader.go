@@ -154,7 +154,7 @@ func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Conte
 	}
 
 	if csl.Spec.FeatureFlag != nil {
-		rawSettings.FeatureFlagSettings, _, err = UnmarshalConfigMap(existingConfigMapSetting, csl.Spec.Target.ConfigMapData)
+		rawSettings.FeatureFlagSettings, _, err = unmarshalConfigMap(existingConfigMapSetting, csl.Spec.Target.ConfigMapData)
 		if err != nil {
 			return nil, err
 		}
@@ -177,13 +177,13 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 	if err != nil {
 		return nil, err
 	}
-	_, existingSettings, err := UnmarshalConfigMap(existingConfigMapSetting, csl.Spec.Target.ConfigMapData)
+	_, existingSettings, err := unmarshalConfigMap(existingConfigMapSetting, csl.Spec.Target.ConfigMapData)
 	if err != nil {
 		return nil, err
 	}
 
 	existingSettings[FeatureManagementSectionName] = latestFeatureFlagSettings
-	typedStr, err := createJsonYamlTypeData(existingSettings, csl.Spec.Target.ConfigMapData)
+	typedStr, err := marshalJsonYaml(existingSettings, csl.Spec.Target.ConfigMapData)
 	if err != nil {
 		return nil, err
 	}

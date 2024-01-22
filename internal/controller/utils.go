@@ -62,7 +62,7 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 
 	if spec.FeatureFlag != nil {
 		if spec.Target.ConfigMapData == nil || spec.Target.ConfigMapData.Type == acpv1.Default || spec.Target.ConfigMapData.Type == acpv1.Properties {
-			return loader.NewArgumentError("spec.target.configMapData", fmt.Errorf("target.configMapData.type must be json or yaml when FeatureFlag is set"))
+			return loader.NewArgumentError("spec.target.configMapData", fmt.Errorf("configMap data type must be json or yaml when FeatureFlag is set"))
 		}
 
 		if len(spec.FeatureFlag.Selectors) == 0 {

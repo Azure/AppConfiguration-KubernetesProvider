@@ -459,7 +459,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.target.configMapData: target.configMapData.type must be json or yaml when FeatureFlag is set"))
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.target.configMapData: configMap data type must be json or yaml when FeatureFlag is set"))
 		})
 
 		It("Should return error if feature flag is set when data type is properties", func() {
@@ -482,7 +482,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.target.configMapData: target.configMapData.type must be json or yaml when FeatureFlag is set"))
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.target.configMapData: configMap data type must be json or yaml when FeatureFlag is set"))
 		})
 
 		It("Should return error if feature flag selector is not set", func() {

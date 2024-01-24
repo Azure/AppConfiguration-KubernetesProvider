@@ -6,7 +6,6 @@ package loader
 import (
 	acpv1 "azappconfig/provider/api/v1"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -15,23 +14,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func createTypedSettings(settings map[string]*string, isJsonContentTypeMap map[string]bool, dataOptions *acpv1.ConfigMapDataOptions) (map[string]string, error) {
-	if settings == nil {
-		return nil, errors.New("settings cannot be nil")
-	}
-
-	if isJsonContentTypeMap == nil {
-		return nil, errors.New("isJsonContentTypeMap cannot be nil")
-	}
-
+func createTypedSettings(rawSettings *RawSettings, dataOptions *acpv1.ConfigMapDataOptions) (map[string]string, error) {
 	result := make(map[string]string)
-	if len(settings) == 0 {
+	if len(rawSettings.KeyValueSettings) == 0 && rawSettings.FeatureFlagSettings == nil {
 		return result, nil
 	}
 
 	if dataOptions == nil || dataOptions.Type == acpv1.Default || dataOptions.Type == acpv1.Properties {
 		tmpSettings := make(map[string]string)
-		for k, v := range settings {
+		for k, v := range rawSettings.KeyValueSettings {
 			if v != nil {
 				tmpSettings[k] = *v
 			} else {
@@ -49,11 +40,11 @@ func createTypedSettings(settings map[string]*string, isJsonContentTypeMap map[s
 	// dataOptions.Type = json or yaml
 	root := &Tree{}
 	parsedSettings := make(map[string]interface{})
-	for k, v := range settings {
+	for k, v := range rawSettings.KeyValueSettings {
 		var value interface{} = nil
 		if v != nil {
 			value = *v
-			if isJsonContentTypeMap[k] {
+			if rawSettings.IsJsonContentTypeMap[k] {
 				var out interface{}
 				err := json.Unmarshal([]byte(*v), &out)
 				if err != nil {
@@ -74,20 +65,15 @@ func createTypedSettings(settings map[string]*string, isJsonContentTypeMap map[s
 		parsedSettings = root.build()
 	}
 
-	if dataOptions.Type == acpv1.Json {
-		jsonStr, err := json.Marshal(parsedSettings)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to marshal key-values to json: %s", err.Error())
-		}
-		result[dataOptions.Key] = string(jsonStr)
+	if rawSettings.FeatureFlagSettings != nil {
+		// FeatureManagementSection = {"FeatureManagement": { "featureFlags" : [{...}, {...}]}
+		parsedSettings[FeatureManagementSectionName] = rawSettings.FeatureFlagSettings
 	}
 
-	if dataOptions.Type == acpv1.Yaml {
-		yamlStr, err := yaml.Marshal(parsedSettings)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to marshal key-values to yaml: %s", err.Error())
-		}
-		result[dataOptions.Key] = string(yamlStr)
+	if typedStr, err := marshalJsonYaml(parsedSettings, dataOptions); err != nil {
+		return nil, err
+	} else {
+		result[dataOptions.Key] = typedStr
 	}
 
 	return result, nil
@@ -117,4 +103,56 @@ func isJsonContentType(contentType *string) bool {
 	contentTypeStr := strings.ToLower(strings.Trim(*contentType, " "))
 	matched, _ := regexp.MatchString("^application\\/(?:[^\\/]+\\+)?json(;.*)?$", contentTypeStr)
 	return matched
+}
+
+// Used for scenarios related to feature flag refresh.
+// Currently, only supports feature flag settings in JSON/YAML formats.
+func unmarshalConfigMap(existingConfigMapSetting *map[string]string, dataOptions *acpv1.ConfigMapDataOptions) (map[string]interface{}, map[string]interface{}, error) {
+	var existingConfigMapData string
+	var ok bool
+	if existingConfigMapData, ok = (*existingConfigMapSetting)[dataOptions.Key]; !ok {
+		return nil, nil, fmt.Errorf("Failed to get data for key '%s' from configMap", dataOptions.Key)
+	}
+
+	keyValueSettings := make(map[string]interface{})
+	var featureFlagSection map[string]interface{}
+	switch dataOptions.Type {
+	case acpv1.Yaml:
+		err := yaml.Unmarshal([]byte(existingConfigMapData), &keyValueSettings)
+		if err != nil {
+			return nil, nil, err
+		}
+	case acpv1.Json:
+		err := json.Unmarshal([]byte(existingConfigMapData), &keyValueSettings)
+		if err != nil {
+			return nil, nil, err
+		}
+	default:
+		return nil, nil, fmt.Errorf("Unsupported data type '%s', only supports json/yaml for now", dataOptions.Type)
+	}
+
+	if featureFlagSection, ok = keyValueSettings[FeatureManagementSectionName].(map[string]interface{}); !ok {
+		return nil, nil, fmt.Errorf("Failed to get feature flags from configMap data '%s'", existingConfigMapData)
+	}
+	delete(keyValueSettings, FeatureManagementSectionName)
+	return featureFlagSection, keyValueSettings, nil
+}
+
+func marshalJsonYaml(settings map[string]interface{}, dataOptions *acpv1.ConfigMapDataOptions) (string, error) {
+	switch dataOptions.Type {
+	case acpv1.Yaml:
+		yamlStr, err := yaml.Marshal(settings)
+		if err != nil {
+			return "", fmt.Errorf("Failed to marshal key-values to yaml: %s", err.Error())
+		}
+		return string(yamlStr), nil
+	case acpv1.Json:
+		jsonStr, err := json.Marshal(settings)
+		if err != nil {
+			return "", fmt.Errorf("Failed to marshal key-values to json: %s", err.Error())
+		}
+		return string(jsonStr), nil
+	}
+
+	return "", nil
 }

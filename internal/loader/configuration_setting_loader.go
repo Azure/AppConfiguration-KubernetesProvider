@@ -7,6 +7,7 @@ import (
 	acpv1 "azappconfig/provider/api/v1"
 	"azappconfig/provider/internal/properties"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -43,13 +44,23 @@ type TargetKeyValueSettings struct {
 	KeyVaultReferencesToCache map[string]KeyVaultSecretUriSegment
 }
 
+type RawSettings struct {
+	KeyValueSettings          map[string]*string
+	IsJsonContentTypeMap      map[string]bool
+	FeatureFlagSettings       map[string]interface{}
+	SecretSettings            map[string][]byte
+	KeyVaultReferencesToCache map[string]KeyVaultSecretUriSegment
+}
+
 type ConfigurationSettingsRetriever interface {
-	CreateKeyValueSettings(ctx context.Context, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error)
+	CreateTargetSettings(ctx context.Context, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error)
+	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error)
+	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
 	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
 	ResolveKeyVaultReferences(ctx context.Context, kvReferencesToResolve map[string]KeyVaultSecretUriSegment, kvResolver ResolveSecretReference) (map[string][]byte, error)
 }
 
-type GetSettingsFunc func(ctx context.Context, acpSpec acpv1.AzureAppConfigurationProviderSpec, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
+type GetSettingsFunc func(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
 
 type ServicePrincipleAuthenticationParameters struct {
 	ClientId     string
@@ -64,6 +75,9 @@ const (
 	AzureClientSecret                     string = "azure_client_secret"
 	AzureTenantId                         string = "azure_tenant_id"
 	AzureAppConfigurationConnectionString string = "azure_app_configuration_connection_string"
+	FeatureFlagKeyPrefix                  string = ".appconfig.featureflag/"
+	FeatureFlagSectionName                string = "FeatureFlags"
+	FeatureManagementSectionName          string = "FeatureManagement"
 )
 
 var (
@@ -109,21 +123,92 @@ func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppC
 	}, nil
 }
 
-func (csp *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error) {
+func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error) {
+	rawSettings, err := csl.CreateKeyValueSettings(ctx, resolveSecretReference)
+	if err != nil {
+		return nil, err
+	}
+
+	if csl.Spec.FeatureFlag != nil {
+		if rawSettings.FeatureFlagSettings, err = csl.getFeatureFlagSettings(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	typedSettings, err := createTypedSettings(rawSettings, csl.Spec.Target.ConfigMapData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TargetKeyValueSettings{
+		ConfigMapSettings:         typedSettings,
+		SecretSettings:            rawSettings.SecretSettings,
+		KeyVaultReferencesToCache: rawSettings.KeyVaultReferencesToCache,
+	}, nil
+}
+
+func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Context, existingConfigMapSetting *map[string]string, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error) {
+	rawSettings, err := csl.CreateKeyValueSettings(ctx, resolveSecretReference)
+	if err != nil {
+		return nil, err
+	}
+
+	if csl.Spec.FeatureFlag != nil {
+		rawSettings.FeatureFlagSettings, _, err = unmarshalConfigMap(existingConfigMapSetting, csl.Spec.Target.ConfigMapData)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	typedSettings, err := createTypedSettings(rawSettings, csl.Spec.Target.ConfigMapData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TargetKeyValueSettings{
+		ConfigMapSettings:         typedSettings,
+		SecretSettings:            rawSettings.SecretSettings,
+		KeyVaultReferencesToCache: rawSettings.KeyVaultReferencesToCache,
+	}, nil
+}
+
+func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSetting *map[string]string) (*TargetKeyValueSettings, error) {
+	latestFeatureFlagSettings, err := csl.getFeatureFlagSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	_, existingSettings, err := unmarshalConfigMap(existingConfigMapSetting, csl.Spec.Target.ConfigMapData)
+	if err != nil {
+		return nil, err
+	}
+
+	existingSettings[FeatureManagementSectionName] = latestFeatureFlagSettings
+	typedStr, err := marshalJsonYaml(existingSettings, csl.Spec.Target.ConfigMapData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TargetKeyValueSettings{
+		ConfigMapSettings: map[string]string{
+			csl.Spec.Target.ConfigMapData.Key: typedStr,
+		},
+	}, nil
+}
+
+func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, resolveSecretReference ResolveSecretReference) (*RawSettings, error) {
 	settingsChan := make(chan []azappconfig.Setting)
 	errChan := make(chan error)
-	go csp.getSettingsFunc(ctx, csp.Spec, csp.AppConfigClient, settingsChan, errChan)
+	keyValueFilters := getKeyValueFilters(csl.Spec)
+	go csl.getSettingsFunc(ctx, keyValueFilters, csl.AppConfigClient, settingsChan, errChan)
 
-	targetSettings := &TargetKeyValueSettings{
-		ConfigMapSettings:         make(map[string]string),
+	rawSettings := &RawSettings{
+		KeyValueSettings:          make(map[string]*string),
+		IsJsonContentTypeMap:      make(map[string]bool),
 		SecretSettings:            make(map[string][]byte),
 		KeyVaultReferencesToCache: make(map[string]KeyVaultSecretUriSegment),
 	}
-	var configMapSettings = make(map[string]*string)
-	var isJsonContentTypeMap = make(map[string]bool)
 	var settings []azappconfig.Setting
 	var kvResolver ResolveSecretReference
-	var kvReferencesToResolve map[string]KeyVaultSecretUriSegment = make(map[string]KeyVaultSecretUriSegment)
 
 	for {
 		select {
@@ -132,15 +217,15 @@ func (csp *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 				goto end
 			}
 			for _, setting := range settings {
-				trimmedKey := trimPrefix(*setting.Key, csp.Spec.Configuration.TrimKeyPrefixes)
+				trimmedKey := trimPrefix(*setting.Key, csl.Spec.Configuration.TrimKeyPrefixes)
 				if len(trimmedKey) == 0 {
 					klog.Warningf("key of the setting '%s' is trimmed to the empty string, just ignore it", *setting.Key)
 					continue
 				}
 
 				if setting.ContentType == nil {
-					configMapSettings[trimmedKey] = setting.Value
-					isJsonContentTypeMap[trimmedKey] = false
+					rawSettings.KeyValueSettings[trimmedKey] = setting.Value
+					rawSettings.IsJsonContentTypeMap[trimmedKey] = false
 					continue
 				}
 				switch *setting.ContentType {
@@ -150,12 +235,12 @@ func (csp *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 					if setting.Value == nil {
 						return nil, fmt.Errorf("The value of Key Vault reference '%s' is null", *setting.Key)
 					}
-					if csp.Spec.Secret == nil {
-						return nil, fmt.Errorf("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csp.Name, csp.Namespace)
+					if csl.Spec.Secret == nil {
+						return nil, fmt.Errorf("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
 					}
 					if kvResolver == nil {
 						if resolveSecretReference == nil {
-							if newKvResolver, err := csp.createKeyVaultResolver(ctx); err != nil {
+							if newKvResolver, err := csl.createKeyVaultResolver(ctx); err != nil {
 								return nil, err
 							} else {
 								kvResolver = newKvResolver
@@ -173,21 +258,21 @@ func (csp *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 					// Cache the non-versioned secret reference
 					if secretUriSegment.SecretVersion == "" {
-						targetSettings.KeyVaultReferencesToCache[trimmedKey] = *secretUriSegment
+						rawSettings.KeyVaultReferencesToCache[trimmedKey] = *secretUriSegment
 					}
 
-					kvReferencesToResolve[trimmedKey] = *secretUriSegment
+					rawSettings.KeyVaultReferencesToCache[trimmedKey] = *secretUriSegment
 				default:
-					configMapSettings[trimmedKey] = setting.Value
-					isJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
+					rawSettings.KeyValueSettings[trimmedKey] = setting.Value
+					rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
 				}
 			}
 
-			// resolve the Key Vault reference settings
-			if resolvedSecret, err := csp.ResolveKeyVaultReferences(ctx, kvReferencesToResolve, kvResolver); err != nil {
+			// resolve the keyVault reference settings
+			if resolvedSecret, err := csl.ResolveKeyVaultReferences(ctx, rawSettings.KeyVaultReferencesToCache, kvResolver); err != nil {
 				return nil, err
 			} else {
-				maps.Copy(targetSettings.SecretSettings, resolvedSecret)
+				maps.Copy(rawSettings.SecretSettings, resolvedSecret)
 			}
 		case err := <-errChan:
 			if err != nil {
@@ -197,15 +282,48 @@ func (csp *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 	}
 
 end:
-	typedSetting, err := createTypedSettings(configMapSettings, isJsonContentTypeMap, csp.Spec.Target.ConfigMapData)
-	if err != nil {
-		return nil, err
-	}
-	targetSettings.ConfigMapSettings = typedSetting
-	return targetSettings, nil
+	return rawSettings, nil
 }
 
-func (csp *ConfigurationSettingLoader) CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error) {
+func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, error) {
+	featureFlagSettingChan := make(chan []azappconfig.Setting)
+	errChan := make(chan error)
+	featureFlagFilters := getFeatureFlagFilters(csl.Spec)
+	go csl.getSettingsFunc(ctx, featureFlagFilters, csl.AppConfigClient, featureFlagSettingChan, errChan)
+
+	var featureFlagSettings []azappconfig.Setting
+	// featureFlagSection = {"featureFlags": [{...}, {...}]}
+	var featureFlagSection = map[string]interface{}{
+		FeatureFlagSectionName: make([]interface{}, 0),
+	}
+
+	for {
+		select {
+		case featureFlagSettings = <-featureFlagSettingChan:
+			if len(featureFlagSettings) == 0 {
+				goto end
+			} else {
+				for _, setting := range featureFlagSettings {
+					var out interface{}
+					err := json.Unmarshal([]byte(*setting.Value), &out)
+					if err != nil {
+						return nil, fmt.Errorf("Failed to unmarshal feature flag settings: %s", err.Error())
+					}
+					featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
+				}
+			}
+		case err := <-errChan:
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+end:
+	return featureFlagSection, nil
+}
+
+func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error) {
 	sentinelChanged := false
 	if provider.Spec.Configuration.Refresh == nil {
 		return sentinelChanged, eTags, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
@@ -217,7 +335,7 @@ func (csp *ConfigurationSettingLoader) CheckAndRefreshSentinels(ctx context.Cont
 			// Initialize the updatedETags with the current eTags
 			refreshedETags[sentinel] = eTag
 		}
-		refreshedSentinel, err := csp.getSentinelSetting(ctx, provider, sentinel, refreshedETags[sentinel])
+		refreshedSentinel, err := csl.getSentinelSetting(ctx, provider, sentinel, refreshedETags[sentinel])
 		if err != nil {
 			return false, eTags, err
 		}
@@ -231,9 +349,9 @@ func (csp *ConfigurationSettingLoader) CheckAndRefreshSentinels(ctx context.Cont
 	return sentinelChanged, refreshedETags, nil
 }
 
-func (csp *ConfigurationSettingLoader) ResolveKeyVaultReferences(ctx context.Context, keyVaultReferencesToResolve map[string]KeyVaultSecretUriSegment, keyVaultResolver ResolveSecretReference) (map[string][]byte, error) {
+func (csl *ConfigurationSettingLoader) ResolveKeyVaultReferences(ctx context.Context, keyVaultReferencesToResolve map[string]KeyVaultSecretUriSegment, keyVaultResolver ResolveSecretReference) (map[string][]byte, error) {
 	if keyVaultResolver == nil {
-		if kvResolver, err := csp.createKeyVaultResolver(ctx); err != nil {
+		if kvResolver, err := csl.createKeyVaultResolver(ctx); err != nil {
 			return nil, err
 		} else {
 			keyVaultResolver = kvResolver
@@ -267,12 +385,12 @@ func (csp *ConfigurationSettingLoader) ResolveKeyVaultReferences(ctx context.Con
 	return resolvedSecretReferences, nil
 }
 
-func (csp *ConfigurationSettingLoader) getSentinelSetting(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, sentinel acpv1.Sentinel, etag *azcore.ETag) (*azappconfig.Setting, error) {
+func (csl *ConfigurationSettingLoader) getSentinelSetting(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, sentinel acpv1.Sentinel, etag *azcore.ETag) (*azappconfig.Setting, error) {
 	if provider.Spec.Configuration.Refresh == nil {
 		return nil, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
 	}
 
-	sentinelSetting, err := csp.AppConfigClient.GetSetting(ctx, sentinel.Key, &azappconfig.GetSettingOptions{Label: &sentinel.Label, OnlyIfChanged: etag})
+	sentinelSetting, err := csl.AppConfigClient.GetSetting(ctx, sentinel.Key, &azappconfig.GetSettingOptions{Label: &sentinel.Label, OnlyIfChanged: etag})
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) {
@@ -297,16 +415,16 @@ func (csp *ConfigurationSettingLoader) getSentinelSetting(ctx context.Context, p
 	return &sentinelSetting.Setting, nil
 }
 
-func (csp *ConfigurationSettingLoader) createKeyVaultResolver(ctx context.Context) (ResolveSecretReference, error) {
+func (csl *ConfigurationSettingLoader) createKeyVaultResolver(ctx context.Context) (ResolveSecretReference, error) {
 	var defaultAuth *acpv1.AzureAppConfigurationProviderAuth = nil
-	if csp.Spec.Secret != nil && csp.Spec.Secret.Auth != nil {
-		defaultAuth = csp.Spec.Secret.Auth.AzureAppConfigurationProviderAuth
+	if csl.Spec.Secret != nil && csl.Spec.Secret.Auth != nil {
+		defaultAuth = csl.Spec.Secret.Auth.AzureAppConfigurationProviderAuth
 	}
-	defaultCred, err := createTokenCredential(ctx, defaultAuth, csp.Namespace)
+	defaultCred, err := createTokenCredential(ctx, defaultAuth, csl.Namespace)
 	if err != nil {
 		return nil, err
 	}
-	secretClients, err := createSecretClients(ctx, csp.AzureAppConfigurationProvider)
+	secretClients, err := createSecretClients(ctx, csl.AzureAppConfigurationProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -330,8 +448,7 @@ func trimPrefix(key string, prefixToTrim []string) string {
 	return key
 }
 
-func getConfigurationSettings(ctx context.Context, acpSpec acpv1.AzureAppConfigurationProviderSpec, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
-	filters := getFilters(acpSpec)
+func getConfigurationSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
 	nullString := "\x00"
 
 	for _, filter := range filters {
@@ -471,37 +588,55 @@ func getSecret(ctx context.Context, namespacedSecretName types.NamespacedName) (
 	return secretObject, nil
 }
 
-func getFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.KeyValueSelector {
-	var filters []acpv1.KeyValueSelector
+func getKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
+	return deduplicateFilters(acpSpec.Configuration.Selectors)
+}
+
+func getFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
+	featureFlagFilters := make([]acpv1.Selector, 0)
+
+	if acpSpec.FeatureFlag != nil {
+		featureFlagFilters = deduplicateFilters(acpSpec.FeatureFlag.Selectors)
+		for i := 0; i < len(featureFlagFilters); i++ {
+			featureFlagFilters[i].KeyFilter = FeatureFlagKeyPrefix + featureFlagFilters[i].KeyFilter
+		}
+	}
+
+	return featureFlagFilters
+}
+
+func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
+	var result []acpv1.Selector
 	findDuplicate := false
-	if len(acpSpec.Configuration.Selectors) > 0 {
+
+	if len(filters) > 0 {
 		//
 		// Deduplicate the filters in a way that in honor of what user tell us
 		// If user populate the selectors with  `{KeyFilter: "one*", LabelFilter: "prod"}, {KeyFilter: "two*", LabelFilter: "dev"}, {KeyFilter: "one*", LabelFilter: "prod"}`
 		// We deduplicate it into `{KeyFilter: "two*", LabelFilter: "dev"}, {KeyFilter: "one*", LabelFilter: "prod"}`
 		// not `{KeyFilter: "one*", LabelFilter: "prod"}, {KeyFilter: "two*", LabelFilter: "dev"}`
-		for i := len(acpSpec.Configuration.Selectors) - 1; i >= 0; i-- {
+		for i := len(filters) - 1; i >= 0; i-- {
 			findDuplicate = false
-			for j := 0; j < len(filters); j++ {
-				if strings.Compare(filters[j].KeyFilter, acpSpec.Configuration.Selectors[i].KeyFilter) == 0 &&
-					compare(filters[j].LabelFilter, acpSpec.Configuration.Selectors[i].LabelFilter) {
+			for j := 0; j < len(result); j++ {
+				if strings.Compare(result[j].KeyFilter, filters[i].KeyFilter) == 0 &&
+					compare(result[j].LabelFilter, filters[i].LabelFilter) {
 					findDuplicate = true
 					break
 				}
 			}
 			if !findDuplicate {
-				filters = append(filters, acpSpec.Configuration.Selectors[i])
+				result = append(result, filters[i])
 			}
 		}
-		reverse(filters)
+		reverse(result)
 	} else {
-		filters = append(filters, acpv1.KeyValueSelector{
+		result = append(result, acpv1.Selector{
 			KeyFilter:   "*",
 			LabelFilter: nil,
 		})
 	}
 
-	return filters
+	return result
 }
 
 func compare(a *string, b *string) bool {
@@ -514,7 +649,7 @@ func compare(a *string, b *string) bool {
 	return strings.Compare(*a, *b) == 0
 }
 
-func reverse(arr []acpv1.KeyValueSelector) {
+func reverse(arr []acpv1.Selector) {
 	for i, j := 0, len(arr)-1; i < j; i, j = i+1, j-1 {
 		arr[i], arr[j] = arr[j], arr[i]
 	}

@@ -45,7 +45,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateKeyValueSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider"
@@ -104,7 +104,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateKeyValueSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-2"
@@ -155,7 +155,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				SecretSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateKeyValueSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-3"
@@ -218,7 +218,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: configMapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateKeyValueSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-5"
@@ -287,7 +287,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateKeyValueSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-7"
@@ -441,6 +441,65 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 
 			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.target.configMapData.separator: separator field is not allowed when type is properties"))
+		})
+
+		It("Should return error if feature flag is set when data type is default", func() {
+			configMapName := "test-configmap"
+			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+				},
+				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter: "testKey",
+						},
+					},
+				},
+			}
+
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.target.configMapData: configMap data type must be json or yaml when FeatureFlag is set"))
+		})
+
+		It("Should return error if feature flag is set when data type is properties", func() {
+			configMapName := "test-configmap"
+			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+					ConfigMapData: &acpv1.ConfigMapDataOptions{
+						Type: acpv1.Properties,
+						Key:  "testKey",
+					},
+				},
+				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter: "testKeyFilter",
+						},
+					},
+				},
+			}
+
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.target.configMapData: configMap data type must be json or yaml when FeatureFlag is set"))
+		})
+
+		It("Should return error if feature flag selector is not set", func() {
+			configMapName := "test-configmap"
+			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+					ConfigMapData: &acpv1.ConfigMapDataOptions{
+						Type: acpv1.Json,
+						Key:  "testKey",
+					},
+				},
+				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{},
+			}
+
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.featureFlag.selectors: featureFlag.selectors must be specified when FeatureFlag is set"))
 		})
 
 		It("Should return error if both endpoint and connectionStringReference are not set", func() {

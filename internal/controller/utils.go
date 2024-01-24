@@ -18,6 +18,7 @@ import (
 const (
 	MinimalSentinelBasedRefreshInterval time.Duration = time.Second
 	MinimalSecretRefreshInterval        time.Duration = time.Minute
+	MinimalFeatureFlagRefreshInterval   time.Duration = time.Minute
 )
 
 func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
@@ -55,6 +56,31 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 		for i := range spec.Configuration.Selectors {
 			if spec.Configuration.Selectors[i].LabelFilter != nil && hasNonEscapedValueInLabel(*spec.Configuration.Selectors[i].LabelFilter) {
 				return loader.NewArgumentError("spec.configuration.selectors", fmt.Errorf("non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters"))
+			}
+		}
+	}
+
+	if spec.FeatureFlag != nil {
+		if spec.Target.ConfigMapData == nil || spec.Target.ConfigMapData.Type == acpv1.Default || spec.Target.ConfigMapData.Type == acpv1.Properties {
+			return loader.NewArgumentError("spec.target.configMapData", fmt.Errorf("configMap data type must be json or yaml when FeatureFlag is set"))
+		}
+
+		if len(spec.FeatureFlag.Selectors) == 0 {
+			return loader.NewArgumentError("spec.featureFlag.selectors", fmt.Errorf("featureFlag.selectors must be specified when FeatureFlag is set"))
+		}
+
+		// Check if feature flag label filters are valid
+		for i := range spec.FeatureFlag.Selectors {
+			if spec.FeatureFlag.Selectors[i].LabelFilter != nil && hasNonEscapedValueInLabel(*spec.FeatureFlag.Selectors[i].LabelFilter) {
+				return loader.NewArgumentError("spec.featureFlag.selectors", fmt.Errorf("non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters"))
+			}
+		}
+
+		// Check if feature flag refresh interval is valid
+		if spec.FeatureFlag.Refresh != nil {
+			err := verifyRefreshInterval(spec.FeatureFlag.Refresh.Interval, MinimalFeatureFlagRefreshInterval, "featureFlag.refresh.interval")
+			if err != nil {
+				return err
 			}
 		}
 	}

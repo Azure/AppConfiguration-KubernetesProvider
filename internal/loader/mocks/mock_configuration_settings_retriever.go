@@ -53,19 +53,49 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckAndRefreshSentine
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAndRefreshSentinels", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckAndRefreshSentinels), arg0, arg1, arg2)
 }
 
-// CreateKeyValueSettings mocks base method.
-func (m *MockConfigurationSettingsRetriever) CreateKeyValueSettings(arg0 context.Context, arg1 loader.ResolveSecretReference) (*loader.TargetKeyValueSettings, error) {
+// CreateTargetSettings mocks base method.
+func (m *MockConfigurationSettingsRetriever) CreateTargetSettings(arg0 context.Context, arg1 loader.ResolveSecretReference) (*loader.TargetKeyValueSettings, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateKeyValueSettings", arg0, arg1)
+	ret := m.ctrl.Call(m, "CreateTargetSettings", arg0, arg1)
 	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreateKeyValueSettings indicates an expected call of CreateKeyValueSettings.
-func (mr *MockConfigurationSettingsRetrieverMockRecorder) CreateKeyValueSettings(arg0, arg1 interface{}) *gomock.Call {
+// CreateTargetSettings indicates an expected call of CreateTargetSettings.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) CreateTargetSettings(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateKeyValueSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CreateKeyValueSettings), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTargetSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CreateTargetSettings), arg0, arg1)
+}
+
+// RefreshFeatureFlagSettings mocks base method.
+func (m *MockConfigurationSettingsRetriever) RefreshFeatureFlagSettings(arg0 context.Context, arg1 *map[string]string) (*loader.TargetKeyValueSettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshFeatureFlagSettings", arg0, arg1)
+	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RefreshFeatureFlagSettings indicates an expected call of RefreshFeatureFlagSettings.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshFeatureFlagSettings(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshFeatureFlagSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).RefreshFeatureFlagSettings), arg0, arg1)
+}
+
+// RefreshKeyValueSettings mocks base method.
+func (m *MockConfigurationSettingsRetriever) RefreshKeyValueSettings(arg0 context.Context, arg1 *map[string]string, arg2 loader.ResolveSecretReference) (*loader.TargetKeyValueSettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshKeyValueSettings", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RefreshKeyValueSettings indicates an expected call of RefreshKeyValueSettings.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshKeyValueSettings(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshKeyValueSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).RefreshKeyValueSettings), arg0, arg1, arg2)
 }
 
 // ResolveKeyVaultReferences mocks base method.

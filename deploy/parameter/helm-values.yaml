@@ -41,10 +41,10 @@ securityContext:
 
 resources: 
   limits:
-    cpu: 500m
+    cpu: 100m
     memory: 128Mi
   requests:
-    cpu: 10m
+    cpu: 20m
     memory: 64Mi
 
 autoscaling:

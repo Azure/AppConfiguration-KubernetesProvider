@@ -35,7 +35,7 @@ type AzureAppConfigurationProviderSpec struct {
 	Target                    ConfigurationGenerationParameters        `json:"target"`
 	Auth                      *AzureAppConfigurationProviderAuth       `json:"auth,omitempty"`
 	Configuration             AzureAppConfigurationKeyValueOptions     `json:"configuration,omitempty"`
-	Secret                    *AzureKeyVaultReference                  `json:"secret,omitempty"`
+	Secret                    *SecretReference                         `json:"secret,omitempty"`
 	FeatureFlag               *AzureAppConfigurationFeatureFlagOptions `json:"featureFlag,omitempty"`
 }
 
@@ -141,8 +141,8 @@ type ManagedIdentityReferenceParameters struct {
 	Key string `json:"key"`
 }
 
-// AzureKeyVaultReference defines the authentication type used to Azure KeyVault resolve KeyVaultReference
-type AzureKeyVaultReference struct {
+// SecretReference defines the authentication type used to Azure KeyVault resolve KeyVaultReference
+type SecretReference struct {
 	Target  SecretGenerationParameters `json:"target"`
 	Auth    *AzureKeyVaultAuth         `json:"auth,omitempty"`
 	Refresh *RefreshSettings           `json:"refresh,omitempty"`

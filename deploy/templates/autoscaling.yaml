@@ -2,7 +2,7 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: az-appconfig-k8s-provider-hpa
+  name: {{ include "az-appconfig-k8s-provider.fullname" . }}-hpa
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

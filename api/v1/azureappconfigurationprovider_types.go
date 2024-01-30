@@ -73,8 +73,8 @@ type AzureAppConfigurationKeyValueOptions struct {
 
 // AzureAppConfigurationFeatureFlagOptions defines the options of fetching feature flags from AppConfiguration.
 type AzureAppConfigurationFeatureFlagOptions struct {
-	Selectors []Selector       `json:"selectors,omitempty"`
-	Refresh   *RefreshSettings `json:"refresh,omitempty"`
+	Selectors []Selector                  `json:"selectors,omitempty"`
+	Refresh   *FeatureFlagRefreshSettings `json:"refresh,omitempty"`
 }
 
 // KeyLabelSelector defines the filters when fetching the data from Azure AppConfiguration
@@ -151,6 +151,14 @@ type AzureKeyVaultReference struct {
 // Defines the settings for refresh.
 type RefreshSettings struct {
 	// +kubebuilder:validation:Format=duration
+	Interval string `json:"interval"`
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+type FeatureFlagRefreshSettings struct {
+	// +kubebuilder:validation:Format=duration
+	// +kubebuilder:default="30s"
 	Interval string `json:"interval"`
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled,omitempty"`

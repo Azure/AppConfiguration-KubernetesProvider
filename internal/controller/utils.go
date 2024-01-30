@@ -18,7 +18,7 @@ import (
 const (
 	MinimalSentinelBasedRefreshInterval time.Duration = time.Second
 	MinimalSecretRefreshInterval        time.Duration = time.Minute
-	MinimalFeatureFlagRefreshInterval   time.Duration = time.Minute
+	MinimalFeatureFlagRefreshInterval   time.Duration = time.Second
 )
 
 func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {

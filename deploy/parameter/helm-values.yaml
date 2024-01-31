@@ -41,10 +41,10 @@ securityContext:
 
 resources: 
   limits:
-    cpu: 500m
-    memory: 128Mi
+    cpu: 100m
+    memory: 256Mi
   requests:
-    cpu: 10m
+    cpu: 20m
     memory: 64Mi
 
 autoscaling:
@@ -52,7 +52,20 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 5
   targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
 
 env:
   azureClientId: ""
   azureTenantId: ""
+
+# Pod scheduling preferences
+# ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+affinity: {}
+
+# Node labels for pod assignment
+# ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+nodeSelector: {}
+
+# Tolerations for nodes that have taints on them.
+# ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration
+tolerations: []

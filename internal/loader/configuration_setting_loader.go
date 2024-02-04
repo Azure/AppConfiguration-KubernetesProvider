@@ -50,8 +50,9 @@ type TargetKeyValueSettings struct {
 }
 
 type TargetSecretReference struct {
-	Type        corev1.SecretType
-	UriSegments map[string]KeyVaultSecretUriSegment
+	Type                  corev1.SecretType
+	UriSegments           map[string]KeyVaultSecretUriSegment
+	SecretResourceVersion string
 }
 
 type RawSettings struct {
@@ -210,7 +211,7 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 	}, nil
 }
 
-func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*RawSettings, error) {
+func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver) (*RawSettings, error) {
 	settingsChan := make(chan []azappconfig.Setting)
 	errChan := make(chan error)
 	keyValueFilters := getKeyValueFilters(csl.Spec)
@@ -223,7 +224,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 		SecretReferences:     make(map[string]*TargetSecretReference),
 	}
 	var settings []azappconfig.Setting
-	var kvResolver SecretReferenceResolver
+	resolver := secretReferenceResolver
 
 	for {
 		select {
@@ -251,6 +252,10 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 						return nil, fmt.Errorf("The value of Key Vault reference '%s' is null", *setting.Key)
 					}
 
+					if csl.Spec.Secret == nil {
+						return nil, fmt.Errorf("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
+					}
+
 					var secretType corev1.SecretType = corev1.SecretTypeOpaque
 					var err error
 					if secretTypeTag, ok := setting.Tags[PreservedSecretTypeTag]; ok {
@@ -258,19 +263,13 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 						if err != nil {
 							return nil, err
 						}
-					} else if csl.Spec.Secret == nil {
-						return nil, fmt.Errorf("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
 					}
 
-					if kvResolver == nil {
-						if resolveSecretReference == nil {
-							if newKvResolver, err := csl.createSecretReferenceResolver(ctx); err != nil {
-								return nil, err
-							} else {
-								kvResolver = newKvResolver
-							}
+					if resolver == nil {
+						if newResolver, err := csl.createSecretReferenceResolver(ctx); err != nil {
+							return nil, err
 						} else {
-							kvResolver = resolveSecretReference
+							resolver = newResolver
 						}
 					}
 
@@ -300,7 +299,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 			}
 
 			// resolve the secret reference settings
-			if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.SecretReferences, kvResolver); err != nil {
+			if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.SecretReferences, resolver); err != nil {
 				return nil, err
 			} else {
 				err = MergeSecret(rawSettings.SecretSettings, resolvedSecret)

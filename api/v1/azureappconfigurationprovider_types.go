@@ -156,6 +156,7 @@ type RefreshSettings struct {
 	Enabled bool `json:"enabled,omitempty"`
 }
 
+// Defines the settings for feature flag refresh.
 type FeatureFlagRefreshSettings struct {
 	// +kubebuilder:validation:Format=duration
 	// +kubebuilder:default="30s"

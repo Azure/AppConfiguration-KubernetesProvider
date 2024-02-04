@@ -136,12 +136,13 @@ spec:
                   of fetching feature flags from AppConfiguration.
                 properties:
                   refresh:
-                    description: Defines the settings for refresh.
+                    description: Defines the settings for feature flag refresh.
                     properties:
                       enabled:
                         default: false
                         type: boolean
                       interval:
+                        default: 30s
                         format: duration
                         type: string
                     required:

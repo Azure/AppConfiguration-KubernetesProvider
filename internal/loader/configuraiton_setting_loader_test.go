@@ -305,7 +305,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
 			_, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
 
-			Expect(err.Error()).Should(Equal("fail to decode the cert 'targetSecret': failed to get certificate, unknown content type 'fake-content-type'"))
+			Expect(err.Error()).Should(Equal("fail to decode the cert 'targetSecret': unknown content type 'fake-content-type'"))
 		})
 
 		It("Should throw decode pem block error", func() {
@@ -560,9 +560,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
 			secretValue, _ := createFakePfx()
 			secretName := "targetSecret"
+			ct := CertTypePfx
 			secret1 := azsecrets.GetSecretResponse{
 				SecretBundle: azsecrets.SecretBundle{
-					Value: &secretValue,
+					Value:       &secretValue,
+					ContentType: &ct,
 				},
 			}
 
@@ -614,9 +616,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
 			secretValue, _ := createFakePem()
 			secretName := "targetSecret"
+			ct := CertTypePem
 			secret1 := azsecrets.GetSecretResponse{
 				SecretBundle: azsecrets.SecretBundle{
-					Value: &secretValue,
+					Value:       &secretValue,
+					ContentType: &ct,
 				},
 			}
 

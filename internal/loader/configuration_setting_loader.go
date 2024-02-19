@@ -434,25 +434,23 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 					return fmt.Errorf("fail to resolve the Key Vault reference type setting '%s': %s", name, err.Error())
 				}
 
-				if resolvedSecret.Kid != nil && len(*resolvedSecret.Kid) > 0 {
-					switch *resolvedSecret.ContentType {
-					case CertTypePfx:
-						resolvedSecretReferences[name].Data[TlsKey], resolvedSecretReferences[name].Data[TlsCrt], err = decodePkcs12(*resolvedSecret.Value)
-					case CertTypePem:
-						resolvedSecretReferences[name].Data[TlsKey], resolvedSecretReferences[name].Data[TlsCrt], err = decodePem(*resolvedSecret.Value)
-					default:
-						err = fmt.Errorf("failed to get certificate, unknown content type '%s'", *resolvedSecret.ContentType)
-					}
-				} else {
+				if resolvedSecret.ContentType == nil {
+					return fmt.Errorf("unspecified content type")
+				}
+
+				switch *resolvedSecret.ContentType {
+				case CertTypePfx:
 					resolvedSecretReferences[name].Data[TlsKey], resolvedSecretReferences[name].Data[TlsCrt], err = decodePkcs12(*resolvedSecret.Value)
-					if err != nil {
-						resolvedSecretReferences[name].Data[TlsKey], resolvedSecretReferences[name].Data[TlsCrt], err = decodePem(*resolvedSecret.Value)
-					}
+				case CertTypePem:
+					resolvedSecretReferences[name].Data[TlsKey], resolvedSecretReferences[name].Data[TlsCrt], err = decodePem(*resolvedSecret.Value)
+				default:
+					err = fmt.Errorf("unknown content type '%s'", *resolvedSecret.ContentType)
 				}
 
 				if err != nil {
 					return fmt.Errorf("fail to decode the cert '%s': %s", name, err.Error())
 				}
+
 				return nil
 			})
 		}

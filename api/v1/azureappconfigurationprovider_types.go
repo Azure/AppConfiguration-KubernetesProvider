@@ -141,7 +141,7 @@ type ManagedIdentityReferenceParameters struct {
 	Key string `json:"key"`
 }
 
-// SecretReference defines the authentication type used to Azure KeyVault resolve KeyVaultReference
+// SecretReference defines the settings for resolving secret reference type items
 type SecretReference struct {
 	Target  SecretGenerationParameters `json:"target"`
 	Auth    *AzureKeyVaultAuth         `json:"auth,omitempty"`

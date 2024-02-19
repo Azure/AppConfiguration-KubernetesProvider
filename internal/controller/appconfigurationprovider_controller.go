@@ -212,9 +212,6 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		retriever = reconciler.Retriever
 	}
 
-	/* Check if the reconciler should reconcile unconditionally under some situations, like the provider is updated, the configmap is deleted and so on. */
-	shouldReconcile := reconciler.shouldReconcile(provider, &existingConfigMap, existingSecrets)
-
 	// Initialize the processor setting in this reconcile
 	processor := &AppConfigurationProviderProcessor{
 		Context:                ctx,
@@ -222,7 +219,6 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		Retriever:              &retriever,
 		CurrentTime:            metav1.Now(),
 		ReconciliationState:    reconciler.ProvidersReconcileState[req.NamespacedName],
-		ShouldReconcile:        shouldReconcile,
 		Settings:               &loader.TargetKeyValueSettings{},
 		RefreshOptions:         NewRefreshOptions(),
 		ResolveSecretReference: nil,
@@ -239,6 +235,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 			return result, nil
 		}
 	}
+
 	/* Create secret when there are secret settings */
 	if processor.RefreshOptions.SecretSettingPopulated {
 		result, err := reconciler.createOrUpdateSecrets(ctx, provider, processor.Settings)
@@ -465,44 +462,6 @@ func newProviderStatus(
 		LastSyncTime:      syncTime,
 		RefreshStatus:     refreshStatus,
 	}
-}
-
-func (reconciler *AzureAppConfigurationProviderReconciler) shouldReconcile(
-	provider *acpv1.AzureAppConfigurationProvider,
-	existingConfigMap *corev1.ConfigMap,
-	existingSecrets map[string]corev1.Secret) bool {
-	// Get the name and namespace of the provider
-	namespacedName := types.NamespacedName{
-		Name:      provider.Name,
-		Namespace: provider.Namespace,
-	}
-
-	if provider.Generation != reconciler.ProvidersReconcileState[namespacedName].Generation {
-		// If the provider is updated, we need to reconcile anyway
-		return true
-	}
-
-	if reconciler.ProvidersReconcileState[namespacedName].ConfigMapResourceVersion == nil ||
-		*reconciler.ProvidersReconcileState[namespacedName].ConfigMapResourceVersion != existingConfigMap.ResourceVersion {
-		// If the ConfigMap is removed or updated, we need to reconcile anyway
-		return true
-	}
-
-	if provider.Spec.Secret == nil {
-		return false
-	}
-
-	if len(reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences) == 0 {
-		return true
-	}
-
-	for name, secret := range existingSecrets {
-		if reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[name].SecretResourceVersion != secret.ResourceVersion {
-			return true
-		}
-	}
-
-	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.

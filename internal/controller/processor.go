@@ -43,43 +43,43 @@ type RefreshOptions struct {
 }
 
 func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingConfigMap *corev1.ConfigMap, existingSecrets map[string]corev1.Secret) error {
-	if err := processor.ProcessFullReconciliation(); err != nil {
-		return err
-	}
-
-	if err := processor.ProcessFeatureFlagRefresh(existingConfigMap); err != nil {
-		return err
-	}
-
-	if err := processor.ProcessKeyValueRefresh(existingConfigMap); err != nil {
-		return err
-	}
-
-	if err := processor.ProcessSecretReferenceRefresh(existingSecrets); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (processor *AppConfigurationProviderProcessor) ProcessFullReconciliation() error {
-	if processor.ShouldReconcile {
-		updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.ResolveSecretReference)
-		if err != nil {
+	if processor.ShouldReconcile = processor.shouldReconcile(existingConfigMap, existingSecrets); processor.ShouldReconcile {
+		if err := processor.processFullReconciliation(); err != nil {
 			return err
 		}
-		processor.Settings = updatedSettings
-		processor.ReconciliationState.ExistingSecretReferences = updatedSettings.SecretReferences
-		processor.RefreshOptions.ConfigMapSettingPopulated = true
-		if processor.Provider.Spec.Secret != nil {
-			processor.RefreshOptions.SecretSettingPopulated = true
-		}
+	}
+
+	if err := processor.processFeatureFlagRefresh(existingConfigMap); err != nil {
+		return err
+	}
+
+	if err := processor.processKeyValueRefresh(existingConfigMap); err != nil {
+		return err
+	}
+
+	if err := processor.processSecretReferenceRefresh(existingSecrets); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (processor *AppConfigurationProviderProcessor) ProcessFeatureFlagRefresh(existingConfigMap *corev1.ConfigMap) error {
+func (processor *AppConfigurationProviderProcessor) processFullReconciliation() error {
+	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.ResolveSecretReference)
+	if err != nil {
+		return err
+	}
+	processor.Settings = updatedSettings
+	processor.ReconciliationState.ExistingSecretReferences = updatedSettings.SecretReferences
+	processor.RefreshOptions.ConfigMapSettingPopulated = true
+	if processor.Provider.Spec.Secret != nil {
+		processor.RefreshOptions.SecretSettingPopulated = true
+	}
+
+	return nil
+}
+
+func (processor *AppConfigurationProviderProcessor) processFeatureFlagRefresh(existingConfigMap *corev1.ConfigMap) error {
 	provider := *processor.Provider
 	reconcileState := processor.ReconciliationState
 	var err error
@@ -117,7 +117,7 @@ func (processor *AppConfigurationProviderProcessor) ProcessFeatureFlagRefresh(ex
 	return nil
 }
 
-func (processor *AppConfigurationProviderProcessor) ProcessKeyValueRefresh(existingConfigMap *corev1.ConfigMap) error {
+func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(existingConfigMap *corev1.ConfigMap) error {
 	provider := processor.Provider
 	reconcileState := processor.ReconciliationState
 	var err error
@@ -171,7 +171,7 @@ func (processor *AppConfigurationProviderProcessor) ProcessKeyValueRefresh(exist
 	return nil
 }
 
-func (processor *AppConfigurationProviderProcessor) ProcessSecretReferenceRefresh(existingSecrets map[string]corev1.Secret) error {
+func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefresh(existingSecrets map[string]corev1.Secret) error {
 	provider := processor.Provider
 	reconcileState := processor.ReconciliationState
 	// Check if the key vault dynamic feature if enabled
@@ -234,6 +234,39 @@ func (processor *AppConfigurationProviderProcessor) ProcessSecretReferenceRefres
 	reconcileState.NextSecretReferenceRefreshReconcileTime = nextSecretReferenceRefreshReconcileTime
 
 	return nil
+}
+
+func (processor *AppConfigurationProviderProcessor) shouldReconcile(
+	existingConfigMap *corev1.ConfigMap,
+	existingSecrets map[string]corev1.Secret) bool {
+
+	if processor.Provider.Generation != processor.ReconciliationState.Generation {
+		// If the provider is updated, we need to reconcile anyway
+		return true
+	}
+
+	if processor.ReconciliationState.ConfigMapResourceVersion == nil ||
+		*processor.ReconciliationState.ConfigMapResourceVersion != existingConfigMap.ResourceVersion {
+		// If the ConfigMap is removed or updated, we need to reconcile anyway
+		return true
+	}
+
+	if processor.Provider.Spec.Secret == nil {
+		return false
+	}
+
+	if len(processor.ReconciliationState.ExistingSecretReferences) == 0 ||
+		len(processor.ReconciliationState.ExistingSecretReferences) != len(existingSecrets) {
+		return true
+	}
+
+	for name, secret := range existingSecrets {
+		if processor.ReconciliationState.ExistingSecretReferences[name].SecretResourceVersion != secret.ResourceVersion {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error) {

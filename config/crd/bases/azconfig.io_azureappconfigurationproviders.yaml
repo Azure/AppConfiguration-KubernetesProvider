@@ -163,8 +163,8 @@ spec:
                     type: array
                 type: object
               secret:
-                description: SecretReference defines the authentication type used
-                  to Azure KeyVault resolve KeyVaultReference
+                description: SecretReference defines the settings for resolving secret
+                  reference type items
                 properties:
                   auth:
                     properties:

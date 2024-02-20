@@ -19,15 +19,15 @@ import (
 )
 
 type AppConfigurationProviderProcessor struct {
-	Context                context.Context
-	Retriever              *loader.ConfigurationSettingsRetriever
-	Provider               *acpv1.AzureAppConfigurationProvider
-	Settings               *loader.TargetKeyValueSettings
-	ShouldReconcile        bool
-	ReconciliationState    *ReconciliationState
-	CurrentTime            metav1.Time
-	RefreshOptions         *RefreshOptions
-	ResolveSecretReference loader.SecretReferenceResolver
+	Context                 context.Context
+	Retriever               *loader.ConfigurationSettingsRetriever
+	Provider                *acpv1.AzureAppConfigurationProvider
+	Settings                *loader.TargetKeyValueSettings
+	ShouldReconcile         bool
+	ReconciliationState     *ReconciliationState
+	CurrentTime             metav1.Time
+	RefreshOptions          *RefreshOptions
+	SecretReferenceResolver loader.SecretReferenceResolver
 }
 
 type RefreshOptions struct {
@@ -65,7 +65,7 @@ func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingCon
 }
 
 func (processor *AppConfigurationProviderProcessor) processFullReconciliation() error {
-	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.ResolveSecretReference)
+	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 	if processor.Settings.ConfigMapSettings != nil {
 		existingConfigMapSettings = &processor.Settings.ConfigMapSettings
 	}
-	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.ResolveSecretReference)
+	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 		}
 	}
 
-	resolvedSecretData, err := (*processor.Retriever).ResolveSecretReferences(processor.Context, secretReferencesToSolve, processor.ResolveSecretReference)
+	resolvedSecretData, err := (*processor.Retriever).ResolveSecretReferences(processor.Context, secretReferencesToSolve, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}
@@ -225,7 +225,6 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 		if ok {
 			maps.Copy(existingSecret.Data, targetSecret.Data)
 		}
-
 	}
 	processor.Settings.SecretSettings = existingSecrets
 	processor.RefreshOptions.SecretSettingPopulated = true

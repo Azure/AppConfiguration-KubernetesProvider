@@ -214,14 +214,14 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 
 	// Initialize the processor setting in this reconcile
 	processor := &AppConfigurationProviderProcessor{
-		Context:                ctx,
-		Provider:               provider,
-		Retriever:              &retriever,
-		CurrentTime:            metav1.Now(),
-		ReconciliationState:    reconciler.ProvidersReconcileState[req.NamespacedName],
-		Settings:               &loader.TargetKeyValueSettings{},
-		RefreshOptions:         NewRefreshOptions(),
-		ResolveSecretReference: nil,
+		Context:                 ctx,
+		Provider:                provider,
+		Retriever:               &retriever,
+		CurrentTime:             metav1.Now(),
+		ReconciliationState:     reconciler.ProvidersReconcileState[req.NamespacedName],
+		Settings:                &loader.TargetKeyValueSettings{},
+		RefreshOptions:          NewRefreshOptions(),
+		SecretReferenceResolver: nil,
 	}
 
 	if err := processor.PopulateSettings(&existingConfigMap, existingSecrets); err != nil {

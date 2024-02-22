@@ -76,8 +76,8 @@ const (
 	AzureTenantId                         string = "azure_tenant_id"
 	AzureAppConfigurationConnectionString string = "azure_app_configuration_connection_string"
 	FeatureFlagKeyPrefix                  string = ".appconfig.featureflag/"
-	FeatureFlagSectionName                string = "FeatureFlags"
-	FeatureManagementSectionName          string = "FeatureManagement"
+	FeatureFlagSectionName                string = "feature_flags"
+	FeatureManagementSectionName          string = "feature_management"
 )
 
 var (

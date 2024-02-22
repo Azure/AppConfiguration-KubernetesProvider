@@ -66,7 +66,7 @@ func createTypedSettings(rawSettings *RawSettings, dataOptions *acpv1.ConfigMapD
 	}
 
 	if rawSettings.FeatureFlagSettings != nil {
-		// FeatureManagementSection = {"FeatureManagement": { "featureFlags" : [{...}, {...}]}
+		// FeatureManagementSection = {"feature_management": { "feature_flags" : [{...}, {...}]}
 		parsedSettings[FeatureManagementSectionName] = rawSettings.FeatureFlagSettings
 	}
 

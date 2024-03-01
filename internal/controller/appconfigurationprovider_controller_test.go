@@ -330,6 +330,63 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["filestyle.json"]).Should(Equal("{\"testKey\":\"testValue\",\"testKey2\":\"testValue2\",\"testKey3\":\"testValue3\"}"))
 			Expect(len(configmap.Data)).Should(Equal(1))
 		})
+
+		It("Should create file style ConfigMap with feature flag settings", func() {
+			By("By getting multiple configuration settings and feature flags from AppConfig")
+			mapResult := make(map[string]string)
+			mapResult["filestyle.json"] = "{\"testKey\":\"testValue\",\"feature_management\":{\"feature_flags\":[{\"id\": \"testFeatureFlag\",\"enabled\": true,\"conditions\": {\"client_filters\": []}}]}}"
+
+			allSettings := &loader.TargetKeyValueSettings{
+				ConfigMapSettings: mapResult,
+			}
+
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+
+			ctx := context.Background()
+			providerName := "test-appconfigurationprovider-8"
+			configMapName := "file-style-configmap-to-be-created-2"
+			configProvider := &acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "appconfig.kubernetes.config/v1",
+					Kind:       "AzureAppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      providerName,
+					Namespace: ProviderNamespace,
+				},
+				Spec: acpv1.AzureAppConfigurationProviderSpec{
+					Endpoint: &EndpointName,
+					Target: acpv1.ConfigurationGenerationParameters{
+						ConfigMapName: configMapName,
+						ConfigMapData: &acpv1.ConfigMapDataOptions{
+							Type: "json",
+							Key:  "filestyle.json",
+						},
+					},
+					FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+						Selectors: []acpv1.Selector{
+							{
+								KeyFilter: "*",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+			time.Sleep(time.Second * 5) //Wait few seconds to wait the second round reconcile complete
+			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
+			configmap := &corev1.ConfigMap{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(configmap.Name).Should(Equal(configMapName))
+			Expect(configmap.Namespace).Should(Equal(ProviderNamespace))
+			Expect(configmap.Data["filestyle.json"]).Should(Equal("{\"testKey\":\"testValue\",\"feature_management\":{\"feature_flags\":[{\"id\": \"testFeatureFlag\",\"enabled\": true,\"conditions\": {\"client_filters\": []}}]}}"))
+			Expect(len(configmap.Data)).Should(Equal(1))
+		})
 	})
 
 	Context("Verify exist non escaped value in label", func() {

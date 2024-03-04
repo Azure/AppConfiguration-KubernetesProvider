@@ -96,13 +96,13 @@ func TestResolveSecretReferenceSetting(t *testing.T) {
 	valueToTest := "{ \"uri\":\"https://FAKE-VAULT/secrets/fake-secret/testversion/notvalid\"}"
 	defaultCredential := mockTokeCredential{}
 	clients := &syncmap.Map{}
-	resolver := &KeyVaultReferenceResolver{
+	resolver := &KeyVaultConnector{
 		DefaultTokenCredential: defaultCredential,
 		Clients:                clients,
 	}
 
 	secretUriSegment, _ := parse(valueToTest)
-	resolvedValue, err := resolver.Resolve(*secretUriSegment, context.Background())
+	resolvedSecret, err := resolver.Resolve(*secretUriSegment, context.Background())
 
 	assert.Contains(t, err.Error(), "fake-vault")
 	length := 0
@@ -111,7 +111,7 @@ func TestResolveSecretReferenceSetting(t *testing.T) {
 		return true
 	})
 	assert.Equal(t, 1, length)
-	assert.Nil(t, resolvedValue)
+	assert.Nil(t, resolvedSecret.Value)
 }
 
 type mockTokeCredential struct {

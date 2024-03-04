@@ -12,6 +12,7 @@ import (
 
 	azcore "github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	gomock "github.com/golang/mock/gomock"
+	v10 "k8s.io/api/core/v1"
 )
 
 // MockConfigurationSettingsRetriever is a mock of ConfigurationSettingsRetriever interface.
@@ -54,7 +55,7 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckAndRefreshSentine
 }
 
 // CreateTargetSettings mocks base method.
-func (m *MockConfigurationSettingsRetriever) CreateTargetSettings(arg0 context.Context, arg1 loader.ResolveSecretReference) (*loader.TargetKeyValueSettings, error) {
+func (m *MockConfigurationSettingsRetriever) CreateTargetSettings(arg0 context.Context, arg1 loader.SecretReferenceResolver) (*loader.TargetKeyValueSettings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateTargetSettings", arg0, arg1)
 	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
@@ -84,7 +85,7 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshFeatureFlagSett
 }
 
 // RefreshKeyValueSettings mocks base method.
-func (m *MockConfigurationSettingsRetriever) RefreshKeyValueSettings(arg0 context.Context, arg1 *map[string]string, arg2 loader.ResolveSecretReference) (*loader.TargetKeyValueSettings, error) {
+func (m *MockConfigurationSettingsRetriever) RefreshKeyValueSettings(arg0 context.Context, arg1 *map[string]string, arg2 loader.SecretReferenceResolver) (*loader.TargetKeyValueSettings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RefreshKeyValueSettings", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
@@ -98,17 +99,17 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshKeyValueSetting
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshKeyValueSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).RefreshKeyValueSettings), arg0, arg1, arg2)
 }
 
-// ResolveKeyVaultReferences mocks base method.
-func (m *MockConfigurationSettingsRetriever) ResolveKeyVaultReferences(arg0 context.Context, arg1 map[string]loader.KeyVaultSecretUriSegment, arg2 loader.ResolveSecretReference) (map[string][]byte, error) {
+// ResolveSecretReferences mocks base method.
+func (m *MockConfigurationSettingsRetriever) ResolveSecretReferences(arg0 context.Context, arg1 map[string]*loader.TargetSecretReference, arg2 loader.SecretReferenceResolver) (map[string]v10.Secret, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResolveKeyVaultReferences", arg0, arg1, arg2)
-	ret0, _ := ret[0].(map[string][]byte)
+	ret := m.ctrl.Call(m, "ResolveSecretReferences", arg0, arg1, arg2)
+	ret0, _ := ret[0].(map[string]v10.Secret)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ResolveKeyVaultReferences indicates an expected call of ResolveKeyVaultReferences.
-func (mr *MockConfigurationSettingsRetrieverMockRecorder) ResolveKeyVaultReferences(arg0, arg1, arg2 interface{}) *gomock.Call {
+// ResolveSecretReferences indicates an expected call of ResolveSecretReferences.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) ResolveSecretReferences(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveKeyVaultReferences", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).ResolveKeyVaultReferences), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveSecretReferences", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).ResolveSecretReferences), arg0, arg1, arg2)
 }

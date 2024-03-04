@@ -13,81 +13,80 @@ import (
 	"golang.org/x/exp/maps"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type AppConfigurationProviderProcessor struct {
-	Context                context.Context
-	Retriever              *loader.ConfigurationSettingsRetriever
-	Provider               *acpv1.AzureAppConfigurationProvider
-	Settings               *loader.TargetKeyValueSettings
-	ShouldReconcile        bool
-	ReconciliationState    map[types.NamespacedName]*ReconciliationState
-	CurrentTime            metav1.Time
-	NamespacedName         types.NamespacedName
-	RefreshOptions         *RefreshOptions
-	ResolveSecretReference loader.ResolveSecretReference
+	Context                 context.Context
+	Retriever               *loader.ConfigurationSettingsRetriever
+	Provider                *acpv1.AzureAppConfigurationProvider
+	Settings                *loader.TargetKeyValueSettings
+	ShouldReconcile         bool
+	ReconciliationState     *ReconciliationState
+	CurrentTime             metav1.Time
+	RefreshOptions          *RefreshOptions
+	SecretReferenceResolver loader.SecretReferenceResolver
 }
 
 type RefreshOptions struct {
-	sentinelBasedRefreshEnabled bool
-	sentinelChanged             bool
-	keyVaultRefreshEnabled      bool
-	keyVaultRefreshNeeded       bool
-	updatedSentinelETags        map[acpv1.Sentinel]*azcore.ETag
-	featureFlagRefreshEnabled   bool
-	featureFlagRefreshNeeded    bool
-	ConfigMapSettingPopulated   bool
-	SecretSettingPopulated      bool
+	sentinelBasedRefreshEnabled   bool
+	sentinelChanged               bool
+	secretReferenceRefreshEnabled bool
+	secretReferenceRefreshNeeded  bool
+	featureFlagRefreshEnabled     bool
+	featureFlagRefreshNeeded      bool
+	ConfigMapSettingPopulated     bool
+	SecretSettingPopulated        bool
+	updatedSentinelETags          map[acpv1.Sentinel]*azcore.ETag
 }
 
-func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingConfigMap *corev1.ConfigMap, existingSecret *corev1.Secret) error {
-	if err := processor.ProcessFullReconciliation(); err != nil {
-		return err
-	}
-
-	if err := processor.ProcessFeatureFlagRefresh(existingConfigMap); err != nil {
-		return err
-	}
-
-	if err := processor.ProcessKeyValueRefresh(existingConfigMap); err != nil {
-		return err
-	}
-
-	if err := processor.ProcessKeyVaultReferenceRefresh(existingSecret); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (processor *AppConfigurationProviderProcessor) ProcessFullReconciliation() error {
-	if processor.ShouldReconcile {
-		updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.ResolveSecretReference)
-		if err != nil {
+func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingConfigMap *corev1.ConfigMap, existingSecrets map[string]corev1.Secret) error {
+	if processor.ShouldReconcile = processor.shouldReconcile(existingConfigMap, existingSecrets); processor.ShouldReconcile {
+		if err := processor.processFullReconciliation(); err != nil {
 			return err
 		}
-		processor.Settings = updatedSettings
-		processor.ReconciliationState[processor.NamespacedName].CachedSecretReferences = updatedSettings.KeyVaultReferencesToCache
-		processor.RefreshOptions.ConfigMapSettingPopulated = true
-		if processor.Provider.Spec.Secret != nil {
-			processor.RefreshOptions.SecretSettingPopulated = true
-		}
+	}
+
+	if err := processor.processFeatureFlagRefresh(existingConfigMap); err != nil {
+		return err
+	}
+
+	if err := processor.processKeyValueRefresh(existingConfigMap); err != nil {
+		return err
+	}
+
+	if err := processor.processSecretReferenceRefresh(existingSecrets); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (processor *AppConfigurationProviderProcessor) ProcessFeatureFlagRefresh(existingConfigMap *corev1.ConfigMap) error {
+func (processor *AppConfigurationProviderProcessor) processFullReconciliation() error {
+	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.SecretReferenceResolver)
+	if err != nil {
+		return err
+	}
+	processor.Settings = updatedSettings
+	processor.ReconciliationState.ExistingSecretReferences = updatedSettings.SecretReferences
+	processor.RefreshOptions.ConfigMapSettingPopulated = true
+	if processor.Provider.Spec.Secret != nil {
+		processor.RefreshOptions.SecretSettingPopulated = true
+	}
+
+	return nil
+}
+
+func (processor *AppConfigurationProviderProcessor) processFeatureFlagRefresh(existingConfigMap *corev1.ConfigMap) error {
 	provider := *processor.Provider
-	reconcileState := processor.ReconciliationState[processor.NamespacedName]
-	currentTime := processor.CurrentTime
+	reconcileState := processor.ReconciliationState
 	var err error
 	// Check if the feature flag dynamic feature if enabled
-	if provider.Spec.FeatureFlag != nil && provider.Spec.FeatureFlag.Refresh != nil && provider.Spec.FeatureFlag.Refresh.Enabled {
+	if provider.Spec.FeatureFlag != nil &&
+		provider.Spec.FeatureFlag.Refresh != nil &&
+		provider.Spec.FeatureFlag.Refresh.Enabled {
 		processor.RefreshOptions.featureFlagRefreshEnabled = true
 	} else {
 		reconcileState.NextFeatureFlagRefreshReconcileTime = metav1.Time{}
@@ -95,13 +94,13 @@ func (processor *AppConfigurationProviderProcessor) ProcessFeatureFlagRefresh(ex
 	}
 
 	refreshInterval, _ := time.ParseDuration(provider.Spec.FeatureFlag.Refresh.Interval)
-	nextFeatureFlagRefreshReconcileTime := metav1.Time{Time: currentTime.Add(refreshInterval)}
+	nextFeatureFlagRefreshReconcileTime := metav1.Time{Time: processor.CurrentTime.Add(refreshInterval)}
 	if processor.ShouldReconcile {
 		reconcileState.NextFeatureFlagRefreshReconcileTime = nextFeatureFlagRefreshReconcileTime
 		return nil
 	}
 
-	if !currentTime.After(reconcileState.NextFeatureFlagRefreshReconcileTime.Time) {
+	if !processor.CurrentTime.After(reconcileState.NextFeatureFlagRefreshReconcileTime.Time) {
 		return nil
 	}
 
@@ -118,13 +117,13 @@ func (processor *AppConfigurationProviderProcessor) ProcessFeatureFlagRefresh(ex
 	return nil
 }
 
-func (processor *AppConfigurationProviderProcessor) ProcessKeyValueRefresh(existingConfigMap *corev1.ConfigMap) error {
-	provider := *processor.Provider
-	reconcileState := processor.ReconciliationState[processor.NamespacedName]
-	currentTime := processor.CurrentTime
+func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(existingConfigMap *corev1.ConfigMap) error {
+	provider := processor.Provider
+	reconcileState := processor.ReconciliationState
 	var err error
 	// Check if the sentinel based refresh is enabled
-	if provider.Spec.Configuration.Refresh != nil && provider.Spec.Configuration.Refresh.Enabled {
+	if provider.Spec.Configuration.Refresh != nil &&
+		provider.Spec.Configuration.Refresh.Enabled {
 		processor.RefreshOptions.sentinelBasedRefreshEnabled = true
 	} else {
 		reconcileState.NextSentinelBasedRefreshReconcileTime = metav1.Time{}
@@ -132,13 +131,13 @@ func (processor *AppConfigurationProviderProcessor) ProcessKeyValueRefresh(exist
 	}
 
 	refreshInterval, _ := time.ParseDuration(provider.Spec.Configuration.Refresh.Interval)
-	nextSentinelBasedRefreshReconcileTime := metav1.Time{Time: currentTime.Add(refreshInterval)}
+	nextSentinelBasedRefreshReconcileTime := metav1.Time{Time: processor.CurrentTime.Add(refreshInterval)}
 	if processor.ShouldReconcile {
 		reconcileState.NextSentinelBasedRefreshReconcileTime = nextSentinelBasedRefreshReconcileTime
 		return nil
 	}
 
-	if !currentTime.After(reconcileState.NextSentinelBasedRefreshReconcileTime.Time) {
+	if !processor.CurrentTime.After(reconcileState.NextSentinelBasedRefreshReconcileTime.Time) {
 		return nil
 	}
 
@@ -155,13 +154,13 @@ func (processor *AppConfigurationProviderProcessor) ProcessKeyValueRefresh(exist
 	if processor.Settings.ConfigMapSettings != nil {
 		existingConfigMapSettings = &processor.Settings.ConfigMapSettings
 	}
-	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.ResolveSecretReference)
+	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}
 
 	processor.Settings = keyValueRefreshedSettings
-	reconcileState.CachedSecretReferences = keyValueRefreshedSettings.KeyVaultReferencesToCache
+	reconcileState.ExistingSecretReferences = keyValueRefreshedSettings.SecretReferences
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
@@ -172,62 +171,119 @@ func (processor *AppConfigurationProviderProcessor) ProcessKeyValueRefresh(exist
 	return nil
 }
 
-func (processor *AppConfigurationProviderProcessor) ProcessKeyVaultReferenceRefresh(existingSecret *corev1.Secret) error {
-	provider := *processor.Provider
-	reconcileState := processor.ReconciliationState[processor.NamespacedName]
-	currentTime := processor.CurrentTime
+func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefresh(existingSecrets map[string]corev1.Secret) error {
+	provider := processor.Provider
+	reconcileState := processor.ReconciliationState
 	// Check if the key vault dynamic feature if enabled
-	if provider.Spec.Secret != nil && provider.Spec.Secret.Refresh != nil && provider.Spec.Secret.Refresh.Enabled {
-		processor.RefreshOptions.keyVaultRefreshEnabled = true
+	if provider.Spec.Secret != nil &&
+		provider.Spec.Secret.Refresh != nil &&
+		provider.Spec.Secret.Refresh.Enabled {
+		processor.RefreshOptions.secretReferenceRefreshEnabled = true
 	}
 
-	if !processor.RefreshOptions.keyVaultRefreshEnabled {
-		reconcileState.NextKeyVaultReferenceRefreshReconcileTime = metav1.Time{}
-		reconcileState.CachedSecretReferences = make(map[string]loader.KeyVaultSecretUriSegment)
+	if !processor.RefreshOptions.secretReferenceRefreshEnabled {
+		reconcileState.NextSecretReferenceRefreshReconcileTime = metav1.Time{}
 		return nil
 	}
 
-	if !currentTime.After(reconcileState.NextKeyVaultReferenceRefreshReconcileTime.Time) {
+	if !processor.CurrentTime.After(reconcileState.NextSecretReferenceRefreshReconcileTime.Time) {
 		return nil
 	}
 
-	processor.RefreshOptions.keyVaultRefreshNeeded = true
+	processor.RefreshOptions.secretReferenceRefreshNeeded = true
 	keyVaultRefreshInterval, _ := time.ParseDuration(provider.Spec.Secret.Refresh.Interval)
-	nextKeyVaultReferenceRefreshReconcileTime := metav1.Time{Time: currentTime.Add(keyVaultRefreshInterval)}
+	nextSecretReferenceRefreshReconcileTime := metav1.Time{Time: processor.CurrentTime.Add(keyVaultRefreshInterval)}
 	// When SecretSettingPopulated means ProcessFullReconciliation or ProcessKeyValueRefresh has executed, update next refresh time and return
 	if processor.RefreshOptions.SecretSettingPopulated {
-		reconcileState.NextKeyVaultReferenceRefreshReconcileTime = nextKeyVaultReferenceRefreshReconcileTime
+		reconcileState.NextSecretReferenceRefreshReconcileTime = nextSecretReferenceRefreshReconcileTime
 		return nil
 	}
 
-	resolvedSecretData, err := (*processor.Retriever).ResolveKeyVaultReferences(processor.Context, reconcileState.CachedSecretReferences, processor.ResolveSecretReference)
+	// Only resolve the secret references that not specified the secret version
+	secretReferencesToSolve := make(map[string]*loader.TargetSecretReference)
+	for secretName, reference := range reconcileState.ExistingSecretReferences {
+		for key, uriSegment := range reference.UriSegments {
+			if uriSegment.SecretVersion == "" {
+				if secretReferencesToSolve[secretName] == nil {
+					secretReferencesToSolve[secretName] = &loader.TargetSecretReference{
+						Type:        reference.Type,
+						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+					}
+				}
+				secretReferencesToSolve[secretName].UriSegments[key] = uriSegment
+			}
+		}
+	}
+
+	resolvedSecretData, err := (*processor.Retriever).ResolveSecretReferences(processor.Context, secretReferencesToSolve, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}
-	maps.Copy(existingSecret.Data, resolvedSecretData)
-	processor.Settings.SecretSettings = existingSecret.Data
+
+	for secretName, targetSecret := range resolvedSecretData {
+		existingSecret, ok := existingSecrets[secretName]
+		if ok {
+			maps.Copy(existingSecret.Data, targetSecret.Data)
+		}
+	}
+	processor.Settings.SecretSettings = existingSecrets
 	processor.RefreshOptions.SecretSettingPopulated = true
 
 	// Update next refresh time only if settings updated successfully
-	reconcileState.NextKeyVaultReferenceRefreshReconcileTime = nextKeyVaultReferenceRefreshReconcileTime
+	reconcileState.NextSecretReferenceRefreshReconcileTime = nextSecretReferenceRefreshReconcileTime
 
 	return nil
 }
 
+func (processor *AppConfigurationProviderProcessor) shouldReconcile(
+	existingConfigMap *corev1.ConfigMap,
+	existingSecrets map[string]corev1.Secret) bool {
+
+	if processor.Provider.Generation != processor.ReconciliationState.Generation {
+		// If the provider is updated, we need to reconcile anyway
+		return true
+	}
+
+	if processor.ReconciliationState.ConfigMapResourceVersion == nil ||
+		*processor.ReconciliationState.ConfigMapResourceVersion != existingConfigMap.ResourceVersion {
+		// If the ConfigMap is removed or updated, we need to reconcile anyway
+		return true
+	}
+
+	if processor.Provider.Spec.Secret == nil {
+		return false
+	}
+
+	if len(processor.ReconciliationState.ExistingSecretReferences) == 0 ||
+		len(processor.ReconciliationState.ExistingSecretReferences) != len(existingSecrets) {
+		return true
+	}
+
+	for name, secret := range existingSecrets {
+		if processor.ReconciliationState.ExistingSecretReferences[name].SecretResourceVersion != secret.ResourceVersion {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error) {
-	processor.ReconciliationState[processor.NamespacedName].Generation = processor.Provider.Generation
-	if !processor.RefreshOptions.keyVaultRefreshEnabled && !processor.RefreshOptions.sentinelBasedRefreshEnabled && !processor.RefreshOptions.featureFlagRefreshEnabled {
+	processor.ReconciliationState.Generation = processor.Provider.Generation
+	if !processor.RefreshOptions.secretReferenceRefreshEnabled &&
+		!processor.RefreshOptions.sentinelBasedRefreshEnabled &&
+		!processor.RefreshOptions.featureFlagRefreshEnabled {
 		// Do nothing, just complete the reconcile
 		klog.V(1).Infof("Complete reconcile AzureAppConfigurationProvider %q in %q namespace", processor.Provider.Name, processor.Provider.Namespace)
 		return reconcile.Result{}, nil
 	} else {
 		// Update the sentinel ETags and last sentinel refresh time
 		if processor.RefreshOptions.sentinelChanged {
-			processor.ReconciliationState[processor.NamespacedName].SentinelETags = processor.RefreshOptions.updatedSentinelETags
+			processor.ReconciliationState.SentinelETags = processor.RefreshOptions.updatedSentinelETags
 			processor.Provider.Status.RefreshStatus.LastSentinelBasedRefreshTime = processor.CurrentTime
 		}
 		// Update provider last key vault refresh time
-		if processor.RefreshOptions.keyVaultRefreshNeeded {
+		if processor.RefreshOptions.secretReferenceRefreshNeeded {
 			processor.Provider.Status.RefreshStatus.LastKeyVaultReferenceRefreshTime = processor.CurrentTime
 		}
 		// Update provider last feature flag refresh time
@@ -244,22 +300,22 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 
 func NewRefreshOptions() *RefreshOptions {
 	return &RefreshOptions{
-		sentinelBasedRefreshEnabled: false,
-		sentinelChanged:             false,
-		keyVaultRefreshEnabled:      false,
-		keyVaultRefreshNeeded:       false,
-		updatedSentinelETags:        make(map[acpv1.Sentinel]*azcore.ETag),
-		featureFlagRefreshEnabled:   false,
-		featureFlagRefreshNeeded:    false,
-		ConfigMapSettingPopulated:   false,
-		SecretSettingPopulated:      false,
+		sentinelBasedRefreshEnabled:   false,
+		sentinelChanged:               false,
+		secretReferenceRefreshEnabled: false,
+		secretReferenceRefreshNeeded:  false,
+		featureFlagRefreshEnabled:     false,
+		featureFlagRefreshNeeded:      false,
+		ConfigMapSettingPopulated:     false,
+		SecretSettingPopulated:        false,
+		updatedSentinelETags:          make(map[acpv1.Sentinel]*azcore.ETag),
 	}
 }
 
 func (processor *AppConfigurationProviderProcessor) calculateRequeueAfterInterval() time.Duration {
-	reconcileState := processor.ReconciliationState[processor.NamespacedName]
+	reconcileState := processor.ReconciliationState
 	nextRefreshTimeList := []metav1.Time{reconcileState.NextSentinelBasedRefreshReconcileTime,
-		reconcileState.NextKeyVaultReferenceRefreshReconcileTime, reconcileState.NextFeatureFlagRefreshReconcileTime}
+		reconcileState.NextSecretReferenceRefreshReconcileTime, reconcileState.NextFeatureFlagRefreshReconcileTime}
 
 	var nextRequeueTime metav1.Time
 	for _, time := range nextRefreshTimeList {

@@ -15,7 +15,7 @@ import (
 	"golang.org/x/sync/syncmap"
 )
 
-type KeyVaultReferenceResolver struct {
+type KeyVaultConnector struct {
 	DefaultTokenCredential azcore.TokenCredential
 	Clients                *syncmap.Map //map[string]*azsecrets.Client
 }
@@ -30,27 +30,25 @@ type KeyVaultSecretUriSegment struct {
 	SecretVersion string
 }
 
-type ResolveSecretReference interface {
-	Resolve(secretUriSegment KeyVaultSecretUriSegment, ctx context.Context) (*string, error)
+type SecretReferenceResolver interface {
+	Resolve(secretUriSegment KeyVaultSecretUriSegment, ctx context.Context) (azsecrets.GetSecretResponse, error)
 }
 
-func (resolver *KeyVaultReferenceResolver) Resolve(secretUriSegment KeyVaultSecretUriSegment, ctx context.Context) (*string, error) {
+func (resolver *KeyVaultConnector) Resolve(
+	secretUriSegment KeyVaultSecretUriSegment,
+	ctx context.Context) (azsecrets.GetSecretResponse, error) {
 	var secretClient any
 	var ok bool
 	if secretClient, ok = resolver.Clients.Load(secretUriSegment.HostName); !ok {
 		newSecretClient, err := azsecrets.NewClient("https://"+secretUriSegment.HostName, resolver.DefaultTokenCredential, nil)
 		if err != nil {
-			return nil, err
+			return azsecrets.GetSecretResponse{}, err
 		}
 		secretClient = newSecretClient
 		resolver.Clients.Store(secretUriSegment.HostName, newSecretClient)
 	}
-	secretValue, err := secretClient.(*azsecrets.Client).GetSecret(ctx, secretUriSegment.SecretName, secretUriSegment.SecretVersion, nil)
-	if err != nil {
-		return nil, err
-	}
 
-	return secretValue.Value, nil
+	return secretClient.(*azsecrets.Client).GetSecret(ctx, secretUriSegment.SecretName, secretUriSegment.SecretVersion, nil)
 }
 
 func parse(settingValue string) (*KeyVaultSecretUriSegment, error) {

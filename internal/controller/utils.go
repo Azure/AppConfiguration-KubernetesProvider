@@ -227,7 +227,7 @@ func verifyRefreshInterval(interval string, allowedMinimalRefreshInterval time.D
 	refreshInterval, err := time.ParseDuration(interval)
 	if err == nil {
 		if refreshInterval < allowedMinimalRefreshInterval {
-			return loader.NewArgumentError(refreshArgument, fmt.Errorf("%s can not be shorter than %s.", refreshArgument, allowedMinimalRefreshInterval.String()))
+			return loader.NewArgumentError(refreshArgument, fmt.Errorf("%s can not be shorter than %s", refreshArgument, allowedMinimalRefreshInterval.String()))
 		}
 	} else {
 		return loader.NewArgumentError(refreshArgument, err)

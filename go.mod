@@ -7,6 +7,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.11.0
 	github.com/golang/mock v1.6.0
 	github.com/onsi/gomega v1.27.8
+	golang.org/x/crypto v0.17.0
 	golang.org/x/sync v0.3.0
 	k8s.io/apimachinery v0.26.2
 	k8s.io/client-go v0.26.2
@@ -67,7 +68,6 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
 	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/oauth2 v0.5.0 // indirect
@@ -90,4 +90,5 @@ require (
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
+	software.sslmate.com/src/go-pkcs12 v0.4.0
 )

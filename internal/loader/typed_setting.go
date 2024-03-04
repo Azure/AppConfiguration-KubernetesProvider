@@ -82,7 +82,7 @@ func createTypedSettings(rawSettings *RawSettings, dataOptions *acpv1.ConfigMapD
 func marshalProperties(settings map[string]string) string {
 	stringBuilder := strings.Builder{}
 	separator := "\n"
-	if settings != nil && len(settings) > 0 {
+	if settings != nil {
 		i := 0
 		for k, v := range settings {
 			stringBuilder.WriteString(fmt.Sprintf("%s=%s", k, v))

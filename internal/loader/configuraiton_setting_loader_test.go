@@ -6,14 +6,27 @@ package loader
 import (
 	acpv1 "azappconfig/provider/api/v1"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
+	"encoding/pem"
 	"errors"
+	"fmt"
+	"math/big"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
+	"github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets"
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	pkcs12 "software.sslmate.com/src/go-pkcs12"
 
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
@@ -70,8 +83,8 @@ func newCommonKeyValueSettings(key string, value string, label string) azappconf
 }
 
 func newKeyVaultSettings(key string, label string) azappconfig.Setting {
-	vault := "{ \"test\":\"https://fake-vault\"}"
-	keyVaultContentType := KeyVaultReferenceContentType
+	vault := "{ \"uri\":\"https://fake-vault/secrets/fakesecret\"}"
+	keyVaultContentType := SecretReferenceContentType
 
 	return azappconfig.Setting{
 		Key:         &key,
@@ -104,10 +117,10 @@ func (m *MockResolveSecretReference) EXPECT() *MockResolveSecretReferenceMockRec
 }
 
 // Resolve mocks base method.
-func (m *MockResolveSecretReference) Resolve(arg0 KeyVaultSecretUriSegment, arg1 context.Context) (*string, error) {
+func (m *MockResolveSecretReference) Resolve(arg0 KeyVaultSecretUriSegment, arg1 context.Context) (azsecrets.GetSecretResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resolve", arg0, arg1)
-	ret0, _ := ret[0].(*string)
+	ret0, _ := ret[0].(azsecrets.GetSecretResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -123,6 +136,12 @@ const (
 	ProviderNamespace = "default"
 	ConfigMapName     = "configmap-to-be-created"
 )
+
+func TestLoaderAPIs(t *testing.T) {
+	RegisterFailHandler(Fail)
+
+	RunSpecs(t, "Test loader APIs")
+}
 
 var _ = BeforeEach(func() {
 	mockCtrl = gomock.NewController(GinkgoT())
@@ -152,6 +171,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 	Context("When get Key Vault Reference Type Settings", func() {
 		It("Should put into Secret settings collection", func() {
 			By("By resolving the settings from Azure Key Vault")
+			managedIdentity := uuid.New().String()
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
@@ -159,6 +179,16 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				},
 				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
+				},
+				Secret: &acpv1.SecretReference{
+					Target: acpv1.SecretGenerationParameters{
+						SecretName: "targetSecret",
+					},
+					Auth: &acpv1.AzureKeyVaultAuth{
+						AzureAppConfigurationProviderAuth: &acpv1.AzureAppConfigurationProviderAuth{
+							ManagedIdentityClientId: &managedIdentity,
+						},
+					},
 				},
 			}
 			testProvider := acpv1.AzureAppConfigurationProvider{
@@ -175,18 +205,21 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
 			secretValue := "fakeSecretValue"
-			secretValue2 := "fakeSecretValue2"
-			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Times(0).Return(&secretValue, nil)
-			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Times(0).Return(&secretValue2, nil)
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value: &secretValue,
+				},
+			}
+
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
-			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(2))
-			Expect(len(allSettings.SecretSettings)).Should(Equal(2))
-			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
-			Expect(allSettings.ConfigMapSettings["someSubKey1;1"]).Should(Equal("value2"))
-			Expect(allSettings.SecretSettings["secret:1"]).Should(Equal(secretValue))
-			Expect(allSettings.SecretSettings["someSecret"]).Should(Equal(secretValue2))
 			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(2))
+			Expect(len(allSettings.SecretSettings)).Should(Equal(1))
+			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
+			Expect(allSettings.ConfigMapSettings["someSubKey1:1"]).Should(Equal("value4"))
+			Expect(string(allSettings.SecretSettings["targetSecret"].Data["secret:1"])).Should(Equal(secretValue))
 		})
 
 		It("Should throw exception", func() {
@@ -214,13 +247,403 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
 
-			secretValue := "fakeSecretValue"
-			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Times(0).Return(&secretValue, nil)
-			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Times(0).Return(nil, errors.New("Some error"))
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
 			Expect(allSettings).Should(BeNil())
-			Expect(err.Error()).Should(Equal("Some error"))
+			Expect(err.Error()).Should(Equal("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider 'testName' in namespace 'testNamespace'"))
+		})
+
+		It("Should throw unknown content type error", func() {
+			By("By getting unknown cert type from Azure Key Vault")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			secretValue := "fakeSecretValue"
+			secretName := "targetSecret"
+			contentType := "fake-content-type"
+			kidStr := "fakeKid"
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value:       &secretValue,
+					Kid:         &kidStr,
+					ContentType: &contentType,
+				},
+			}
+
+			secretReferencesToResolve := map[string]*TargetSecretReference{
+				secretName: {
+					Type: corev1.SecretTypeTLS,
+					UriSegments: map[string]KeyVaultSecretUriSegment{
+						secretName: {
+							HostName:      "fake-vault",
+							SecretName:    "fake-secret",
+							SecretVersion: "fake-version",
+						},
+					},
+				},
+			}
+
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			_, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
+
+			Expect(err.Error()).Should(Equal("fail to decode the cert 'targetSecret': unknown content type 'fake-content-type'"))
+		})
+
+		It("Should throw decode pem block error", func() {
+			By("By getting unexpected secret value of pem cert from Azure Key Vault")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			secretValue := "fakeSecretValue"
+			secretName := "targetSecret"
+			contentType := CertTypePem
+			kidStr := "fakeKid"
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value:       &secretValue,
+					Kid:         &kidStr,
+					ContentType: &contentType,
+				},
+			}
+
+			secretReferencesToResolve := map[string]*TargetSecretReference{
+				secretName: {
+					Type: corev1.SecretTypeTLS,
+					UriSegments: map[string]KeyVaultSecretUriSegment{
+						secretName: {
+							HostName:      "fake-vault",
+							SecretName:    "fake-secret",
+							SecretVersion: "fake-version",
+						},
+					},
+				},
+			}
+
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			_, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
+
+			Expect(err.Error()).Should(Equal("fail to decode the cert 'targetSecret': failed to decode pem block"))
+		})
+
+		It("Should throw decode pfx error", func() {
+			By("By getting unexpected secret value of pfx cert from Azure Key Vault")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			secretValue := "fakeSecretValue"
+			secretName := "targetSecret"
+			contentType := CertTypePfx
+			kidStr := "fakeKid"
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value:       &secretValue,
+					Kid:         &kidStr,
+					ContentType: &contentType,
+				},
+			}
+
+			secretReferencesToResolve := map[string]*TargetSecretReference{
+				secretName: {
+					Type: corev1.SecretTypeTLS,
+					UriSegments: map[string]KeyVaultSecretUriSegment{
+						secretName: {
+							HostName:      "fake-vault",
+							SecretName:    "fake-secret",
+							SecretVersion: "fake-version",
+						},
+					},
+				},
+			}
+
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			_, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
+
+			Expect(err.Error()).Should(Equal("fail to decode the cert 'targetSecret': illegal base64 data at input byte 12"))
+		})
+
+		It("Succeeded to get tls type secret", func() {
+			By("By getting valid pfx cert from Azure Key Vault")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			secretValue, _ := createFakePfx()
+			secretName := "targetSecret"
+			contentType := CertTypePfx
+			kidStr := "fakeKid"
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value:       &secretValue,
+					Kid:         &kidStr,
+					ContentType: &contentType,
+				},
+			}
+
+			secretReferencesToResolve := map[string]*TargetSecretReference{
+				secretName: {
+					Type: corev1.SecretTypeTLS,
+					UriSegments: map[string]KeyVaultSecretUriSegment{
+						secretName: {
+							HostName:      "fake-vault",
+							SecretName:    "fake-secret",
+							SecretVersion: "fake-version",
+						},
+					},
+				},
+			}
+
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			secrets, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(secrets)).Should(Equal(1))
+			Expect(string(secrets[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
+			Expect(string(secrets[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN PRIVATE KEY"))
+		})
+
+		It("Succeeded to get target tls type secret", func() {
+			By("By getting valid pem cert from Azure Key Vault")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			secretValue, _ := createFakePem()
+			secretName := "targetSecret"
+			contentType := CertTypePem
+			kidStr := "fakeKid"
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value:       &secretValue,
+					Kid:         &kidStr,
+					ContentType: &contentType,
+				},
+			}
+
+			secretReferencesToResolve := map[string]*TargetSecretReference{
+				secretName: {
+					Type: corev1.SecretTypeTLS,
+					UriSegments: map[string]KeyVaultSecretUriSegment{
+						secretName: {
+							HostName:      "fake-vault",
+							SecretName:    "fake-secret",
+							SecretVersion: "fake-version",
+						},
+					},
+				},
+			}
+
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			secrets, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(secrets)).Should(Equal(1))
+			Expect(string(secrets[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
+			Expect(string(secrets[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN RSA PRIVATE KEY"))
+		})
+
+		It("Succeeded to get tls type secret", func() {
+			By("By getting valid non cert based secret from Azure Key Vault")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			secretValue, _ := createFakePfx()
+			secretName := "targetSecret"
+			ct := CertTypePfx
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value:       &secretValue,
+					ContentType: &ct,
+				},
+			}
+
+			secretReferencesToResolve := map[string]*TargetSecretReference{
+				secretName: {
+					Type: corev1.SecretTypeTLS,
+					UriSegments: map[string]KeyVaultSecretUriSegment{
+						secretName: {
+							HostName:      "fake-vault",
+							SecretName:    "fake-secret",
+							SecretVersion: "fake-version",
+						},
+					},
+				},
+			}
+
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			secrets, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(secrets)).Should(Equal(1))
+			Expect(string(secrets[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
+			Expect(string(secrets[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN PRIVATE KEY"))
+		})
+
+		It("Succeeded to get tls type secret", func() {
+			By("By getting valid non cert based pem secret from Azure Key Vault")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint: &EndpointName,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			secretValue, _ := createFakePem()
+			secretName := "targetSecret"
+			ct := CertTypePem
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value:       &secretValue,
+					ContentType: &ct,
+				},
+			}
+
+			secretReferencesToResolve := map[string]*TargetSecretReference{
+				secretName: {
+					Type: corev1.SecretTypeTLS,
+					UriSegments: map[string]KeyVaultSecretUriSegment{
+						secretName: {
+							HostName:      "fake-vault",
+							SecretName:    "fake-secret",
+							SecretVersion: "fake-version",
+						},
+					},
+				},
+			}
+
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			secrets, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(secrets)).Should(Equal(1))
+			Expect(string(secrets[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
+			Expect(string(secrets[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN RSA PRIVATE KEY"))
 		})
 	})
 })
@@ -525,7 +948,7 @@ func TestCreateSecretClients(t *testing.T) {
 			Target: acpv1.ConfigurationGenerationParameters{
 				ConfigMapName: "configMap-test",
 			},
-			Secret: &acpv1.AzureKeyVaultReference{
+			Secret: &acpv1.SecretReference{
 				Target: acpv1.SecretGenerationParameters{
 					SecretName: "secret-test",
 				},
@@ -557,7 +980,7 @@ func TestCreateSecretClients(t *testing.T) {
 			Target: acpv1.ConfigurationGenerationParameters{
 				ConfigMapName: "configMap-test",
 			},
-			Secret: &acpv1.AzureKeyVaultReference{
+			Secret: &acpv1.SecretReference{
 				Target: acpv1.SecretGenerationParameters{
 					SecretName: "secretName",
 				},
@@ -592,4 +1015,119 @@ func TestCreateSecretClients(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, r1)
 	assert.NotNil(t, r2)
+}
+
+func createFakeKeyPem(key *rsa.PrivateKey) (string, error) {
+	keyBytes := x509.MarshalPKCS1PrivateKey(key)
+	// PEM encoding of private key
+	keyPEM := string(pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: keyBytes,
+		},
+	))
+
+	return keyPEM, nil
+}
+
+func createFakeCertPem(key *rsa.PrivateKey) (string, error) {
+	notBefore := time.Now()
+	notAfter := notBefore.Add(365 * 24 * 10 * time.Hour)
+
+	//Create certificate templet
+	template := x509.Certificate{
+		SerialNumber:          big.NewInt(0),
+		Subject:               pkix.Name{CommonName: "localhost"},
+		SignatureAlgorithm:    x509.SHA256WithRSA,
+		NotBefore:             notBefore,
+		NotAfter:              notAfter,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement | x509.KeyUsageKeyEncipherment | x509.KeyUsageDataEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+	}
+	//Create certificate using templet
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		return "", err
+
+	}
+	//pem encoding of certificate
+	certPem := string(pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: derBytes,
+		},
+	))
+
+	return certPem, nil
+}
+
+func createFakePem() (string, error) {
+	key, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return "", err
+	}
+
+	keyPEM, err := createFakeKeyPem(key)
+	if err != nil {
+		return "", err
+	}
+
+	certPem, err := createFakeCertPem(key)
+	if err != nil {
+		return "", err
+	}
+
+	return keyPEM + "\n" + certPem, nil
+}
+
+func createFakePfx() (string, error) {
+	key, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return "", err
+	}
+
+	keyPEM, err := createFakeKeyPem(key)
+	if err != nil {
+		return "", err
+	}
+
+	certPem, err := createFakeCertPem(key)
+	if err != nil {
+		return "", err
+	}
+
+	return createPFXFromPEM(keyPEM, certPem)
+}
+
+func createPFXFromPEM(pemPrivateKey, pemCertificate string) (string, error) {
+	// Decode private key PEM
+	block, _ := pem.Decode([]byte(pemPrivateKey))
+	if block == nil || block.Type != "RSA PRIVATE KEY" {
+		return "", fmt.Errorf("failed to decode private key PEM")
+	}
+
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return "", err
+	}
+
+	// Decode certificate PEM
+	block, _ = pem.Decode([]byte(pemCertificate))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return "", fmt.Errorf("failed to decode certificate PEM")
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", err
+	}
+
+	// Create PKCS12 structure
+	pfxData, err := pkcs12.Legacy.Encode(privateKey, cert, []*x509.Certificate{}, "")
+	if err != nil {
+		return "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(pfxData), nil
 }

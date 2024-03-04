@@ -7,7 +7,10 @@ import (
 	acpv1 "azappconfig/provider/api/v1"
 	"azappconfig/provider/internal/properties"
 	"context"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/url"
@@ -20,6 +23,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	"github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/pkcs12"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/syncmap"
@@ -39,25 +43,32 @@ type ConfigurationSettingLoader struct {
 }
 
 type TargetKeyValueSettings struct {
-	ConfigMapSettings         map[string]string
-	SecretSettings            map[string][]byte
-	KeyVaultReferencesToCache map[string]KeyVaultSecretUriSegment
+	ConfigMapSettings map[string]string
+	// Multiple secrets could be managed
+	SecretSettings   map[string]corev1.Secret
+	SecretReferences map[string]*TargetSecretReference
+}
+
+type TargetSecretReference struct {
+	Type                  corev1.SecretType
+	UriSegments           map[string]KeyVaultSecretUriSegment
+	SecretResourceVersion string
 }
 
 type RawSettings struct {
-	KeyValueSettings          map[string]*string
-	IsJsonContentTypeMap      map[string]bool
-	FeatureFlagSettings       map[string]interface{}
-	SecretSettings            map[string][]byte
-	KeyVaultReferencesToCache map[string]KeyVaultSecretUriSegment
+	KeyValueSettings     map[string]*string
+	IsJsonContentTypeMap map[string]bool
+	FeatureFlagSettings  map[string]interface{}
+	SecretSettings       map[string]corev1.Secret
+	SecretReferences     map[string]*TargetSecretReference
 }
 
 type ConfigurationSettingsRetriever interface {
-	CreateTargetSettings(ctx context.Context, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error)
-	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error)
+	CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
+	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
 	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
-	ResolveKeyVaultReferences(ctx context.Context, kvReferencesToResolve map[string]KeyVaultSecretUriSegment, kvResolver ResolveSecretReference) (map[string][]byte, error)
+	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (map[string]corev1.Secret, error)
 }
 
 type GetSettingsFunc func(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
@@ -69,7 +80,7 @@ type ServicePrincipleAuthenticationParameters struct {
 }
 
 const (
-	KeyVaultReferenceContentType          string = "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8"
+	SecretReferenceContentType            string = "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8"
 	FeatureFlagContentType                string = "application/vnd.microsoft.appconfig.ff+json;charset=utf-8"
 	AzureClientId                         string = "azure_client_id"
 	AzureClientSecret                     string = "azure_client_secret"
@@ -78,6 +89,11 @@ const (
 	FeatureFlagKeyPrefix                  string = ".appconfig.featureflag/"
 	FeatureFlagSectionName                string = "feature_flags"
 	FeatureManagementSectionName          string = "feature_management"
+	PreservedSecretTypeTag                string = ".kubernetes.secret.type"
+	CertTypePem                           string = "application/x-pem-file"
+	CertTypePfx                           string = "application/x-pkcs12"
+	TlsKey                                string = "tls.key"
+	TlsCrt                                string = "tls.crt"
 )
 
 var (
@@ -123,7 +139,7 @@ func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppC
 	}, nil
 }
 
-func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error) {
+func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error) {
 	rawSettings, err := csl.CreateKeyValueSettings(ctx, resolveSecretReference)
 	if err != nil {
 		return nil, err
@@ -141,13 +157,13 @@ func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context,
 	}
 
 	return &TargetKeyValueSettings{
-		ConfigMapSettings:         typedSettings,
-		SecretSettings:            rawSettings.SecretSettings,
-		KeyVaultReferencesToCache: rawSettings.KeyVaultReferencesToCache,
+		ConfigMapSettings: typedSettings,
+		SecretSettings:    rawSettings.SecretSettings,
+		SecretReferences:  rawSettings.SecretReferences,
 	}, nil
 }
 
-func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Context, existingConfigMapSetting *map[string]string, resolveSecretReference ResolveSecretReference) (*TargetKeyValueSettings, error) {
+func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Context, existingConfigMapSetting *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error) {
 	rawSettings, err := csl.CreateKeyValueSettings(ctx, resolveSecretReference)
 	if err != nil {
 		return nil, err
@@ -166,9 +182,9 @@ func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Conte
 	}
 
 	return &TargetKeyValueSettings{
-		ConfigMapSettings:         typedSettings,
-		SecretSettings:            rawSettings.SecretSettings,
-		KeyVaultReferencesToCache: rawSettings.KeyVaultReferencesToCache,
+		ConfigMapSettings: typedSettings,
+		SecretSettings:    rawSettings.SecretSettings,
+		SecretReferences:  rawSettings.SecretReferences,
 	}, nil
 }
 
@@ -195,20 +211,20 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 	}, nil
 }
 
-func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, resolveSecretReference ResolveSecretReference) (*RawSettings, error) {
+func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver) (*RawSettings, error) {
 	settingsChan := make(chan []azappconfig.Setting)
 	errChan := make(chan error)
 	keyValueFilters := getKeyValueFilters(csl.Spec)
 	go csl.getSettingsFunc(ctx, keyValueFilters, csl.AppConfigClient, settingsChan, errChan)
 
 	rawSettings := &RawSettings{
-		KeyValueSettings:          make(map[string]*string),
-		IsJsonContentTypeMap:      make(map[string]bool),
-		SecretSettings:            make(map[string][]byte),
-		KeyVaultReferencesToCache: make(map[string]KeyVaultSecretUriSegment),
+		KeyValueSettings:     make(map[string]*string),
+		IsJsonContentTypeMap: make(map[string]bool),
+		SecretSettings:       make(map[string]corev1.Secret),
+		SecretReferences:     make(map[string]*TargetSecretReference),
 	}
 	var settings []azappconfig.Setting
-	var kvResolver ResolveSecretReference
+	resolver := secretReferenceResolver
 
 	for {
 		select {
@@ -230,23 +246,30 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 				}
 				switch *setting.ContentType {
 				case FeatureFlagContentType:
-					continue // ignore feature flag at this moment, will support it in later version
-				case KeyVaultReferenceContentType:
+					continue // ignore feature flag while getting key value settings
+				case SecretReferenceContentType:
 					if setting.Value == nil {
 						return nil, fmt.Errorf("The value of Key Vault reference '%s' is null", *setting.Key)
 					}
+
 					if csl.Spec.Secret == nil {
 						return nil, fmt.Errorf("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
 					}
-					if kvResolver == nil {
-						if resolveSecretReference == nil {
-							if newKvResolver, err := csl.createKeyVaultResolver(ctx); err != nil {
-								return nil, err
-							} else {
-								kvResolver = newKvResolver
-							}
+
+					var secretType corev1.SecretType = corev1.SecretTypeOpaque
+					var err error
+					if secretTypeTag, ok := setting.Tags[PreservedSecretTypeTag]; ok {
+						secretType, err = parseSecretType(secretTypeTag)
+						if err != nil {
+							return nil, err
+						}
+					}
+
+					if resolver == nil {
+						if newResolver, err := csl.createSecretReferenceResolver(ctx); err != nil {
+							return nil, err
 						} else {
-							kvResolver = resolveSecretReference
+							resolver = newResolver
 						}
 					}
 
@@ -256,23 +279,33 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 						return nil, err
 					}
 
-					// Cache the non-versioned secret reference
-					if secretUriSegment.SecretVersion == "" {
-						rawSettings.KeyVaultReferencesToCache[trimmedKey] = *secretUriSegment
+					secretName := trimmedKey
+					// If the secret type is not specified, reside it to the Secret with name specified
+					if secretType == corev1.SecretTypeOpaque {
+						secretName = csl.Spec.Secret.Target.SecretName
 					}
 
-					rawSettings.KeyVaultReferencesToCache[trimmedKey] = *secretUriSegment
+					if _, ok := rawSettings.SecretReferences[secretName]; !ok {
+						rawSettings.SecretReferences[secretName] = &TargetSecretReference{
+							Type:        secretType,
+							UriSegments: make(map[string]KeyVaultSecretUriSegment),
+						}
+					}
+					rawSettings.SecretReferences[secretName].UriSegments[trimmedKey] = *secretUriSegment
 				default:
 					rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 					rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
 				}
 			}
 
-			// resolve the keyVault reference settings
-			if resolvedSecret, err := csl.ResolveKeyVaultReferences(ctx, rawSettings.KeyVaultReferencesToCache, kvResolver); err != nil {
+			// resolve the secret reference settings
+			if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.SecretReferences, resolver); err != nil {
 				return nil, err
 			} else {
-				maps.Copy(rawSettings.SecretSettings, resolvedSecret)
+				err = MergeSecret(rawSettings.SecretSettings, resolvedSecret)
+				if err != nil {
+					return nil, err
+				}
 			}
 		case err := <-errChan:
 			if err != nil {
@@ -323,7 +356,10 @@ end:
 	return featureFlagSection, nil
 }
 
-func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error) {
+func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
+	ctx context.Context,
+	provider *acpv1.AzureAppConfigurationProvider,
+	eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error) {
 	sentinelChanged := false
 	if provider.Spec.Configuration.Refresh == nil {
 		return sentinelChanged, eTags, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
@@ -349,33 +385,76 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(ctx context.Cont
 	return sentinelChanged, refreshedETags, nil
 }
 
-func (csl *ConfigurationSettingLoader) ResolveKeyVaultReferences(ctx context.Context, keyVaultReferencesToResolve map[string]KeyVaultSecretUriSegment, keyVaultResolver ResolveSecretReference) (map[string][]byte, error) {
-	if keyVaultResolver == nil {
-		if kvResolver, err := csl.createKeyVaultResolver(ctx); err != nil {
+func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
+	ctx context.Context,
+	secretReferencesToResolve map[string]*TargetSecretReference,
+	resolver SecretReferenceResolver) (map[string]corev1.Secret, error) {
+	if resolver == nil {
+		if kvResolver, err := csl.createSecretReferenceResolver(ctx); err != nil {
 			return nil, err
 		} else {
-			keyVaultResolver = kvResolver
+			resolver = kvResolver
 		}
 	}
 
-	resolvedSecretReferences := make(map[string][]byte)
-	if len(keyVaultReferencesToResolve) > 0 {
+	resolvedSecretReferences := make(map[string]corev1.Secret)
+	for name, targetSecretReference := range secretReferencesToResolve {
+		resolvedSecretReferences[name] = corev1.Secret{
+			Data: make(map[string][]byte),
+			Type: targetSecretReference.Type,
+		}
+
 		var eg errgroup.Group
-		lock := &sync.Mutex{}
-		for key, kvReference := range keyVaultReferencesToResolve {
-			currentKey := key
-			currentReference := kvReference
-			eg.Go(func() error {
-				resolvedValue, err := keyVaultResolver.Resolve(currentReference, ctx)
-				if err != nil {
-					return fmt.Errorf("Fail to resolve the Key Vault reference type setting '%s': %s", currentKey, err.Error())
+		if targetSecretReference.Type == corev1.SecretTypeOpaque {
+			if len(targetSecretReference.UriSegments) > 0 {
+				lock := &sync.Mutex{}
+				for key, kvReference := range targetSecretReference.UriSegments {
+					currentKey := key
+					currentReference := kvReference
+					eg.Go(func() error {
+						resolvedSecret, err := resolver.Resolve(currentReference, ctx)
+						if err != nil {
+							return fmt.Errorf("fail to resolve the Key Vault reference type setting '%s': %s", currentKey, err.Error())
+						}
+						lock.Lock()
+						defer lock.Unlock()
+						resolvedSecretReferences[name].Data[currentKey] = []byte(*resolvedSecret.Value)
+						return nil
+					})
 				}
-				lock.Lock()
-				defer lock.Unlock()
-				resolvedSecretReferences[currentKey] = []byte(*resolvedValue)
+
+				if err := eg.Wait(); err != nil {
+					return nil, err
+				}
+			}
+		} else if targetSecretReference.Type == corev1.SecretTypeTLS {
+			eg.Go(func() error {
+				resolvedSecret, err := resolver.Resolve(targetSecretReference.UriSegments[name], ctx)
+				if err != nil {
+					return fmt.Errorf("fail to resolve the Key Vault reference type setting '%s': %s", name, err.Error())
+				}
+
+				if resolvedSecret.ContentType == nil {
+					return fmt.Errorf("unspecified content type")
+				}
+
+				switch *resolvedSecret.ContentType {
+				case CertTypePfx:
+					resolvedSecretReferences[name].Data[TlsKey], resolvedSecretReferences[name].Data[TlsCrt], err = decodePkcs12(*resolvedSecret.Value)
+				case CertTypePem:
+					resolvedSecretReferences[name].Data[TlsKey], resolvedSecretReferences[name].Data[TlsCrt], err = decodePem(*resolvedSecret.Value)
+				default:
+					err = fmt.Errorf("unknown content type '%s'", *resolvedSecret.ContentType)
+				}
+
+				if err != nil {
+					return fmt.Errorf("fail to decode the cert '%s': %s", name, err.Error())
+				}
+
 				return nil
 			})
 		}
+		// All other types are not supported
 
 		if err := eg.Wait(); err != nil {
 			return nil, err
@@ -415,7 +494,7 @@ func (csl *ConfigurationSettingLoader) getSentinelSetting(ctx context.Context, p
 	return &sentinelSetting.Setting, nil
 }
 
-func (csl *ConfigurationSettingLoader) createKeyVaultResolver(ctx context.Context) (ResolveSecretReference, error) {
+func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context.Context) (SecretReferenceResolver, error) {
 	var defaultAuth *acpv1.AzureAppConfigurationProviderAuth = nil
 	if csl.Spec.Secret != nil && csl.Spec.Secret.Auth != nil {
 		defaultAuth = csl.Spec.Secret.Auth.AzureAppConfigurationProviderAuth
@@ -428,12 +507,12 @@ func (csl *ConfigurationSettingLoader) createKeyVaultResolver(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	keyVaultResolver := &KeyVaultReferenceResolver{
+	resolver := &KeyVaultConnector{
 		DefaultTokenCredential: defaultCred,
 		Clients:                secretClients,
 	}
 
-	return keyVaultResolver, nil
+	return resolver, nil
 }
 
 func trimPrefix(key string, prefixToTrim []string) string {
@@ -448,7 +527,11 @@ func trimPrefix(key string, prefixToTrim []string) string {
 	return key
 }
 
-func getConfigurationSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
+func getConfigurationSettings(
+	ctx context.Context,
+	filters []acpv1.Selector,
+	client *azappconfig.Client,
+	c chan []azappconfig.Setting, e chan error) {
 	nullString := "\x00"
 
 	for _, filter := range filters {
@@ -475,7 +558,10 @@ func getConfigurationSettings(ctx context.Context, filters []acpv1.Selector, cli
 	c <- make([]azappconfig.Setting, 0)
 }
 
-func createTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigurationProviderAuth, namespace string) (azcore.TokenCredential, error) {
+func createTokenCredential(
+	ctx context.Context,
+	acpAuth *acpv1.AzureAppConfigurationProviderAuth,
+	namespace string) (azcore.TokenCredential, error) {
 	// If User explicitly specify the authentication method
 	if acpAuth != nil {
 		if acpAuth.WorkloadIdentity != nil {
@@ -506,7 +592,10 @@ func createTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigura
 	return nil, nil
 }
 
-func getWorkloadIdentityClientId(ctx context.Context, workloadIdentityAuth *acpv1.WorkloadIdentityParameters, namespace string) (string, error) {
+func getWorkloadIdentityClientId(
+	ctx context.Context,
+	workloadIdentityAuth *acpv1.WorkloadIdentityParameters,
+	namespace string) (string, error) {
 	if workloadIdentityAuth.ManagedIdentityClientIdReference == nil {
 		return *workloadIdentityAuth.ManagedIdentityClientId, nil
 	} else {
@@ -528,8 +617,10 @@ func getWorkloadIdentityClientId(ctx context.Context, workloadIdentityAuth *acpv
 	}
 }
 
-func getConnectionStringParameter(ctx context.Context, namespacedSecretName types.NamespacedName) (string, error) {
-	secret, err := getSecret(ctx, namespacedSecretName)
+func getConnectionStringParameter(
+	ctx context.Context,
+	namespacedSecretName types.NamespacedName) (string, error) {
+	secret, err := GetSecret(ctx, namespacedSecretName)
 	if err != nil {
 		return "", err
 	}
@@ -537,8 +628,10 @@ func getConnectionStringParameter(ctx context.Context, namespacedSecretName type
 	return string(secret.Data[AzureAppConfigurationConnectionString]), nil
 }
 
-func getServicePrincipleAuthenticationParameters(ctx context.Context, namespacedSecretName types.NamespacedName) (*ServicePrincipleAuthenticationParameters, error) {
-	secret, err := getSecret(ctx, namespacedSecretName)
+func getServicePrincipleAuthenticationParameters(
+	ctx context.Context,
+	namespacedSecretName types.NamespacedName) (*ServicePrincipleAuthenticationParameters, error) {
+	secret, err := GetSecret(ctx, namespacedSecretName)
 	if err != nil {
 		return nil, err
 	}
@@ -550,7 +643,8 @@ func getServicePrincipleAuthenticationParameters(ctx context.Context, namespaced
 	}, nil
 }
 
-func getConfigMap(ctx context.Context, namespacedConfigMapName types.NamespacedName) (*corev1.ConfigMap, error) {
+func getConfigMap(ctx context.Context,
+	namespacedConfigMapName types.NamespacedName) (*corev1.ConfigMap, error) {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		return nil, err
@@ -569,7 +663,8 @@ func getConfigMap(ctx context.Context, namespacedConfigMapName types.NamespacedN
 	return configMapObject, nil
 }
 
-func getSecret(ctx context.Context, namespacedSecretName types.NamespacedName) (*corev1.Secret, error) {
+func GetSecret(ctx context.Context,
+	namespacedSecretName types.NamespacedName) (*corev1.Secret, error) {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		return nil, err
@@ -655,7 +750,9 @@ func reverse(arr []acpv1.Selector) {
 	}
 }
 
-func createSecretClients(ctx context.Context, acp acpv1.AzureAppConfigurationProvider) (*syncmap.Map, error) {
+func createSecretClients(
+	ctx context.Context,
+	acp acpv1.AzureAppConfigurationProvider) (*syncmap.Map, error) {
 	secretClients := &syncmap.Map{}
 	if acp.Spec.Secret == nil || acp.Spec.Secret.Auth == nil {
 		return secretClients, nil
@@ -678,4 +775,109 @@ func createSecretClients(ctx context.Context, acp acpv1.AzureAppConfigurationPro
 	}
 
 	return secretClients, nil
+}
+
+func parseSecretType(secretType string) (corev1.SecretType, error) {
+	secretTypeMap := map[string]corev1.SecretType{
+		"opaque":            corev1.SecretTypeOpaque,
+		"kubernetes.io/tls": corev1.SecretTypeTLS,
+	}
+
+	if parsedType, ok := secretTypeMap[secretType]; ok {
+		if parsedType != corev1.SecretTypeTLS {
+			return "", fmt.Errorf("secret type %q is not supported", secretType)
+		} else {
+			return parsedType, nil
+		}
+	} else {
+		return "", fmt.Errorf("secret type %q is not supported", secretType)
+	}
+}
+
+func decodePkcs12(value string) (key []byte, crt []byte, err error) {
+	pfxRaw, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return nil, nil, err
+	}
+	// using ToPEM to extract more than one certificate and key in pfxData
+	pemBlock, err := pkcs12.ToPEM(pfxRaw, "")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return parsePemBlock(pemBlock)
+}
+
+func decodePem(value string) (key []byte, crt []byte, err error) {
+	pemBlocks := []*pem.Block{}
+	for pemBlock, rest := pem.Decode([]byte(value)); pemBlock != nil; pemBlock, rest = pem.Decode(rest) {
+		pemBlocks = append(pemBlocks, pemBlock)
+	}
+	if len(pemBlocks) == 0 {
+		return nil, nil, fmt.Errorf("failed to decode pem block")
+	}
+
+	return parsePemBlock(pemBlocks)
+}
+
+func parsePemBlock(pemBlock []*pem.Block) ([]byte, []byte, error) {
+	// PEM block encoded form contains the headers
+	//    -----BEGIN Type-----
+	//    Headers
+	//    base64-encoded Bytes
+	//    -----END Type-----
+	// Setting headers to nil to ensure no headers included in the encoded block
+	var pemKeyData, pemCertData []byte
+	for _, block := range pemBlock {
+
+		block.Headers = make(map[string]string)
+		if block.Type == "CERTIFICATE" {
+			pemCertData = append(pemCertData, pem.EncodeToMemory(block)...)
+		} else {
+			key, err := parsePrivateKey(block.Bytes)
+			if err != nil {
+				return nil, nil, err
+			}
+			// pkcs1 RSA private key PEM file is specific for RSA keys. RSA is not used exclusively inside X509
+			// and SSL/TLS, a more generic key format is available in the form of PKCS#8 that identifies the type
+			// of private key and contains the relevant data.
+			// Converting to pkcs8 private key as ToPEM uses pkcs1
+			// The driver determines the key type from the pkcs8 form of the key and marshals appropriately
+			block.Bytes, err = x509.MarshalPKCS8PrivateKey(key)
+			if err != nil {
+				return nil, nil, err
+			}
+			pemKeyData = append(pemKeyData, pem.EncodeToMemory(block)...)
+		}
+	}
+
+	return pemKeyData, pemCertData, nil
+}
+
+func parsePrivateKey(block []byte) (interface{}, error) {
+	if key, err := x509.ParsePKCS1PrivateKey(block); err == nil {
+		return key, nil
+	}
+	if key, err := x509.ParsePKCS8PrivateKey(block); err == nil {
+		return key, nil
+	}
+	if key, err := x509.ParseECPrivateKey(block); err == nil {
+		return key, nil
+	}
+	return nil, fmt.Errorf("failed to parse key for type pkcs1, pkcs8 or ec")
+}
+
+func MergeSecret(secret map[string]corev1.Secret, newSecret map[string]corev1.Secret) error {
+	for k, v := range newSecret {
+		if _, ok := secret[k]; !ok {
+			secret[k] = v
+		} else if secret[k].Type != v.Type {
+			return fmt.Errorf("secret type mismatch for key %q", k)
+
+		} else {
+			maps.Copy(secret[k].Data, v.Data)
+		}
+	}
+
+	return nil
 }

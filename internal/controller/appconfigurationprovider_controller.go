@@ -46,6 +46,7 @@ type AzureAppConfigurationProviderReconciler struct {
 	client.Client
 	Scheme                  *runtime.Scheme
 	Retriever               loader.ConfigurationSettingsRetriever
+	ClientManager           *loader.ConfigurationClientManager
 	ProvidersReconcileState map[types.NamespacedName]*ReconciliationState
 }
 
@@ -199,18 +200,14 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	}
 
 	/* Create ConfigurationSettingLoader to get the key-value settings from Azure AppConfiguration. */
-	configProvider, err := loader.NewConfigurationSettingLoader(ctx, *provider, nil)
+	configLoader, err := loader.NewConfigurationSettingLoader(ctx, *provider, nil, reconciler.ClientManager, reconciler.ProvidersReconcileState[req.NamespacedName].Generation)
 	if err != nil {
 		reconciler.logAndSetFailStatus(ctx, err, provider)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 	}
 
-	var retriever loader.ConfigurationSettingsRetriever
-	if reconciler.Retriever == nil {
-		retriever = configProvider
-	} else {
-		retriever = reconciler.Retriever
-	}
+	reconciler.ClientManager = configLoader.ClientManager
+	var retriever loader.ConfigurationSettingsRetriever = configLoader
 
 	// Initialize the processor setting in this reconcile
 	processor := &AppConfigurationProviderProcessor{

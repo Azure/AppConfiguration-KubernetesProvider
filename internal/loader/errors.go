@@ -3,7 +3,13 @@
 
 package loader
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"net/http"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+)
 
 type ArgumentError struct {
 	Field string
@@ -19,4 +25,20 @@ func NewArgumentError(field string, err error) *ArgumentError {
 		Field: field,
 		Err:   err,
 	}
+}
+
+func IsFailoverable(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) &&
+		(respErr.StatusCode == http.StatusTooManyRequests ||
+			respErr.StatusCode == http.StatusRequestTimeout ||
+			respErr.StatusCode == http.StatusInternalServerError) {
+		return true
+	}
+
+	return false
 }

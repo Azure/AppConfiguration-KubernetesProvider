@@ -5,7 +5,6 @@ package loader
 
 import (
 	acpv1 "azappconfig/provider/api/v1"
-	"azappconfig/provider/internal/properties"
 	"context"
 	"crypto/x509"
 	"encoding/base64"
@@ -18,11 +17,8 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	"github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets"
-	"github.com/google/uuid"
 	"golang.org/x/crypto/pkcs12"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
@@ -39,7 +35,7 @@ import (
 type ConfigurationSettingLoader struct {
 	acpv1.AzureAppConfigurationProvider
 	getSettingsFunc GetSettingsFunc
-	AppConfigClient *azappconfig.Client
+	ClientManager   *ConfigurationClientManager
 }
 
 type TargetKeyValueSettings struct {
@@ -69,6 +65,7 @@ type ConfigurationSettingsRetriever interface {
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
 	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (map[string]corev1.Secret, error)
+	ExecuteFailoverPolicy(ctx context.Context, filters []acpv1.Selector) ([]azappconfig.Setting, error)
 }
 
 type GetSettingsFunc func(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
@@ -96,37 +93,15 @@ const (
 	TlsCrt                                string = "tls.crt"
 )
 
-var (
-	clientOptionWithModuleInfo *azappconfig.ClientOptions = &azappconfig.ClientOptions{
-		ClientOptions: policy.ClientOptions{
-			Telemetry: policy.TelemetryOptions{
-				ApplicationID: fmt.Sprintf("%s/%s", properties.ModuleName, properties.ModuleVersion),
-			},
-		},
-	}
-)
-
-func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, getSettingsFunc GetSettingsFunc) (*ConfigurationSettingLoader, error) {
+func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, getSettingsFunc GetSettingsFunc, clientManager *ConfigurationClientManager, generation int64) (*ConfigurationSettingLoader, error) {
 	if getSettingsFunc == nil {
 		getSettingsFunc = getConfigurationSettings
 	}
 
-	var appConfigClient *azappconfig.Client = nil
-	if provider.Spec.ConnectionStringReference != nil {
-		connectionString, err := getConnectionStringParameter(ctx, types.NamespacedName{Namespace: provider.Namespace, Name: *provider.Spec.ConnectionStringReference})
-		if err != nil {
-			return nil, err
-		}
-		appConfigClient, err = azappconfig.NewClientFromConnectionString(connectionString, clientOptionWithModuleInfo)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		appConfigCredential, err := createTokenCredential(ctx, provider.Spec.Auth, provider.Namespace)
-		if err != nil {
-			return nil, err
-		}
-		appConfigClient, err = azappconfig.NewClient(*provider.Spec.Endpoint, appConfigCredential, clientOptionWithModuleInfo)
+	manager := clientManager
+	if manager == nil || generation != provider.Generation {
+		var err error
+		manager, err = NewConfigurationClientManager(ctx, provider)
 		if err != nil {
 			return nil, err
 		}
@@ -134,8 +109,8 @@ func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppC
 
 	return &ConfigurationSettingLoader{
 		AzureAppConfigurationProvider: provider,
-		AppConfigClient:               appConfigClient,
 		getSettingsFunc:               getSettingsFunc,
+		ClientManager:                 manager,
 	}, nil
 }
 
@@ -212,10 +187,11 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 }
 
 func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver) (*RawSettings, error) {
-	settingsChan := make(chan []azappconfig.Setting)
-	errChan := make(chan error)
 	keyValueFilters := getKeyValueFilters(csl.Spec)
-	go csl.getSettingsFunc(ctx, keyValueFilters, csl.AppConfigClient, settingsChan, errChan)
+	settings, err := csl.ExecuteFailoverPolicy(ctx, keyValueFilters)
+	if err != nil {
+		return nil, err
+	}
 
 	rawSettings := &RawSettings{
 		KeyValueSettings:     make(map[string]*string),
@@ -223,139 +199,107 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 		SecretSettings:       make(map[string]corev1.Secret),
 		SecretReferences:     make(map[string]*TargetSecretReference),
 	}
-	var settings []azappconfig.Setting
 	resolver := secretReferenceResolver
 
-	for {
-		select {
-		case settings = <-settingsChan:
-			if len(settings) == 0 {
-				goto end
-			}
-			for _, setting := range settings {
-				trimmedKey := trimPrefix(*setting.Key, csl.Spec.Configuration.TrimKeyPrefixes)
-				if len(trimmedKey) == 0 {
-					klog.Warningf("key of the setting '%s' is trimmed to the empty string, just ignore it", *setting.Key)
-					continue
-				}
+	for _, setting := range settings {
+		trimmedKey := trimPrefix(*setting.Key, csl.Spec.Configuration.TrimKeyPrefixes)
+		if len(trimmedKey) == 0 {
+			klog.Warningf("key of the setting '%s' is trimmed to the empty string, just ignore it", *setting.Key)
+			continue
+		}
 
-				if setting.ContentType == nil {
-					rawSettings.KeyValueSettings[trimmedKey] = setting.Value
-					rawSettings.IsJsonContentTypeMap[trimmedKey] = false
-					continue
-				}
-				switch *setting.ContentType {
-				case FeatureFlagContentType:
-					continue // ignore feature flag while getting key value settings
-				case SecretReferenceContentType:
-					if setting.Value == nil {
-						return nil, fmt.Errorf("the value of Key Vault reference '%s' is null", *setting.Key)
-					}
-
-					if csl.Spec.Secret == nil {
-						return nil, fmt.Errorf("a Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
-					}
-
-					var secretType corev1.SecretType = corev1.SecretTypeOpaque
-					var err error
-					if secretTypeTag, ok := setting.Tags[PreservedSecretTypeTag]; ok {
-						secretType, err = parseSecretType(secretTypeTag)
-						if err != nil {
-							return nil, err
-						}
-					}
-
-					if resolver == nil {
-						if newResolver, err := csl.createSecretReferenceResolver(ctx); err != nil {
-							return nil, err
-						} else {
-							resolver = newResolver
-						}
-					}
-
-					currentUrl := *setting.Value
-					secretUriSegment, err := parse(currentUrl)
-					if err != nil {
-						return nil, err
-					}
-
-					secretName := trimmedKey
-					// If the secret type is not specified, reside it to the Secret with name specified
-					if secretType == corev1.SecretTypeOpaque {
-						secretName = csl.Spec.Secret.Target.SecretName
-					}
-
-					if _, ok := rawSettings.SecretReferences[secretName]; !ok {
-						rawSettings.SecretReferences[secretName] = &TargetSecretReference{
-							Type:        secretType,
-							UriSegments: make(map[string]KeyVaultSecretUriSegment),
-						}
-					}
-					rawSettings.SecretReferences[secretName].UriSegments[trimmedKey] = *secretUriSegment
-				default:
-					rawSettings.KeyValueSettings[trimmedKey] = setting.Value
-					rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
-				}
+		if setting.ContentType == nil {
+			rawSettings.KeyValueSettings[trimmedKey] = setting.Value
+			rawSettings.IsJsonContentTypeMap[trimmedKey] = false
+			continue
+		}
+		switch *setting.ContentType {
+		case FeatureFlagContentType:
+			continue // ignore feature flag while getting key value settings
+		case SecretReferenceContentType:
+			if setting.Value == nil {
+				return nil, fmt.Errorf("The value of Key Vault reference '%s' is null", *setting.Key)
 			}
 
-			// resolve the secret reference settings
-			if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.SecretReferences, resolver); err != nil {
-				return nil, err
-			} else {
-				err = MergeSecret(rawSettings.SecretSettings, resolvedSecret)
+			if csl.Spec.Secret == nil {
+				return nil, fmt.Errorf("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
+			}
+
+			var secretType corev1.SecretType = corev1.SecretTypeOpaque
+			var err error
+			if secretTypeTag, ok := setting.Tags[PreservedSecretTypeTag]; ok {
+				secretType, err = parseSecretType(secretTypeTag)
 				if err != nil {
 					return nil, err
 				}
 			}
-		case err := <-errChan:
+
+			if resolver == nil {
+				if newResolver, err := csl.createSecretReferenceResolver(ctx); err != nil {
+					return nil, err
+				} else {
+					resolver = newResolver
+				}
+			}
+
+			currentUrl := *setting.Value
+			secretUriSegment, err := parse(currentUrl)
 			if err != nil {
 				return nil, err
 			}
+
+			secretName := trimmedKey
+			// If the secret type is not specified, reside it to the Secret with name specified
+			if secretType == corev1.SecretTypeOpaque {
+				secretName = csl.Spec.Secret.Target.SecretName
+			}
+
+			if _, ok := rawSettings.SecretReferences[secretName]; !ok {
+				rawSettings.SecretReferences[secretName] = &TargetSecretReference{
+					Type:        secretType,
+					UriSegments: make(map[string]KeyVaultSecretUriSegment),
+				}
+			}
+			rawSettings.SecretReferences[secretName].UriSegments[trimmedKey] = *secretUriSegment
+		default:
+			rawSettings.KeyValueSettings[trimmedKey] = setting.Value
+			rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
 		}
 	}
 
-end:
+	// resolve the secret reference settings
+	if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.SecretReferences, resolver); err != nil {
+		return nil, err
+	} else {
+		err = MergeSecret(rawSettings.SecretSettings, resolvedSecret)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return rawSettings, nil
 }
 
 func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, error) {
-	featureFlagSettingChan := make(chan []azappconfig.Setting)
-	errChan := make(chan error)
 	featureFlagFilters := getFeatureFlagFilters(csl.Spec)
-	go csl.getSettingsFunc(ctx, featureFlagFilters, csl.AppConfigClient, featureFlagSettingChan, errChan)
+	featureFlagSettings, err := csl.ExecuteFailoverPolicy(ctx, featureFlagFilters)
+	if err != nil {
+		return nil, err
+	}
 
-	var featureFlagSettings []azappconfig.Setting
-	// featureFlagSection = {"feature_flags": [{...}, {...}]}
+	// featureFlagSection = {"featureFlags": [{...}, {...}]}
 	var featureFlagSection = map[string]interface{}{
 		FeatureFlagSectionName: make([]interface{}, 0),
 	}
-
-	for {
-		select {
-		case featureFlagSettings = <-featureFlagSettingChan:
-			if len(featureFlagSettings) == 0 {
-				goto end
-			} else {
-				for _, setting := range featureFlagSettings {
-					if setting.ContentType != nil &&
-						*setting.ContentType == FeatureFlagContentType {
-						var out interface{}
-						err := json.Unmarshal([]byte(*setting.Value), &out)
-						if err != nil {
-							return nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
-						}
-						featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
-					}
-				}
-			}
-		case err := <-errChan:
-			if err != nil {
-				return nil, err
-			}
+	for _, setting := range featureFlagSettings {
+		var out interface{}
+		err := json.Unmarshal([]byte(*setting.Value), &out)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to unmarshal feature flag settings: %s", err.Error())
 		}
+		featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
 	}
 
-end:
 	return featureFlagSection, nil
 }
 
@@ -472,29 +416,45 @@ func (csl *ConfigurationSettingLoader) getSentinelSetting(ctx context.Context, p
 		return nil, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
 	}
 
-	sentinelSetting, err := csl.AppConfigClient.GetSetting(ctx, sentinel.Key, &azappconfig.GetSettingOptions{Label: &sentinel.Label, OnlyIfChanged: etag})
-	if err != nil {
-		var respErr *azcore.ResponseError
-		if errors.As(err, &respErr) {
-			var label string
-			if sentinel.Label == "\x00" { // NUL is escaped to \x00 in golang
-				label = "no"
-			} else {
-				label = fmt.Sprintf("'%s'", sentinel.Label)
-			}
-			switch respErr.StatusCode {
-			case 404:
-				klog.Warningf("Sentinel key '%s' with %s label does not exists, revisit the sentinel after %s", sentinel.Key, label, provider.Spec.Configuration.Refresh.Interval)
-				return &azappconfig.Setting{}, nil
-			case 304:
-				klog.V(3).Infof("There's no change to the sentinel key '%s' with %s label , just exit and revisit the sentinel after %s", sentinel.Key, label, provider.Spec.Configuration.Refresh.Interval)
-				return &sentinelSetting.Setting, nil
-			}
+	clients := csl.ClientManager.GetClients()
+	if len(clients) == 0 {
+		csl.ClientManager.RefreshClients()
+		return nil, fmt.Errorf("no client is available to get sentinel setting")
+	}
+	for _, clientWrapper := range clients {
+		successful := false
+		sentinelSetting, err := clientWrapper.Client.GetSetting(ctx, sentinel.Key, &azappconfig.GetSettingOptions{Label: &sentinel.Label, OnlyIfChanged: etag})
+		if err == nil {
+			successful = true
+			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper.Endpoint, successful)
+			return &sentinelSetting.Setting, nil
 		}
-		return nil, err
+		if IsFailoverable(err) {
+			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper.Endpoint, successful)
+			continue
+		} else {
+			var respErr *azcore.ResponseError
+			if errors.As(err, &respErr) {
+				var label string
+				if sentinel.Label == "\x00" { // NUL is escaped to \x00 in golang
+					label = "no"
+				} else {
+					label = fmt.Sprintf("'%s'", sentinel.Label)
+				}
+				switch respErr.StatusCode {
+				case 404:
+					klog.Warningf("Sentinel key '%s' with %s label does not exists, revisit the sentinel after %s", sentinel.Key, label, provider.Spec.Configuration.Refresh.Interval)
+					return &azappconfig.Setting{}, nil
+				case 304:
+					klog.V(3).Infof("There's no change to the sentinel key '%s' with %s label , just exit and revisit the sentinel after %s", sentinel.Key, label, provider.Spec.Configuration.Refresh.Interval)
+					return &sentinelSetting.Setting, nil
+				}
+			}
+			return nil, err
+		}
 	}
 
-	return &sentinelSetting.Setting, nil
+	return nil, nil
 }
 
 func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context.Context) (SecretReferenceResolver, error) {
@@ -502,7 +462,7 @@ func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context
 	if csl.Spec.Secret != nil && csl.Spec.Secret.Auth != nil {
 		defaultAuth = csl.Spec.Secret.Auth.AzureAppConfigurationProviderAuth
 	}
-	defaultCred, err := createTokenCredential(ctx, defaultAuth, csl.Namespace)
+	defaultCred, err := CreateTokenCredential(ctx, defaultAuth, csl.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -516,6 +476,48 @@ func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context
 	}
 
 	return resolver, nil
+}
+
+func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, filters []acpv1.Selector) ([]azappconfig.Setting, error) {
+	clients := csl.ClientManager.GetClients()
+	if len(clients) == 0 {
+		csl.ClientManager.RefreshClients()
+		return nil, fmt.Errorf("no client is available to execute failover policy")
+	}
+
+	for _, clientWrapper := range clients {
+		settingsChan := make(chan []azappconfig.Setting)
+		errChan := make(chan error)
+		successful := false
+
+		go csl.getSettingsFunc(ctx, filters, clientWrapper.Client, settingsChan, errChan)
+
+		var configSettings []azappconfig.Setting
+		for {
+			select {
+			case configSettings = <-settingsChan:
+				if len(configSettings) == 0 {
+					successful = true
+					goto update
+				}
+			case err := <-errChan:
+				if err != nil && IsFailoverable(err) {
+					goto update
+				} else {
+					return nil, err
+				}
+			}
+		}
+	update:
+		csl.ClientManager.UpdateClientBackoffStatus(clientWrapper.Endpoint, successful)
+		if successful {
+			return configSettings, nil
+		}
+	}
+
+	// Failed to execute failover policy
+	csl.ClientManager.RefreshClients()
+	return nil, fmt.Errorf("failed to execute failover policy: all clients failed")
 }
 
 func trimPrefix(key string, prefixToTrim []string) string {
@@ -583,93 +585,7 @@ func getConfigurationSettings(
 	c <- make([]azappconfig.Setting, 0)
 }
 
-func createTokenCredential(
-	ctx context.Context,
-	acpAuth *acpv1.AzureAppConfigurationProviderAuth,
-	namespace string) (azcore.TokenCredential, error) {
-	// If User explicitly specify the authentication method
-	if acpAuth != nil {
-		if acpAuth.WorkloadIdentity != nil {
-			workloadIdentityClientId, err := getWorkloadIdentityClientId(ctx, acpAuth.WorkloadIdentity, namespace)
-			if err != nil {
-				return nil, fmt.Errorf("fail to retrieve workload identity client ID from configMap '%s' : %s", acpAuth.WorkloadIdentity.ManagedIdentityClientIdReference.ConfigMap, err.Error())
-			}
-			return azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
-				ClientID: workloadIdentityClientId,
-			})
-		}
-		if acpAuth.ServicePrincipalReference != nil {
-			parameter, err := getServicePrincipleAuthenticationParameters(ctx, types.NamespacedName{Namespace: namespace, Name: *acpAuth.ServicePrincipalReference})
-			if err != nil {
-				return nil, fmt.Errorf("fail to retrieve service principal secret from '%s': %s", *acpAuth.ServicePrincipalReference, err.Error())
-			}
-			return azidentity.NewClientSecretCredential(parameter.TenantId, parameter.ClientId, parameter.ClientSecret, nil)
-		}
-		if acpAuth.ManagedIdentityClientId != nil {
-			return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-				ID: azidentity.ClientID(*acpAuth.ManagedIdentityClientId),
-			})
-		}
-	} else {
-		return azidentity.NewManagedIdentityCredential(nil)
-	}
-
-	return nil, nil
-}
-
-func getWorkloadIdentityClientId(
-	ctx context.Context,
-	workloadIdentityAuth *acpv1.WorkloadIdentityParameters,
-	namespace string) (string, error) {
-	if workloadIdentityAuth.ManagedIdentityClientIdReference == nil {
-		return *workloadIdentityAuth.ManagedIdentityClientId, nil
-	} else {
-		configMap, err := getConfigMap(ctx, types.NamespacedName{Namespace: namespace, Name: workloadIdentityAuth.ManagedIdentityClientIdReference.ConfigMap})
-		if err != nil {
-			return "", err
-		}
-
-		if _, ok := configMap.Data[workloadIdentityAuth.ManagedIdentityClientIdReference.Key]; !ok {
-			return "", fmt.Errorf("key '%s' does not exist", workloadIdentityAuth.ManagedIdentityClientIdReference.Key)
-		}
-
-		managedIdentityClientId := configMap.Data[workloadIdentityAuth.ManagedIdentityClientIdReference.Key]
-		if _, err = uuid.Parse(managedIdentityClientId); err != nil {
-			return "", fmt.Errorf("managedIdentityClientId %q is not a valid uuid", managedIdentityClientId)
-		}
-
-		return managedIdentityClientId, nil
-	}
-}
-
-func getConnectionStringParameter(
-	ctx context.Context,
-	namespacedSecretName types.NamespacedName) (string, error) {
-	secret, err := GetSecret(ctx, namespacedSecretName)
-	if err != nil {
-		return "", err
-	}
-
-	return string(secret.Data[AzureAppConfigurationConnectionString]), nil
-}
-
-func getServicePrincipleAuthenticationParameters(
-	ctx context.Context,
-	namespacedSecretName types.NamespacedName) (*ServicePrincipleAuthenticationParameters, error) {
-	secret, err := GetSecret(ctx, namespacedSecretName)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ServicePrincipleAuthenticationParameters{
-		ClientId:     string(secret.Data[AzureClientId]),
-		ClientSecret: string(secret.Data[AzureClientSecret]),
-		TenantId:     string(secret.Data[AzureTenantId]),
-	}, nil
-}
-
-func getConfigMap(ctx context.Context,
-	namespacedConfigMapName types.NamespacedName) (*corev1.ConfigMap, error) {
+func getConfigMap(ctx context.Context, namespacedConfigMapName types.NamespacedName) (*corev1.ConfigMap, error) {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		return nil, err
@@ -789,7 +705,7 @@ func createSecretClients(
 	}
 	for _, keyVault := range acp.Spec.Secret.Auth.KeyVaults {
 		url, _ := url.Parse(keyVault.Uri)
-		tokenCredential, err := createTokenCredential(ctx, keyVault.AzureAppConfigurationProviderAuth, acp.Namespace)
+		tokenCredential, err := CreateTokenCredential(ctx, keyVault.AzureAppConfigurationProviderAuth, acp.Namespace)
 		if err != nil {
 			klog.ErrorS(err, fmt.Sprintf("Fail to create token credential for %q", keyVault.Uri))
 			return nil, err

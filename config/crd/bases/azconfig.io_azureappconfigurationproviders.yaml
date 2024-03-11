@@ -162,6 +162,9 @@ spec:
                       type: object
                     type: array
                 type: object
+              replicaDiscovery:
+                default: true
+                type: boolean
               secret:
                 description: SecretReference defines the settings for resolving secret
                   reference type items

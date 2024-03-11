@@ -11,6 +11,7 @@ import (
 	reflect "reflect"
 
 	azcore "github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	azappconfig "github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	gomock "github.com/golang/mock/gomock"
 	v10 "k8s.io/api/core/v1"
 )
@@ -67,6 +68,21 @@ func (m *MockConfigurationSettingsRetriever) CreateTargetSettings(arg0 context.C
 func (mr *MockConfigurationSettingsRetrieverMockRecorder) CreateTargetSettings(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTargetSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CreateTargetSettings), arg0, arg1)
+}
+
+// ExecuteFailoverPolicy mocks base method.
+func (m *MockConfigurationSettingsRetriever) ExecuteFailoverPolicy(arg0 context.Context, arg1 []v1.Selector) ([]azappconfig.Setting, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteFailoverPolicy", arg0, arg1)
+	ret0, _ := ret[0].([]azappconfig.Setting)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExecuteFailoverPolicy indicates an expected call of ExecuteFailoverPolicy.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) ExecuteFailoverPolicy(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteFailoverPolicy", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).ExecuteFailoverPolicy), arg0, arg1)
 }
 
 // RefreshFeatureFlagSettings mocks base method.

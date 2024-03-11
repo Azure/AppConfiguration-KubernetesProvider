@@ -33,6 +33,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 	var (
 		EndpointName = "https://fake-endpoint"
+		// fakeClientWrapper = &loader.ConfigurationClientWrapper{
+		// 	Client:         nil,
+		// 	Endpoint:       EndpointName,
+		// 	BackOffEndTime: metav1.Time{},
+		// 	FailedAttempts: 0,
+		// }
 	)
 
 	Context("When create AzureAppConfigurationProvider object", func() {
@@ -45,6 +51,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
+			// MockConfigClientManager.EXPECT().GetClients().Return(fakeClientWrapper)
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
@@ -60,7 +67,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Namespace: ProviderNamespace,
 				},
 				Spec: acpv1.AzureAppConfigurationProviderSpec{
-					Endpoint: &EndpointName,
+					Endpoint:         &EndpointName,
+					ReplicaDiscovery: false,
 					Target: acpv1.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},

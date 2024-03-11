@@ -35,7 +35,7 @@ type AzureAppConfigurationProviderSpec struct {
 	Target                    ConfigurationGenerationParameters        `json:"target"`
 	Auth                      *AzureAppConfigurationProviderAuth       `json:"auth,omitempty"`
 	Configuration             AzureAppConfigurationKeyValueOptions     `json:"configuration,omitempty"`
-	Secret                    *SecretReference                         `json:"secret,omitempty"`
+	Secret                    *SecretReference                  `json:"secret,omitempty"`
 	FeatureFlag               *AzureAppConfigurationFeatureFlagOptions `json:"featureFlag,omitempty"`
 }
 

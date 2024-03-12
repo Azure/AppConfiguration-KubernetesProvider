@@ -35,7 +35,7 @@ import (
 type ConfigurationSettingLoader struct {
 	acpv1.AzureAppConfigurationProvider
 	getSettingsFunc GetSettingsFunc
-	ClientManager   *ConfigurationClientManager
+	ClientManager   ClientManager
 }
 
 type TargetKeyValueSettings struct {
@@ -70,6 +70,10 @@ type ConfigurationSettingsRetriever interface {
 
 type GetSettingsFunc func(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
 
+type GetSettings interface {
+	GetSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
+}
+
 type ServicePrincipleAuthenticationParameters struct {
 	ClientId     string
 	ClientSecret string
@@ -93,24 +97,15 @@ const (
 	TlsCrt                                string = "tls.crt"
 )
 
-func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, getSettingsFunc GetSettingsFunc, clientManager *ConfigurationClientManager, generation int64) (*ConfigurationSettingLoader, error) {
+func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, getSettingsFunc GetSettingsFunc, clientManager ClientManager) (*ConfigurationSettingLoader, error) {
 	if getSettingsFunc == nil {
 		getSettingsFunc = getConfigurationSettings
-	}
-
-	manager := clientManager
-	if manager == nil || generation != provider.Generation {
-		var err error
-		manager, err = NewConfigurationClientManager(ctx, provider)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	return &ConfigurationSettingLoader{
 		AzureAppConfigurationProvider: provider,
 		getSettingsFunc:               getSettingsFunc,
-		ClientManager:                 manager,
+		ClientManager:                 clientManager,
 	}, nil
 }
 

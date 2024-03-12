@@ -5,7 +5,6 @@ package loader
 
 import (
 	acpv1 "azappconfig/provider/api/v1"
-	v1 "azappconfig/provider/api/v1"
 	// "azappconfig/provider/internal/loader/mocks"
 	"context"
 	"crypto/rand"
@@ -37,8 +36,14 @@ import (
 var (
 	mockResolveSecretReference    *MockResolveSecretReference
 	mockCtrl                      *gomock.Controller
-	mockCongiurationClientManager *MockConfigClientManager
+	mockCongiurationClientManager *MockClientManager
 	EndpointName                  string = "https://fake-endpoint"
+	fakeClientWrapper                    = ConfigurationClientWrapper{
+		Client:         nil,
+		Endpoint:       EndpointName,
+		BackOffEndTime: metav1.Time{},
+		FailedAttempts: 0,
+	}
 )
 
 func mockGetConfigurationSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
@@ -134,45 +139,31 @@ func (mr *MockResolveSecretReferenceMockRecorder) Resolve(arg0, arg1 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockResolveSecretReference)(nil).Resolve), arg0, arg1)
 }
 
-// MockConfigClientManager is a mock of ConfigClientManager interface.
-type MockConfigClientManager struct {
+// MockClientManager is a mock of ClientManager interface.
+type MockClientManager struct {
 	ctrl     *gomock.Controller
-	recorder *MockConfigClientManagerMockRecorder
+	recorder *MockClientManagerMockRecorder
 }
 
-// MockConfigClientManagerMockRecorder is the mock recorder for MockConfigClientManager.
-type MockConfigClientManagerMockRecorder struct {
-	mock *MockConfigClientManager
+// MockClientManagerMockRecorder is the mock recorder for MockClientManager.
+type MockClientManagerMockRecorder struct {
+	mock *MockClientManager
 }
 
-// NewMockConfigClientManager creates a new mock instance.
-func NewMockConfigClientManager(ctrl *gomock.Controller) *MockConfigClientManager {
-	mock := &MockConfigClientManager{ctrl: ctrl}
-	mock.recorder = &MockConfigClientManagerMockRecorder{mock}
+// NewMockClientManager creates a new mock instance.
+func NewMockClientManager(ctrl *gomock.Controller) *MockClientManager {
+	mock := &MockClientManager{ctrl: ctrl}
+	mock.recorder = &MockClientManagerMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockConfigClientManager) EXPECT() *MockConfigClientManagerMockRecorder {
+func (m *MockClientManager) EXPECT() *MockClientManagerMockRecorder {
 	return m.recorder
 }
 
-// DiscoverFallbackClients mocks base method.
-func (m *MockConfigClientManager) DiscoverFallbackClients(arg0 string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DiscoverFallbackClients", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DiscoverFallbackClients indicates an expected call of DiscoverFallbackClients.
-func (mr *MockConfigClientManagerMockRecorder) DiscoverFallbackClients(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DiscoverFallbackClients", reflect.TypeOf((*MockConfigClientManager)(nil).DiscoverFallbackClients), arg0)
-}
-
 // GetClients mocks base method.
-func (m *MockConfigClientManager) GetClients() []*ConfigurationClientWrapper {
+func (m *MockClientManager) GetClients() []*ConfigurationClientWrapper {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClients")
 	ret0, _ := ret[0].([]*ConfigurationClientWrapper)
@@ -180,24 +171,33 @@ func (m *MockConfigClientManager) GetClients() []*ConfigurationClientWrapper {
 }
 
 // GetClients indicates an expected call of GetClients.
-func (mr *MockConfigClientManagerMockRecorder) GetClients() *gomock.Call {
+func (mr *MockClientManagerMockRecorder) GetClients() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClients", reflect.TypeOf((*MockConfigClientManager)(nil).GetClients))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClients", reflect.TypeOf((*MockClientManager)(nil).GetClients))
 }
 
-// NewConfigurationClientManager mocks base method.
-func (m *MockConfigClientManager) NewConfigurationClientManager(arg0 context.Context, arg1 v1.AzureAppConfigurationProvider) (*ConfigurationClientManager, error) {
+// RefreshClients mocks base method.
+func (m *MockClientManager) RefreshClients() {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewConfigurationClientManager", arg0, arg1)
-	ret0, _ := ret[0].(*ConfigurationClientManager)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	m.ctrl.Call(m, "RefreshClients")
 }
 
-// NewConfigurationClientManager indicates an expected call of NewConfigurationClientManager.
-func (mr *MockConfigClientManagerMockRecorder) NewConfigurationClientManager(arg0, arg1 interface{}) *gomock.Call {
+// RefreshClients indicates an expected call of RefreshClients.
+func (mr *MockClientManagerMockRecorder) RefreshClients() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewConfigurationClientManager", reflect.TypeOf((*MockConfigClientManager)(nil).NewConfigurationClientManager), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshClients", reflect.TypeOf((*MockClientManager)(nil).RefreshClients))
+}
+
+// UpdateClientBackoffStatus mocks base method.
+func (m *MockClientManager) UpdateClientBackoffStatus(arg0 string, arg1 bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateClientBackoffStatus", arg0, arg1)
+}
+
+// UpdateClientBackoffStatus indicates an expected call of UpdateClientBackoffStatus.
+func (mr *MockClientManagerMockRecorder) UpdateClientBackoffStatus(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClientBackoffStatus", reflect.TypeOf((*MockClientManager)(nil).UpdateClientBackoffStatus), arg0, arg1)
 }
 
 const (
@@ -215,7 +215,7 @@ func TestLoaderAPIs(t *testing.T) {
 var _ = BeforeEach(func() {
 	mockCtrl = gomock.NewController(GinkgoT())
 	mockResolveSecretReference = NewMockResolveSecretReference(mockCtrl)
-	mockCongiurationClientManager = NewMockConfigClientManager(mockCtrl)
+	mockCongiurationClientManager = NewMockClientManager(mockCtrl)
 
 	go func() {
 		defer GinkgoRecover()
@@ -229,13 +229,7 @@ var _ = AfterEach(func() {
 
 var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 	var (
-		EndpointName      = "https://fake-endpoint"
-		fakeClientWrapper = &ConfigurationClientWrapper{
-			Client:         nil,
-			Endpoint:       EndpointName,
-			BackOffEndTime: metav1.Time{},
-			FailedAttempts: 0,
-		}
+		EndpointName = "https://fake-endpoint"
 	)
 
 	Context("When get Key Vault Reference Type Settings", func() {
@@ -273,7 +267,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV, nil, ProviderGeneration)
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV, mockCongiurationClientManager)
 			secretValue := "fakeSecretValue"
 			secret1 := azsecrets.GetSecretResponse{
 				SecretBundle: azsecrets.SecretBundle{
@@ -315,8 +309,10 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV, nil, ProviderGeneration)
-
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV, mockCongiurationClientManager)
+			secretValue := "fakeSecretValue"
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Times(0).Return(&secretValue, nil)
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Times(0).Return(nil, errors.New("Some error"))
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
 			Expect(allSettings).Should(BeNil())
@@ -720,7 +716,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 func TestGetAllConfigurationSettingsNoTrim(t *testing.T) {
 	testSpec := acpv1.AzureAppConfigurationProviderSpec{
-		Endpoint: &EndpointName,
+		Endpoint:         &EndpointName,
+		ReplicaDiscovery: false,
 		Target: acpv1.ConfigurationGenerationParameters{
 			ConfigMapName: ConfigMapName,
 		},
@@ -737,7 +734,7 @@ func TestGetAllConfigurationSettingsNoTrim(t *testing.T) {
 		Spec: testSpec,
 	}
 
-	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettings, nil, ProviderGeneration)
+	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettings, mockCongiurationClientManager)
 	allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), nil)
 
 	assert.Equal(t, 6, len(allSettings.ConfigMapSettings))
@@ -772,7 +769,7 @@ func TestGetAllConfigurationSettingsTrimSinglePrefix(t *testing.T) {
 		Spec: testSpec,
 	}
 
-	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettings, nil, ProviderGeneration)
+	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettings, nil)
 	allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), nil)
 
 	assert.Equal(t, 4, len(allSettings.ConfigMapSettings))
@@ -805,7 +802,7 @@ func TestGetAllConfigurationSettingsTrimMultiplePrefix(t *testing.T) {
 		Spec: testSpec,
 	}
 
-	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettings, nil, ProviderGeneration)
+	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettings, nil)
 	allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), nil)
 
 	assert.Equal(t, 4, len(allSettings.ConfigMapSettings))
@@ -835,7 +832,7 @@ func TestErrorWhenGetAllConfiguration(t *testing.T) {
 		Spec: testSpec,
 	}
 
-	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettingsThrowError, nil, ProviderGeneration)
+	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettingsThrowError, nil)
 
 	allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), nil)
 

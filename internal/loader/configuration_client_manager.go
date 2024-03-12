@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-//go:generate mockgen -destination=mocks/mock_configuration_client_manager.go -package mocks . ConfigClientManager
+//go:generate mockgen -destination=mocks/mock_configuration_client_manager.go -package mocks . ClientManager
 
 type ConfigurationClientManager struct {
 	ReplicaDiscoveryEnabled    bool
@@ -51,10 +51,10 @@ type ConfigurationClientWrapper struct {
 	FailedAttempts int
 }
 
-type ConfigClientManager interface {
-	NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (*ConfigurationClientManager, error)
+type ClientManager interface {
 	GetClients() []*ConfigurationClientWrapper
-	DiscoverFallbackClients(host string) error
+	RefreshClients()
+	UpdateClientBackoffStatus(endpoint string, successful bool)
 }
 
 const (
@@ -84,7 +84,7 @@ var (
 	}
 )
 
-func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (*ConfigurationClientManager, error) {
+func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (ClientManager, error) {
 	manager := &ConfigurationClientManager{
 		ReplicaDiscoveryEnabled: provider.Spec.ReplicaDiscovery,
 		ValidDomain:             getValidDomain(*provider.Spec.Endpoint),

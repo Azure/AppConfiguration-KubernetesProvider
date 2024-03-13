@@ -30,18 +30,17 @@ import (
 //go:generate mockgen -destination=mocks/mock_configuration_client_manager.go -package mocks . ClientManager
 
 type ConfigurationClientManager struct {
-	ReplicaDiscoveryEnabled    bool
-	SpecifiedClient            *azappconfig.Client
-	DynamicClients             []*ConfigurationClientWrapper
-	ValidDomain                string
-	Endpoint                   string
-	ClientsFallbackStatus      map[string]*ConfigurationClientWrapper
-	Credential                 azcore.TokenCredential
-	ConnectionString           string
-	secret                     string
-	id                         string
-	lastFallbackClientsAttempt metav1.Time
-	lastFallbackRefresh        metav1.Time
+	ReplicaDiscoveryEnabled   bool
+	SpecifiedClient           *azappconfig.Client
+	DynamicClients            []*ConfigurationClientWrapper
+	ValidDomain               string
+	Endpoint                  string
+	ClientsFallbackStatus     map[string]*ConfigurationClientWrapper
+	Credential                azcore.TokenCredential
+	secret                    string
+	id                        string
+	lastFallbackClientAttempt metav1.Time
+	lastFallbackClientRefresh metav1.Time
 }
 
 type ConfigurationClientWrapper struct {
@@ -55,6 +54,7 @@ type ClientManager interface {
 	GetClients() []*ConfigurationClientWrapper
 	RefreshClients()
 	UpdateClientBackoffStatus(endpoint string, successful bool)
+	ExecuteFailoverPolicy(ctx context.Context, filters []acpv1.Selector, getSettingsFunc GetSettingsFunc) ([]azappconfig.Setting, error)
 }
 
 const (
@@ -94,20 +94,20 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 
 	var err error
 	if provider.Spec.ConnectionStringReference != nil {
-		manager.ConnectionString, err = getConnectionStringParameter(ctx, types.NamespacedName{Namespace: provider.Namespace, Name: *provider.Spec.ConnectionStringReference})
+		connectionString, err := getConnectionStringParameter(ctx, types.NamespacedName{Namespace: provider.Namespace, Name: *provider.Spec.ConnectionStringReference})
 		if err != nil {
 			return nil, err
 		}
-		manager.secret, err = parseConnectionString(manager.ConnectionString, SecretSection)
+		manager.secret, err = parseConnectionString(connectionString, SecretSection)
 		if err != nil {
 			return nil, err
 		}
-		manager.id, err = parseConnectionString(manager.ConnectionString, IdSection)
+		manager.id, err = parseConnectionString(connectionString, IdSection)
 		if err != nil {
 			return nil, err
 		}
 
-		manager.SpecifiedClient, err = azappconfig.NewClientFromConnectionString(manager.ConnectionString, clientOptionWithModuleInfo)
+		manager.SpecifiedClient, err = azappconfig.NewClientFromConnectionString(connectionString, clientOptionWithModuleInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -128,46 +128,8 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 	return manager, nil
 }
 
-func SrvTargetHostQuery(host string) ([]string, error) {
-	results := make([]string, 0)
-
-	_, originRecords, err := net.LookupSRV(Origin, TCP, host)
-	if err != nil {
-		// If the host does not have SRV records => no replicas
-		if _, ok := err.(*net.DNSError); ok {
-			results = append(results, host)
-			return results, nil
-		}
-		return nil, err
-	}
-
-	originHost := strings.TrimSuffix(originRecords[0].Target, ".")
-	results = append(results, originHost)
-	index := 0
-	for {
-		currentAlt := Alt + strconv.Itoa(index)
-		_, altRecords, err := net.LookupSRV(currentAlt, TCP, originHost)
-		if err != nil {
-			// If the host does not have SRV records => no more replicas
-			if _, ok := err.(*net.DNSError); ok {
-				break
-			} else {
-				return nil, err
-			}
-		}
-
-		altHost := strings.TrimSuffix(altRecords[0].Target, ".")
-		if altHost != "" {
-			results = append(results, altHost)
-		}
-		index = index + 1
-	}
-
-	return results, nil
-}
-
 func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWrapper {
-	if manager.ReplicaDiscoveryEnabled != true {
+	if !manager.ReplicaDiscoveryEnabled {
 		return []*ConfigurationClientWrapper{{
 			Endpoint:       manager.Endpoint,
 			Client:         manager.SpecifiedClient,
@@ -178,10 +140,10 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 
 	clients := make([]*ConfigurationClientWrapper, 0)
 	currentTime := metav1.Now()
-	if currentTime.After(manager.lastFallbackClientsAttempt.Time.Add(MinimalClientRefreshInterval)) &&
+	if currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) &&
 		(manager.DynamicClients == nil ||
-			currentTime.After(manager.lastFallbackRefresh.Time.Add(FallbackClientRefreshExpireInterval))) {
-		manager.lastFallbackClientsAttempt = currentTime
+			currentTime.After(manager.lastFallbackClientRefresh.Time.Add(FallbackClientRefreshExpireInterval))) {
+		manager.lastFallbackClientAttempt = currentTime
 		_ = manager.DiscoverFallbackClients(manager.Endpoint)
 	}
 
@@ -198,17 +160,59 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 	return clients
 }
 
+func (manager *ConfigurationClientManager) ExecuteFailoverPolicy(ctx context.Context, filters []acpv1.Selector, getSettingsFunc GetSettingsFunc) ([]azappconfig.Setting, error) {
+	clients := manager.GetClients()
+	if len(clients) == 0 {
+		manager.RefreshClients()
+		return nil, fmt.Errorf("no client is available to execute failover policy")
+	}
+
+	for _, clientWrapper := range clients {
+		settingsChan := make(chan []azappconfig.Setting)
+		errChan := make(chan error)
+		successful := false
+
+		go getSettingsFunc(ctx, filters, clientWrapper.Client, settingsChan, errChan)
+
+		var configSettings []azappconfig.Setting
+		for {
+			select {
+			case configSettings = <-settingsChan:
+				if len(configSettings) == 0 {
+					successful = true
+					goto update
+				}
+			case err := <-errChan:
+				if err != nil && IsFailoverable(err) {
+					goto update
+				} else {
+					return nil, err
+				}
+			}
+		}
+	update:
+		manager.UpdateClientBackoffStatus(clientWrapper.Endpoint, successful)
+		if successful {
+			return configSettings, nil
+		}
+	}
+
+	// Failed to execute failover policy
+	manager.RefreshClients()
+	return nil, fmt.Errorf("failed to execute failover policy: all clients failed")
+}
+
 func (manager *ConfigurationClientManager) RefreshClients() {
 	currentTime := metav1.Now()
 	if manager.ReplicaDiscoveryEnabled &&
-		currentTime.After(manager.lastFallbackClientsAttempt.Time.Add(MinimalClientRefreshInterval)) {
-		manager.lastFallbackClientsAttempt = currentTime
+		currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) {
+		manager.lastFallbackClientAttempt = currentTime
 		_ = manager.DiscoverFallbackClients(manager.Endpoint)
 	}
 }
 
 func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) error {
-	srvTargetHosts, err := SrvTargetHostQuery(host)
+	srvTargetHosts, err := QuerySrvTargetHost(host)
 	if err != nil {
 		return err
 	}
@@ -237,7 +241,7 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 	}
 
 	manager.DynamicClients = newDynamicClients
-	manager.lastFallbackRefresh = metav1.Now()
+	manager.lastFallbackClientRefresh = metav1.Now()
 	return nil
 }
 
@@ -254,8 +258,48 @@ func (manager *ConfigurationClientManager) UpdateClientBackoffStatus(endpoint st
 	}
 }
 
+func QuerySrvTargetHost(host string) ([]string, error) {
+	results := make([]string, 0)
+
+	_, originRecords, err := net.LookupSRV(Origin, TCP, host)
+	if err != nil {
+		// If the host does not have SRV records => no replicas
+		if _, ok := err.(*net.DNSError); ok {
+			results = append(results, host)
+			return results, nil
+		}
+		return nil, err
+	}
+
+	originHost := strings.TrimSuffix(originRecords[0].Target, ".")
+	results = append(results, originHost)
+	index := 0
+	for {
+		currentAlt := Alt + strconv.Itoa(index)
+		_, altRecords, err := net.LookupSRV(currentAlt, TCP, originHost)
+		if err != nil {
+			// If the host does not have SRV records => no more replicas
+			if _, ok := err.(*net.DNSError); ok {
+				break
+			} else {
+				return nil, err
+			}
+		}
+
+		for _, record := range altRecords {
+			altHost := strings.TrimSuffix(record.Target, ".")
+			if altHost != "" {
+				results = append(results, altHost)
+			}
+		}
+		index = index + 1
+	}
+
+	return results, nil
+}
+
 func (manager *ConfigurationClientManager) newConfigurationClient(endpoint string) (*azappconfig.Client, error) {
-	if manager.ConnectionString == "" {
+	if manager.Credential != nil {
 		return azappconfig.NewClient(endpoint, manager.Credential, clientOptionWithModuleInfo)
 	}
 
@@ -373,7 +417,7 @@ func getWorkloadIdentityClientId(ctx context.Context, workloadIdentityAuth *acpv
 }
 
 func getConnectionStringParameter(ctx context.Context, namespacedSecretName types.NamespacedName) (string, error) {
-	secret, err := getSecret(ctx, namespacedSecretName)
+	secret, err := GetSecret(ctx, namespacedSecretName)
 	if err != nil {
 		return "", err
 	}
@@ -382,7 +426,7 @@ func getConnectionStringParameter(ctx context.Context, namespacedSecretName type
 }
 
 func getServicePrincipleAuthenticationParameters(ctx context.Context, namespacedSecretName types.NamespacedName) (*ServicePrincipleAuthenticationParameters, error) {
-	secret, err := getSecret(ctx, namespacedSecretName)
+	secret, err := GetSecret(ctx, namespacedSecretName)
 	if err != nil {
 		return nil, err
 	}

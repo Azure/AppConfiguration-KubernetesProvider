@@ -65,14 +65,9 @@ type ConfigurationSettingsRetriever interface {
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
 	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (map[string]corev1.Secret, error)
-	ExecuteFailoverPolicy(ctx context.Context, filters []acpv1.Selector) ([]azappconfig.Setting, error)
 }
 
 type GetSettingsFunc func(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
-
-type GetSettings interface {
-	GetSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
-}
 
 type ServicePrincipleAuthenticationParameters struct {
 	ClientId     string
@@ -183,7 +178,7 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 
 func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver) (*RawSettings, error) {
 	keyValueFilters := getKeyValueFilters(csl.Spec)
-	settings, err := csl.ExecuteFailoverPolicy(ctx, keyValueFilters)
+	settings, err := csl.ClientManager.ExecuteFailoverPolicy(ctx, keyValueFilters, csl.getSettingsFunc)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +272,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, error) {
 	featureFlagFilters := getFeatureFlagFilters(csl.Spec)
-	featureFlagSettings, err := csl.ExecuteFailoverPolicy(ctx, featureFlagFilters)
+	featureFlagSettings, err := csl.ClientManager.ExecuteFailoverPolicy(ctx, featureFlagFilters, csl.getSettingsFunc)
 	if err != nil {
 		return nil, err
 	}
@@ -473,46 +468,12 @@ func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context
 	return resolver, nil
 }
 
-func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, filters []acpv1.Selector) ([]azappconfig.Setting, error) {
-	clients := csl.ClientManager.GetClients()
-	if len(clients) == 0 {
-		csl.ClientManager.RefreshClients()
-		return nil, fmt.Errorf("no client is available to execute failover policy")
-	}
+func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(
+	ctx context.Context,
+	filters []acpv1.Selector,
+	getSettingsFunc GetSettingsFunc) ([]azappconfig.Setting, error) {
 
-	for _, clientWrapper := range clients {
-		settingsChan := make(chan []azappconfig.Setting)
-		errChan := make(chan error)
-		successful := false
-
-		go csl.getSettingsFunc(ctx, filters, clientWrapper.Client, settingsChan, errChan)
-
-		var configSettings []azappconfig.Setting
-		for {
-			select {
-			case configSettings = <-settingsChan:
-				if len(configSettings) == 0 {
-					successful = true
-					goto update
-				}
-			case err := <-errChan:
-				if err != nil && IsFailoverable(err) {
-					goto update
-				} else {
-					return nil, err
-				}
-			}
-		}
-	update:
-		csl.ClientManager.UpdateClientBackoffStatus(clientWrapper.Endpoint, successful)
-		if successful {
-			return configSettings, nil
-		}
-	}
-
-	// Failed to execute failover policy
-	csl.ClientManager.RefreshClients()
-	return nil, fmt.Errorf("failed to execute failover policy: all clients failed")
+	return nil, nil
 }
 
 func trimPrefix(key string, prefixToTrim []string) string {

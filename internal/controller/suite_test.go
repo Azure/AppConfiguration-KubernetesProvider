@@ -48,7 +48,6 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 var mockCtrl *gomock.Controller
 var mockConfigurationSettings *mocks.MockConfigurationSettingsRetriever
-var mockConfigClientManager *mocks.MockClientManager
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -82,7 +81,6 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	mockCtrl = gomock.NewController(GinkgoT())
-	mockConfigClientManager = mocks.NewMockClientManager(mockCtrl)
 	mockConfigurationSettings = mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
 
 	err = (&AzureAppConfigurationProviderReconciler{

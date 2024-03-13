@@ -71,18 +71,44 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) CreateTargetSettings(a
 }
 
 // ExecuteFailoverPolicy mocks base method.
-func (m *MockConfigurationSettingsRetriever) ExecuteFailoverPolicy(arg0 context.Context, arg1 []v1.Selector) ([]azappconfig.Setting, error) {
+func (m *MockConfigurationSettingsRetriever) ExecuteFailoverPolicy(arg0 context.Context, arg1 []v1.Selector, arg2 loader.GetSettingsFunc) ([]azappconfig.Setting, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteFailoverPolicy", arg0, arg1)
+	ret := m.ctrl.Call(m, "ExecuteFailoverPolicy", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]azappconfig.Setting)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ExecuteFailoverPolicy indicates an expected call of ExecuteFailoverPolicy.
-func (mr *MockConfigurationSettingsRetrieverMockRecorder) ExecuteFailoverPolicy(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) ExecuteFailoverPolicy(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteFailoverPolicy", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).ExecuteFailoverPolicy), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteFailoverPolicy", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).ExecuteFailoverPolicy), arg0, arg1, arg2)
+}
+
+// GetClients mocks base method.
+func (m *MockConfigurationSettingsRetriever) GetClients() []*loader.ConfigurationClientWrapper {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClients")
+	ret0, _ := ret[0].([]*loader.ConfigurationClientWrapper)
+	return ret0
+}
+
+// GetClients indicates an expected call of GetClients.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) GetClients() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClients", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).GetClients))
+}
+
+// RefreshClients mocks base method.
+func (m *MockConfigurationSettingsRetriever) RefreshClients() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RefreshClients")
+}
+
+// RefreshClients indicates an expected call of RefreshClients.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshClients() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshClients", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).RefreshClients))
 }
 
 // RefreshFeatureFlagSettings mocks base method.
@@ -128,4 +154,16 @@ func (m *MockConfigurationSettingsRetriever) ResolveSecretReferences(arg0 contex
 func (mr *MockConfigurationSettingsRetrieverMockRecorder) ResolveSecretReferences(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveSecretReferences", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).ResolveSecretReferences), arg0, arg1, arg2)
+}
+
+// UpdateClientBackoffStatus mocks base method.
+func (m *MockConfigurationSettingsRetriever) UpdateClientBackoffStatus(arg0 string, arg1 bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateClientBackoffStatus", arg0, arg1)
+}
+
+// UpdateClientBackoffStatus indicates an expected call of UpdateClientBackoffStatus.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) UpdateClientBackoffStatus(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClientBackoffStatus", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).UpdateClientBackoffStatus), arg0, arg1)
 }

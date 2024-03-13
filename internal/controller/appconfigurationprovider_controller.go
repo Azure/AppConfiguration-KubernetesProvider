@@ -46,7 +46,6 @@ type AzureAppConfigurationProviderReconciler struct {
 	client.Client
 	Scheme                  *runtime.Scheme
 	Retriever               loader.ConfigurationSettingsRetriever
-	ClientManager           loader.ClientManager
 	ProvidersReconcileState map[types.NamespacedName]*ReconciliationState
 }
 
@@ -58,7 +57,7 @@ type ReconciliationState struct {
 	NextSentinelBasedRefreshReconcileTime   metav1.Time
 	NextSecretReferenceRefreshReconcileTime metav1.Time
 	NextFeatureFlagRefreshReconcileTime     metav1.Time
-	ClientManager                             loader.ClientManager
+	ClientManager                           loader.ClientManager
 }
 
 const (
@@ -211,12 +210,18 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	}
 
 	/* Create ConfigurationSettingLoader to get the key-value settings from Azure AppConfiguration. */
-	configLoader, err := loader.NewConfigurationSettingLoader(ctx, *provider, nil, reconciler.ClientManager)
+	manager := reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager
+	configLoader, err := loader.NewConfigurationSettingLoader(ctx, *provider, nil, manager)
 	if err != nil {
 		reconciler.logAndSetFailStatus(ctx, err, provider)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 	}
-	var retriever loader.ConfigurationSettingsRetriever = configLoader
+	var retriever loader.ConfigurationSettingsRetriever
+	if reconciler.Retriever != nil {
+		retriever = reconciler.Retriever
+	} else {
+		retriever = configLoader
+	}
 
 	// Initialize the processor setting in this reconcile
 	processor := &AppConfigurationProviderProcessor{

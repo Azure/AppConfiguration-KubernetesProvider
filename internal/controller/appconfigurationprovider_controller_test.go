@@ -396,6 +396,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-8"
 			configMapName := "file-style-configmap-to-be-created-2"
+			wildcard := "*"
 			configProvider := &acpv1.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
@@ -417,7 +418,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
 						Selectors: []acpv1.Selector{
 							{
-								KeyFilter: "*",
+								KeyFilter: &wildcard,
 							},
 						},
 					},
@@ -769,7 +770,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec: Both endpoint and connectionStringReference field are set"))
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec: both endpoint and connectionStringReference field are set"))
 		})
 
 		It("Should return error if configMapData key is set when type is default", func() {
@@ -840,6 +841,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should return error if feature flag is set when data type is default", func() {
 			configMapName := "test-configmap"
+			testKey := "testKey"
 			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
@@ -848,7 +850,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
 					Selectors: []acpv1.Selector{
 						{
-							KeyFilter: "testKey",
+							KeyFilter: &testKey,
 						},
 					},
 				},
@@ -859,6 +861,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should return error if feature flag is set when data type is properties", func() {
 			configMapName := "test-configmap"
+			testKeyFilter := "testKeyFilter"
 			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
@@ -871,7 +874,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
 					Selectors: []acpv1.Selector{
 						{
-							KeyFilter: "testKeyFilter",
+							KeyFilter: &testKeyFilter,
 						},
 					},
 				},
@@ -905,7 +908,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec: One of endpoint and connectionStringReference field must be set"))
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec: one of endpoint and connectionStringReference field must be set"))
 		})
 
 		It("Should return error when both connectionStringReference and auth object are set", func() {
@@ -993,6 +996,63 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 
 			Expect(verifyObject(configProviderSpec)).Should(BeNil())
+		})
+
+		It("Should return error when incorrectly configure the selector", func() {
+			configMapName := "test-configmap"
+			connectionStringReference := "fakeSecret"
+			testKey := "testKey"
+			testSnapshot := "testSnapshot"
+			testLabel := "testLabel"
+			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+				ConnectionStringReference: &connectionStringReference,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter:    &testKey,
+							SnapshotName: &testSnapshot,
+						},
+					},
+				},
+			}
+
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.configuration.selectors: set both keyFilter and snapshotName in one selector causes ambiguity, only one of them should be set"))
+
+			configProviderSpec2 := acpv1.AzureAppConfigurationProviderSpec{
+				ConnectionStringReference: &connectionStringReference,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acpv1.Selector{
+						{
+							SnapshotName: &testSnapshot,
+							LabelFilter:  &testLabel,
+						},
+					},
+				},
+			}
+
+			Expect(verifyObject(configProviderSpec2).Error()).Should(Equal("spec.configuration.selectors: labelFilter is not allowed when snapshotName is set"))
+
+			configProviderSpec3 := acpv1.AzureAppConfigurationProviderSpec{
+				ConnectionStringReference: &connectionStringReference,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acpv1.Selector{
+						{
+							LabelFilter: &testLabel,
+						},
+					},
+				},
+			}
+
+			Expect(verifyObject(configProviderSpec3).Error()).Should(Equal("spec.configuration.selectors: one of keyFilter and snapshotName field must be set"))
 		})
 	})
 

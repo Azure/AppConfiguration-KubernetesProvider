@@ -79,8 +79,9 @@ type AzureAppConfigurationFeatureFlagOptions struct {
 
 // KeyLabelSelector defines the filters when fetching the data from Azure AppConfiguration
 type Selector struct {
-	KeyFilter   string  `json:"keyFilter"`
-	LabelFilter *string `json:"labelFilter,omitempty"`
+	KeyFilter    *string `json:"keyFilter,omitempty"`
+	LabelFilter  *string `json:"labelFilter,omitempty"`
+	SnapshotName *string `json:"snapshotName,omitempty"`
 }
 
 // Defines the settings for dynamic configuration.

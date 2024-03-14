@@ -6,6 +6,7 @@ package loader
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -32,11 +33,15 @@ func IsFailoverable(err error) bool {
 		return false
 	}
 
+	if _, ok := err.(net.Error); ok {
+		return true
+	}
+
 	var respErr *azcore.ResponseError
 	if errors.As(err, &respErr) &&
 		(respErr.StatusCode == http.StatusTooManyRequests ||
 			respErr.StatusCode == http.StatusRequestTimeout ||
-			respErr.StatusCode == http.StatusInternalServerError) {
+			respErr.StatusCode >= http.StatusInternalServerError) {
 		return true
 	}
 

@@ -249,11 +249,11 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 					continue // ignore feature flag while getting key value settings
 				case SecretReferenceContentType:
 					if setting.Value == nil {
-						return nil, fmt.Errorf("The value of Key Vault reference '%s' is null", *setting.Key)
+						return nil, fmt.Errorf("the value of Key Vault reference '%s' is null", *setting.Key)
 					}
 
 					if csl.Spec.Secret == nil {
-						return nil, fmt.Errorf("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
+						return nil, fmt.Errorf("a Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
 					}
 
 					var secretType corev1.SecretType = corev1.SecretTypeOpaque
@@ -325,7 +325,7 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 	go csl.getSettingsFunc(ctx, featureFlagFilters, csl.AppConfigClient, featureFlagSettingChan, errChan)
 
 	var featureFlagSettings []azappconfig.Setting
-	// featureFlagSection = {"featureFlags": [{...}, {...}]}
+	// featureFlagSection = {"feature_flags": [{...}, {...}]}
 	var featureFlagSection = map[string]interface{}{
 		FeatureFlagSectionName: make([]interface{}, 0),
 	}
@@ -337,12 +337,15 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 				goto end
 			} else {
 				for _, setting := range featureFlagSettings {
-					var out interface{}
-					err := json.Unmarshal([]byte(*setting.Value), &out)
-					if err != nil {
-						return nil, fmt.Errorf("Failed to unmarshal feature flag settings: %s", err.Error())
+					if setting.ContentType != nil &&
+						*setting.ContentType == FeatureFlagContentType {
+						var out interface{}
+						err := json.Unmarshal([]byte(*setting.Value), &out)
+						if err != nil {
+							return nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
+						}
+						featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
 					}
-					featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
 				}
 			}
 		case err := <-errChan:
@@ -535,26 +538,48 @@ func getConfigurationSettings(
 	nullString := "\x00"
 
 	for _, filter := range filters {
-		if filter.LabelFilter == nil {
-			filter.LabelFilter = &nullString // NUL is escaped to \x00 in golang
-		}
-		selector := azappconfig.SettingSelector{
-			KeyFilter:   &filter.KeyFilter,
-			LabelFilter: filter.LabelFilter,
-			Fields:      azappconfig.AllSettingFields(),
-		}
-		pager := client.NewListSettingsPager(selector, nil)
+		if filter.KeyFilter != nil {
+			if filter.LabelFilter == nil {
+				filter.LabelFilter = &nullString // NUL is escaped to \x00 in golang
+			}
+			selector := azappconfig.SettingSelector{
+				KeyFilter:   filter.KeyFilter,
+				LabelFilter: filter.LabelFilter,
+				Fields:      azappconfig.AllSettingFields(),
+			}
+			pager := client.NewListSettingsPager(selector, nil)
 
-		for pager.More() {
-			page, err := pager.NextPage(ctx)
+			for pager.More() {
+				page, err := pager.NextPage(ctx)
+				if err != nil {
+					e <- err
+				} else if len(page.Settings) > 0 {
+					c <- page.Settings
+				}
+			}
+		} else {
+			snapshot, err := client.GetSnapshot(ctx, *filter.SnapshotName, nil)
 			if err != nil {
 				e <- err
-			} else if len(page.Settings) > 0 {
-				c <- page.Settings
+			}
+
+			if *snapshot.CompositionType != azappconfig.CompositionTypeKey {
+				e <- fmt.Errorf("compositionType for the selected snapshot '%s' must be 'key', found '%s'", *filter.SnapshotName, *snapshot.CompositionType)
+			}
+
+			pager := client.NewListSettingsForSnapshotPager(*filter.SnapshotName, nil)
+
+			for pager.More() {
+				page, err := pager.NextPage(ctx)
+				if err != nil {
+					e <- err
+				} else if len(page.Settings) > 0 {
+					c <- page.Settings
+				}
 			}
 		}
-
 	}
+
 	c <- make([]azappconfig.Setting, 0)
 }
 
@@ -693,7 +718,10 @@ func getFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []ac
 	if acpSpec.FeatureFlag != nil {
 		featureFlagFilters = deduplicateFilters(acpSpec.FeatureFlag.Selectors)
 		for i := 0; i < len(featureFlagFilters); i++ {
-			featureFlagFilters[i].KeyFilter = FeatureFlagKeyPrefix + featureFlagFilters[i].KeyFilter
+			if featureFlagFilters[i].KeyFilter != nil {
+				prefixedFeatureFlagFilter := FeatureFlagKeyPrefix + *featureFlagFilters[i].KeyFilter
+				featureFlagFilters[i].KeyFilter = &prefixedFeatureFlagFilter
+			}
 		}
 	}
 
@@ -713,8 +741,9 @@ func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
 		for i := len(filters) - 1; i >= 0; i-- {
 			findDuplicate = false
 			for j := 0; j < len(result); j++ {
-				if strings.Compare(result[j].KeyFilter, filters[i].KeyFilter) == 0 &&
-					compare(result[j].LabelFilter, filters[i].LabelFilter) {
+				if compare(result[j].KeyFilter, filters[i].KeyFilter) &&
+					compare(result[j].LabelFilter, filters[i].LabelFilter) &&
+					compare(result[j].SnapshotName, filters[i].SnapshotName) {
 					findDuplicate = true
 					break
 				}
@@ -725,8 +754,9 @@ func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
 		}
 		reverse(result)
 	} else {
+		wildcard := "*"
 		result = append(result, acpv1.Selector{
-			KeyFilter:   "*",
+			KeyFilter:   &wildcard,
 			LabelFilter: nil,
 		})
 	}

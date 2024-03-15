@@ -181,7 +181,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			// mockConfigClientManager.EXPECT().ExecuteFailoverPolicy(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()

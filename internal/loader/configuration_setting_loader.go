@@ -34,7 +34,7 @@ import (
 
 type ConfigurationSettingLoader struct {
 	acpv1.AzureAppConfigurationProvider
-	getSettingsFunc GetSettingsFunc
+	GetSettingsFunc GetSettingsFunc
 	ClientManager   ClientManager
 }
 
@@ -99,7 +99,7 @@ func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppC
 
 	return &ConfigurationSettingLoader{
 		AzureAppConfigurationProvider: provider,
-		getSettingsFunc:               getSettingsFunc,
+		GetSettingsFunc:               getSettingsFunc,
 		ClientManager:                 clientManager,
 	}, nil
 }
@@ -178,7 +178,7 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 
 func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver) (*RawSettings, error) {
 	keyValueFilters := getKeyValueFilters(csl.Spec)
-	settings, err := csl.ClientManager.ExecuteFailoverPolicy(ctx, keyValueFilters, csl.getSettingsFunc)
+	settings, err := csl.ClientManager.ExecuteFailoverPolicy(ctx, keyValueFilters, csl.GetSettingsFunc)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +272,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, error) {
 	featureFlagFilters := getFeatureFlagFilters(csl.Spec)
-	featureFlagSettings, err := csl.ClientManager.ExecuteFailoverPolicy(ctx, featureFlagFilters, csl.getSettingsFunc)
+	featureFlagSettings, err := csl.ClientManager.ExecuteFailoverPolicy(ctx, featureFlagFilters, csl.GetSettingsFunc)
 	if err != nil {
 		return nil, err
 	}

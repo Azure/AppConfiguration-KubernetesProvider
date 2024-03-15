@@ -37,10 +37,10 @@ var (
 	mockResolveSecretReference    *MockResolveSecretReference
 	mockCtrl                      *gomock.Controller
 	mockCongiurationClientManager *MockClientManager
-	EndpointName                  string = "https://fake-endpoint"
+	endpointName                  string = "https://fake-endpoint"
 	fakeClientWrapper                    = ConfigurationClientWrapper{
 		Client:         nil,
-		Endpoint:       EndpointName,
+		Endpoint:       endpointName,
 		BackOffEndTime: metav1.Time{},
 		FailedAttempts: 0,
 	}
@@ -1116,7 +1116,7 @@ func TestCreateSecretClients(t *testing.T) {
 			Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 		},
 		Spec: acpv1.AzureAppConfigurationProviderSpec{
-			Endpoint: &EndpointName,
+			Endpoint: &endpointName,
 			Target: acpv1.ConfigurationGenerationParameters{
 				ConfigMapName: "configMap-test",
 			},
@@ -1148,7 +1148,7 @@ func TestCreateSecretClients(t *testing.T) {
 			Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 		},
 		Spec: acpv1.AzureAppConfigurationProviderSpec{
-			Endpoint: &EndpointName,
+			Endpoint: &endpointName,
 			Target: acpv1.ConfigurationGenerationParameters{
 				ConfigMapName: "configMap-test",
 			},

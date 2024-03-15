@@ -199,28 +199,28 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		}
 	}
 
+	clientManager := reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager
 	if reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager == nil ||
 		reconciler.ProvidersReconcileState[req.NamespacedName].Generation != provider.Generation {
-		manager, err := loader.NewConfigurationClientManager(ctx, *provider)
+		clientManager, err := loader.NewConfigurationClientManager(ctx, *provider)
 		if err != nil {
 			reconciler.logAndSetFailStatus(ctx, err, provider)
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 		}
-		reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager = manager
+		reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager = clientManager
 	}
 
 	/* Create ConfigurationSettingLoader to get the key-value settings from Azure AppConfiguration. */
-	manager := reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager
-	configLoader, err := loader.NewConfigurationSettingLoader(ctx, *provider, nil, manager)
+	configLoader, err := loader.NewConfigurationSettingLoader(ctx, *provider, nil, clientManager)
 	if err != nil {
 		reconciler.logAndSetFailStatus(ctx, err, provider)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 	}
 	var retriever loader.ConfigurationSettingsRetriever
-	if reconciler.Retriever != nil {
-		retriever = reconciler.Retriever
-	} else {
+	if reconciler.Retriever == nil {
 		retriever = configLoader
+	} else {
+		retriever = reconciler.Retriever
 	}
 
 	// Initialize the processor setting in this reconcile

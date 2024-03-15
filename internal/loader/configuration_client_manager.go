@@ -31,8 +31,8 @@ import (
 
 type ConfigurationClientManager struct {
 	ReplicaDiscoveryEnabled   bool
-	SpecifiedClient           *azappconfig.Client
-	DynamicClients            []*ConfigurationClientWrapper
+	StaticClientWrappers      []*ConfigurationClientWrapper
+	DynamicClientwrappers     []*ConfigurationClientWrapper
 	ValidDomain               string
 	Endpoint                  string
 	ClientsFallbackStatus     map[string]*ConfigurationClientWrapper
@@ -54,7 +54,6 @@ type ClientManager interface {
 	GetClients() []*ConfigurationClientWrapper
 	RefreshClients()
 	UpdateClientBackoffStatus(endpoint string, successful bool)
-	ExecuteFailoverPolicy(ctx context.Context, filters []acpv1.Selector, getSettingsFunc GetSettingsFunc) ([]azappconfig.Setting, error)
 }
 
 const (
@@ -91,71 +90,63 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 	}
 
 	var err error
+	var staticClient *azappconfig.Client
 	if provider.Spec.ConnectionStringReference != nil {
 		connectionString, err := getConnectionStringParameter(ctx, types.NamespacedName{Namespace: provider.Namespace, Name: *provider.Spec.ConnectionStringReference})
 		if err != nil {
 			return nil, err
 		}
-		manager.Endpoint, err = parseConnectionString(connectionString, EndpointSection)
-		if err != nil {
+		if manager.Endpoint, err = parseConnectionString(connectionString, EndpointSection); err != nil {
 			return nil, err
 		}
-		manager.secret, err = parseConnectionString(connectionString, SecretSection)
-		if err != nil {
+		if manager.secret, err = parseConnectionString(connectionString, SecretSection); err != nil {
 			return nil, err
 		}
-		manager.id, err = parseConnectionString(connectionString, IdSection)
-		if err != nil {
+		if manager.id, err = parseConnectionString(connectionString, IdSection); err != nil {
 			return nil, err
 		}
-
-		manager.ValidDomain = getValidDomain(manager.Endpoint)
-		manager.SpecifiedClient, err = azappconfig.NewClientFromConnectionString(connectionString, clientOptionWithModuleInfo)
-		if err != nil {
+		if staticClient, err = azappconfig.NewClientFromConnectionString(connectionString, clientOptionWithModuleInfo); err != nil {
 			return nil, err
 		}
-
-		return manager, nil
+	} else {
+		if manager.Credential, err = CreateTokenCredential(ctx, provider.Spec.Auth, provider.Namespace); err != nil {
+			return nil, err
+		}
+		if staticClient, err = azappconfig.NewClient(*provider.Spec.Endpoint, manager.Credential, clientOptionWithModuleInfo); err != nil {
+			return nil, err
+		}
+		manager.Endpoint = *provider.Spec.Endpoint
 	}
 
-	manager.Credential, err = CreateTokenCredential(ctx, provider.Spec.Auth, provider.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	manager.Endpoint = *provider.Spec.Endpoint
 	manager.ValidDomain = getValidDomain(manager.Endpoint)
-	manager.SpecifiedClient, err = azappconfig.NewClient(*provider.Spec.Endpoint, manager.Credential, clientOptionWithModuleInfo)
-	if err != nil {
-		return nil, err
-	}
+	manager.StaticClientWrappers = []*ConfigurationClientWrapper{{
+		Endpoint:       *provider.Spec.Endpoint,
+		Client:         staticClient,
+		BackOffEndTime: metav1.Time{},
+		FailedAttempts: 0,
+	}}
 
 	return manager, nil
 }
 
 func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWrapper {
 	if !manager.ReplicaDiscoveryEnabled {
-		return []*ConfigurationClientWrapper{{
-			Endpoint:       manager.Endpoint,
-			Client:         manager.SpecifiedClient,
-			BackOffEndTime: metav1.Time{},
-			FailedAttempts: 0,
-		}}
+		return manager.StaticClientWrappers
 	}
 
 	clients := make([]*ConfigurationClientWrapper, 0)
 	currentTime := metav1.Now()
 	if currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) &&
-		(manager.DynamicClients == nil ||
+		(manager.DynamicClientwrappers == nil ||
 			currentTime.After(manager.lastFallbackClientRefresh.Time.Add(FallbackClientRefreshExpireInterval))) {
 		manager.lastFallbackClientAttempt = currentTime
 		url, _ := url.Parse(manager.Endpoint)
 		_ = manager.DiscoverFallbackClients(url.Host)
 	}
 
-	if len(manager.DynamicClients) > 0 {
+	if len(manager.DynamicClientwrappers) > 0 {
 		currentTime := metav1.Now()
-		for _, clientWrapper := range manager.DynamicClients {
+		for _, clientWrapper := range manager.DynamicClientwrappers {
 			manager.ClientsFallbackStatus[clientWrapper.Endpoint] = clientWrapper
 			if currentTime.After(clientWrapper.BackOffEndTime.Time) {
 				clients = append(clients, clientWrapper)
@@ -164,51 +155,6 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 	}
 
 	return clients
-}
-
-func (manager *ConfigurationClientManager) ExecuteFailoverPolicy(ctx context.Context, filters []acpv1.Selector, getSettingsFunc GetSettingsFunc) ([]azappconfig.Setting, error) {
-	clients := manager.GetClients()
-	if len(clients) == 0 {
-		manager.RefreshClients()
-		return nil, fmt.Errorf("no client is available to execute failover policy")
-	}
-
-	for _, clientWrapper := range clients {
-		settingsChan := make(chan []azappconfig.Setting)
-		errChan := make(chan error)
-		successful := false
-
-		go getSettingsFunc(ctx, filters, clientWrapper.Client, settingsChan, errChan)
-
-		var configSettings []azappconfig.Setting
-		settingsToReturn := make([]azappconfig.Setting, 0)
-		for {
-			select {
-			case configSettings = <-settingsChan:
-				if len(configSettings) == 0 {
-					successful = true
-					goto update
-				} else {
-					settingsToReturn = append(settingsToReturn, configSettings...)
-				}
-			case err := <-errChan:
-				if err != nil && manager.ReplicaDiscoveryEnabled && IsFailoverable(err) {
-					goto update
-				} else {
-					return nil, err
-				}
-			}
-		}
-	update:
-		manager.UpdateClientBackoffStatus(clientWrapper.Endpoint, successful)
-		if successful {
-			return settingsToReturn, nil
-		}
-	}
-
-	// Failed to execute failover policy
-	manager.RefreshClients()
-	return nil, fmt.Errorf("failed to execute failover policy: all clients failed")
 }
 
 func (manager *ConfigurationClientManager) RefreshClients() {
@@ -250,7 +196,7 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 		}
 	}
 
-	manager.DynamicClients = newDynamicClients
+	manager.DynamicClientwrappers = newDynamicClients
 	manager.lastFallbackClientRefresh = metav1.Now()
 	return nil
 }

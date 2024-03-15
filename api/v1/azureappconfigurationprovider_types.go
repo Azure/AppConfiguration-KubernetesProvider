@@ -30,15 +30,15 @@ import (
 type AzureAppConfigurationProviderSpec struct {
 	// The endpoint url of AppConfiguration which should sync the configuration key-values from.
 	// +kubebuilder:validation:Format=uri
-	Endpoint                  *string `json:"endpoint,omitempty"`
-	ConnectionStringReference *string `json:"connectionStringReference,omitempty"`
+	Endpoint *string `json:"endpoint,omitempty"`
 	// +kubebuilder:default=true
-	ReplicaDiscovery bool                                     `json:"replicaDiscovery,omitempty"`
-	Target           ConfigurationGenerationParameters        `json:"target"`
-	Auth             *AzureAppConfigurationProviderAuth       `json:"auth,omitempty"`
-	Configuration    AzureAppConfigurationKeyValueOptions     `json:"configuration,omitempty"`
-	Secret           *SecretReference                         `json:"secret,omitempty"`
-	FeatureFlag      *AzureAppConfigurationFeatureFlagOptions `json:"featureFlag,omitempty"`
+	ReplicaDiscovery          bool                                     `json:"replicaDiscovery,omitempty"`
+	ConnectionStringReference *string                                  `json:"connectionStringReference,omitempty"`
+	Target                    ConfigurationGenerationParameters        `json:"target"`
+	Auth                      *AzureAppConfigurationProviderAuth       `json:"auth,omitempty"`
+	Configuration             AzureAppConfigurationKeyValueOptions     `json:"configuration,omitempty"`
+	Secret                    *SecretReference                         `json:"secret,omitempty"`
+	FeatureFlag               *AzureAppConfigurationFeatureFlagOptions `json:"featureFlag,omitempty"`
 }
 
 // AzureAppConfigurationProviderStatus defines the observed state of AzureAppConfigurationProvider

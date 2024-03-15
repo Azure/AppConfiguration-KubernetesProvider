@@ -5,7 +5,6 @@ package loader
 
 import (
 	acpv1 "azappconfig/provider/api/v1"
-	v1 "azappconfig/provider/api/v1"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -162,21 +161,6 @@ func (m *MockClientManager) EXPECT() *MockClientManagerMockRecorder {
 	return m.recorder
 }
 
-// ExecuteFailoverPolicy mocks base method.
-func (m *MockClientManager) ExecuteFailoverPolicy(arg0 context.Context, arg1 []v1.Selector, arg2 GetSettingsFunc) ([]azappconfig.Setting, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteFailoverPolicy", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]azappconfig.Setting)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ExecuteFailoverPolicy indicates an expected call of ExecuteFailoverPolicy.
-func (mr *MockClientManagerMockRecorder) ExecuteFailoverPolicy(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteFailoverPolicy", reflect.TypeOf((*MockClientManager)(nil).ExecuteFailoverPolicy), arg0, arg1, arg2)
-}
-
 // GetClients mocks base method.
 func (m *MockClientManager) GetClients() []*ConfigurationClientWrapper {
 	m.ctrl.T.Helper()
@@ -283,11 +267,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			settingsToReturn := make([]azappconfig.Setting, 3)
-			settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
-			settingsToReturn[1] = newCommonKeyValueSettings("app:someSubKey1:1", "value4", "label1")
-			settingsToReturn[2] = newKeyVaultSettings("app:secret:1", "label1")
-			mockCongiurationClientManager.EXPECT().ExecuteFailoverPolicy(gomock.Any(), gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			mockCongiurationClientManager.EXPECT().GetClients().Return([]*ConfigurationClientWrapper{&fakeClientWrapper})
+			mockCongiurationClientManager.EXPECT().UpdateClientBackoffStatus(gomock.Any(), gomock.Any())
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV, mockCongiurationClientManager)
 			secretValue := "fakeSecretValue"
 			secret1 := azsecrets.GetSecretResponse{
@@ -330,11 +311,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			settingsToReturn := make([]azappconfig.Setting, 3)
-			settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
-			settingsToReturn[1] = newCommonKeyValueSettings("app:someSubKey1:1", "value4", "label1")
-			settingsToReturn[2] = newKeyVaultSettings("app:secret:1", "label1")
-			mockCongiurationClientManager.EXPECT().ExecuteFailoverPolicy(gomock.Any(), gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			mockCongiurationClientManager.EXPECT().GetClients().Return([]*ConfigurationClientWrapper{&fakeClientWrapper})
+			mockCongiurationClientManager.EXPECT().UpdateClientBackoffStatus(gomock.Any(), gomock.Any())
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV, mockCongiurationClientManager)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -368,12 +346,31 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV, mockCongiurationClientManager)
 			secretValue := "fakeSecretValue"
-			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Times(0).Return(&secretValue, nil)
-			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Times(0).Return(nil, errors.New("Some error"))
-			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
-
-			Expect(allSettings).Should(BeNil())
-			Expect(err.Error()).Should(Equal("a Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider 'testName' in namespace 'testNamespace'"))
+			secretName := "targetSecret"
+			contentType := "fake-content-type"
+			kidStr := "fakeKid"
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value:       &secretValue,
+					Kid:         &kidStr,
+					ContentType: &contentType,
+				},
+			}
+			secretReferencesToResolve := map[string]*TargetSecretReference{
+				secretName: {
+					Type: corev1.SecretTypeTLS,
+					UriSegments: map[string]KeyVaultSecretUriSegment{
+						secretName: {
+							HostName:      "fake-vault",
+							SecretName:    "fake-secret",
+							SecretVersion: "fake-version",
+						},
+					},
+				},
+			}
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			_, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
+			Expect(err.Error()).Should(Equal("fail to decode the cert 'targetSecret': unknown content type 'fake-content-type'"))
 		})
 
 		It("Should throw unknown content type error", func() {
@@ -399,7 +396,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV, mockCongiurationClientManager)
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := "fake-content-type"
@@ -798,14 +795,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			settingsToReturn := make([]azappconfig.Setting, 6)
-			settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
-			settingsToReturn[1] = newCommonKeyValueSettings("app:", "value2", "label1")
-			settingsToReturn[2] = newCommonKeyValueSettings("test:", "value3", "label1")
-			settingsToReturn[3] = newCommonKeyValueSettings("app:someSubKey1:1", "value4", "label1")
-			settingsToReturn[4] = newCommonKeyValueSettings("app:test:some", "value5", "label1")
-			settingsToReturn[5] = newCommonKeyValueSettings("app:test:", "value6", "label1")
-			mockCongiurationClientManager.EXPECT().ExecuteFailoverPolicy(gomock.Any(), gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			mockCongiurationClientManager.EXPECT().GetClients().Return([]*ConfigurationClientWrapper{&fakeClientWrapper})
+			mockCongiurationClientManager.EXPECT().UpdateClientBackoffStatus(gomock.Any(), gomock.Any())
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettings, mockCongiurationClientManager)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -843,14 +834,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			settingsToReturn := make([]azappconfig.Setting, 6)
-			settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
-			settingsToReturn[1] = newCommonKeyValueSettings("app:", "value2", "label1")
-			settingsToReturn[2] = newCommonKeyValueSettings("test:", "value3", "label1")
-			settingsToReturn[3] = newCommonKeyValueSettings("app:someSubKey1:1", "value4", "label1")
-			settingsToReturn[4] = newCommonKeyValueSettings("app:test:some", "value5", "label1")
-			settingsToReturn[5] = newCommonKeyValueSettings("app:test:", "value6", "label1")
-			mockCongiurationClientManager.EXPECT().ExecuteFailoverPolicy(gomock.Any(), gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			mockCongiurationClientManager.EXPECT().GetClients().Return([]*ConfigurationClientWrapper{&fakeClientWrapper})
+			mockCongiurationClientManager.EXPECT().UpdateClientBackoffStatus(gomock.Any(), gomock.Any())
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettings, mockCongiurationClientManager)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -886,14 +871,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			settingsToReturn := make([]azappconfig.Setting, 6)
-			settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
-			settingsToReturn[1] = newCommonKeyValueSettings("app:", "value2", "label1")
-			settingsToReturn[2] = newCommonKeyValueSettings("test:", "value3", "label1")
-			settingsToReturn[3] = newCommonKeyValueSettings("app:someSubKey1:1", "value4", "label1")
-			settingsToReturn[4] = newCommonKeyValueSettings("app:test:some", "value5", "label1")
-			settingsToReturn[5] = newCommonKeyValueSettings("app:test:", "value6", "label1")
-			mockCongiurationClientManager.EXPECT().ExecuteFailoverPolicy(gomock.Any(), gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			mockCongiurationClientManager.EXPECT().GetClients().Return([]*ConfigurationClientWrapper{&fakeClientWrapper})
+			mockCongiurationClientManager.EXPECT().UpdateClientBackoffStatus(gomock.Any(), gomock.Any())
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettings, mockCongiurationClientManager)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -927,7 +906,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			err := errors.New("fake error")
-			mockCongiurationClientManager.EXPECT().ExecuteFailoverPolicy(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, err)
+			mockCongiurationClientManager.EXPECT().GetClients().Return([]*ConfigurationClientWrapper{&fakeClientWrapper})
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsThrowError, mockCongiurationClientManager)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 

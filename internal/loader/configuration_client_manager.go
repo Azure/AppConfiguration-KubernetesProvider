@@ -120,7 +120,7 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 
 	manager.ValidDomain = getValidDomain(manager.Endpoint)
 	manager.StaticClientWrappers = []*ConfigurationClientWrapper{{
-		Endpoint:       *provider.Spec.Endpoint,
+		Endpoint:       manager.Endpoint,
 		Client:         staticClient,
 		BackOffEndTime: metav1.Time{},
 		FailedAttempts: 0,

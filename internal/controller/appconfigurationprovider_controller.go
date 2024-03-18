@@ -181,6 +181,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 			ConfigMapResourceVersion: nil,
 			SentinelETags:            make(map[acpv1.Sentinel]*azcore.ETag),
 			ExistingSecretReferences: make(map[string]*loader.TargetSecretReference),
+			ClientManager:            nil,
 		}
 	}
 
@@ -199,7 +200,6 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		}
 	}
 
-	clientManager := reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager
 	if reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager == nil ||
 		reconciler.ProvidersReconcileState[req.NamespacedName].Generation != provider.Generation {
 		clientManager, err := loader.NewConfigurationClientManager(ctx, *provider)
@@ -211,6 +211,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	}
 
 	/* Create ConfigurationSettingLoader to get the key-value settings from Azure AppConfiguration. */
+	clientManager := reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager
 	configLoader, err := loader.NewConfigurationSettingLoader(ctx, *provider, nil, clientManager)
 	if err != nil {
 		reconciler.logAndSetFailStatus(ctx, err, provider)

@@ -115,7 +115,7 @@ func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppC
 	if provider.Spec.ConnectionStringReference != nil {
 		connectionString, err := getConnectionStringParameter(ctx, types.NamespacedName{Namespace: provider.Namespace, Name: *provider.Spec.ConnectionStringReference})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("fail to retrieve connection string from secret '%s': %s", *provider.Spec.ConnectionStringReference, err.Error())
 		}
 		appConfigClient, err = azappconfig.NewClientFromConnectionString(connectionString, clientOptionWithModuleInfo)
 		if err != nil {
@@ -648,6 +648,10 @@ func getConnectionStringParameter(
 	secret, err := GetSecret(ctx, namespacedSecretName)
 	if err != nil {
 		return "", err
+	}
+
+	if _, ok := secret.Data[AzureAppConfigurationConnectionString]; !ok {
+		return "", fmt.Errorf("key '%s' does not exist", AzureAppConfigurationConnectionString)
 	}
 
 	return string(secret.Data[AzureAppConfigurationConnectionString]), nil

@@ -416,11 +416,11 @@ func (csl *ConfigurationSettingLoader) getSentinelSetting(ctx context.Context, p
 		sentinelSetting, err := clientWrapper.Client.GetSetting(ctx, sentinel.Key, &azappconfig.GetSettingOptions{Label: &sentinel.Label, OnlyIfChanged: etag})
 		if err == nil {
 			successful = true
-			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper.Endpoint, successful)
+			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
 			return &sentinelSetting.Setting, nil
 		}
 		if IsFailoverable(err) {
-			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper.Endpoint, successful)
+			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
 			continue
 		} else {
 			var respErr *azcore.ResponseError
@@ -504,7 +504,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 			}
 		}
 	update:
-		csl.ClientManager.UpdateClientBackoffStatus(clientWrapper.Endpoint, successful)
+		csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
 		if successful {
 			return settingsToReturn, nil
 		}

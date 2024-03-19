@@ -188,7 +188,7 @@ func (mr *MockClientManagerMockRecorder) RefreshClients() *gomock.Call {
 }
 
 // UpdateClientBackoffStatus mocks base method.
-func (m *MockClientManager) UpdateClientBackoffStatus(arg0 string, arg1 bool) {
+func (m *MockClientManager) UpdateClientBackoffStatus(arg0 *ConfigurationClientWrapper, arg1 bool) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UpdateClientBackoffStatus", arg0, arg1)
 }

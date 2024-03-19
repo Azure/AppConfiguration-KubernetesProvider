@@ -35,7 +35,6 @@ type ConfigurationClientManager struct {
 	DynamicClientwrappers     []*ConfigurationClientWrapper
 	ValidDomain               string
 	Endpoint                  string
-	ClientsFallbackStatus     map[string]*ConfigurationClientWrapper
 	Credential                azcore.TokenCredential
 	secret                    string
 	id                        string
@@ -53,7 +52,7 @@ type ConfigurationClientWrapper struct {
 type ClientManager interface {
 	GetClients() []*ConfigurationClientWrapper
 	RefreshClients()
-	UpdateClientBackoffStatus(endpoint string, successful bool)
+	UpdateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool)
 }
 
 const (
@@ -86,7 +85,6 @@ var (
 func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (ClientManager, error) {
 	manager := &ConfigurationClientManager{
 		ReplicaDiscoveryEnabled: provider.Spec.ReplicaDiscovery,
-		ClientsFallbackStatus:   make(map[string]*ConfigurationClientWrapper),
 	}
 
 	var err error
@@ -136,6 +134,12 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 
 	clients := make([]*ConfigurationClientWrapper, 0)
 	currentTime := metav1.Now()
+	for _, clientWrapper := range manager.StaticClientWrappers {
+		if currentTime.After(clientWrapper.BackOffEndTime.Time) {
+			clients = append(clients, clientWrapper)
+		}
+	}
+
 	if currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) &&
 		(manager.DynamicClientwrappers == nil ||
 			currentTime.After(manager.lastFallbackClientRefresh.Time.Add(FallbackClientRefreshExpireInterval))) {
@@ -145,9 +149,7 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 	}
 
 	if len(manager.DynamicClientwrappers) > 0 {
-		currentTime := metav1.Now()
 		for _, clientWrapper := range manager.DynamicClientwrappers {
-			manager.ClientsFallbackStatus[clientWrapper.Endpoint] = clientWrapper
 			if currentTime.After(clientWrapper.BackOffEndTime.Time) {
 				clients = append(clients, clientWrapper)
 			}
@@ -201,16 +203,16 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 	return nil
 }
 
-func (manager *ConfigurationClientManager) UpdateClientBackoffStatus(endpoint string, successful bool) {
+func (manager *ConfigurationClientManager) UpdateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {
 	if manager.ReplicaDiscoveryEnabled != true {
 		return
 	}
 	if successful {
-		manager.ClientsFallbackStatus[endpoint].BackOffEndTime = metav1.Time{}
-		manager.ClientsFallbackStatus[endpoint].FailedAttempts = 0
+		clientWrapper.BackOffEndTime = metav1.Time{}
+		clientWrapper.FailedAttempts = 0
 	} else {
-		manager.ClientsFallbackStatus[endpoint].FailedAttempts++
-		manager.ClientsFallbackStatus[endpoint].BackOffEndTime = metav1.Time{Time: metav1.Now().Add(calculateBackoffDuration(manager.ClientsFallbackStatus[endpoint].FailedAttempts))}
+		clientWrapper.FailedAttempts++
+		clientWrapper.BackOffEndTime = metav1.Time{Time: metav1.Now().Add(calculateBackoffDuration(clientWrapper.FailedAttempts))}
 	}
 }
 

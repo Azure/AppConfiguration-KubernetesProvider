@@ -945,6 +945,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			err := errors.New("fake error")
 			mockSettingsGetter.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(nil, err)
 			mockCongiurationClientManager.EXPECT().GetClients().Return([]*ConfigurationClientWrapper{&fakeClientWrapper})
+			mockCongiurationClientManager.EXPECT().UpdateClientBackoffStatus(gomock.Any(), gomock.Any())
 			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockCongiurationClientManager, mockSettingsGetter)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 

@@ -128,16 +128,16 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 }
 
 func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWrapper {
-	if !manager.ReplicaDiscoveryEnabled {
-		return manager.StaticClientWrappers
-	}
-
-	clients := make([]*ConfigurationClientWrapper, 0)
 	currentTime := metav1.Now()
+	clients := make([]*ConfigurationClientWrapper, 0)
 	for _, clientWrapper := range manager.StaticClientWrappers {
 		if currentTime.After(clientWrapper.BackOffEndTime.Time) {
 			clients = append(clients, clientWrapper)
 		}
+	}
+
+	if !manager.ReplicaDiscoveryEnabled {
+		return clients
 	}
 
 	if currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) &&
@@ -148,11 +148,9 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 		_ = manager.DiscoverFallbackClients(url.Host)
 	}
 
-	if len(manager.DynamicClientwrappers) > 0 {
-		for _, clientWrapper := range manager.DynamicClientwrappers {
-			if currentTime.After(clientWrapper.BackOffEndTime.Time) {
-				clients = append(clients, clientWrapper)
-			}
+	for _, clientWrapper := range manager.DynamicClientwrappers {
+		if currentTime.After(clientWrapper.BackOffEndTime.Time) {
+			clients = append(clients, clientWrapper)
 		}
 	}
 
@@ -204,9 +202,6 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 }
 
 func (manager *ConfigurationClientManager) UpdateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {
-	if manager.ReplicaDiscoveryEnabled != true {
-		return
-	}
 	if successful {
 		clientWrapper.BackOffEndTime = metav1.Time{}
 		clientWrapper.FailedAttempts = 0
@@ -222,15 +217,10 @@ func QuerySrvTargetHost(host string) ([]string, error) {
 	_, originRecords, err := net.LookupSRV(Origin, TCP, host)
 	if err != nil {
 		// If the host does not have SRV records => no replicas
-		if _, ok := err.(*net.DNSError); ok {
-			results = append(results, host)
-			return results, nil
-		}
-		return nil, err
+		return results, err
 	}
 
 	originHost := strings.TrimSuffix(originRecords[0].Target, ".")
-	results = append(results, originHost)
 	index := 0
 	for {
 		currentAlt := Alt + strconv.Itoa(index)

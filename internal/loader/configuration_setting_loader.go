@@ -510,9 +510,9 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 		successful := true
 		settingsToReturn, err := settingsGetter.GetSettings(ctx, clientWrapper.Client)
 		if err != nil {
-			if csl.AzureAppConfigurationProvider.Spec.ReplicaDiscovery && IsFailoverable(err) {
-				successful = false
-				csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
+			successful = false
+			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
+			if IsFailoverable(err) {
 				continue
 			}
 			return nil, err

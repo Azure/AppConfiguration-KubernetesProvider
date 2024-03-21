@@ -34,8 +34,8 @@ import (
 
 type ConfigurationSettingLoader struct {
 	acpv1.AzureAppConfigurationProvider
-	GetSettingsFunc GetSettingsFunc
-	ClientManager   ClientManager
+	ClientManager  ClientManager
+	SettingsGetter GetSettings
 }
 
 type TargetKeyValueSettings struct {
@@ -67,12 +67,23 @@ type ConfigurationSettingsRetriever interface {
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (map[string]corev1.Secret, error)
 }
 
-type GetSettingsFunc func(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error)
-
 type ServicePrincipleAuthenticationParameters struct {
 	ClientId     string
 	ClientSecret string
 	TenantId     string
+}
+type settingsGetter struct {
+	selectors []acpv1.Selector
+}
+
+type sentinelGetter struct {
+	sentinel        acpv1.Sentinel
+	etag            *azcore.ETag
+	refreshInterval string
+}
+
+type GetSettings interface {
+	GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, error)
 }
 
 const (
@@ -92,15 +103,11 @@ const (
 	TlsCrt                                string = "tls.crt"
 )
 
-func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, getSettingsFunc GetSettingsFunc, clientManager ClientManager) (*ConfigurationSettingLoader, error) {
-	if getSettingsFunc == nil {
-		getSettingsFunc = getConfigurationSettings
-	}
-
+func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsGetter GetSettings) (*ConfigurationSettingLoader, error) {
 	return &ConfigurationSettingLoader{
 		AzureAppConfigurationProvider: provider,
-		GetSettingsFunc:               getSettingsFunc,
 		ClientManager:                 clientManager,
+		SettingsGetter:                settingsGetter,
 	}, nil
 }
 
@@ -178,7 +185,13 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 
 func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver) (*RawSettings, error) {
 	keyValueFilters := getKeyValueFilters(csl.Spec)
-	settings, err := csl.ExecuteFailoverPolicy(ctx, keyValueFilters, csl.GetSettingsFunc)
+	settingGetter := csl.SettingsGetter
+	if settingGetter == nil {
+		settingGetter = &settingsGetter{
+			selectors: keyValueFilters,
+		}
+	}
+	settings, err := csl.ExecuteFailoverPolicy(ctx, settingGetter)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +285,13 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, error) {
 	featureFlagFilters := getFeatureFlagFilters(csl.Spec)
-	featureFlagSettings, err := csl.ExecuteFailoverPolicy(ctx, featureFlagFilters, csl.GetSettingsFunc)
+	settingGetter := csl.SettingsGetter
+	if settingGetter == nil {
+		settingGetter = &settingsGetter{
+			selectors: featureFlagFilters,
+		}
+	}
+	featureFlagSettings, err := csl.ExecuteFailoverPolicy(ctx, settingGetter)
 	if err != nil {
 		return nil, err
 	}
@@ -308,14 +327,22 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 			// Initialize the updatedETags with the current eTags
 			refreshedETags[sentinel] = eTag
 		}
-		refreshedSentinel, err := csl.getSentinelSetting(ctx, provider, sentinel, refreshedETags[sentinel])
+		sentinelGettter := csl.SettingsGetter
+		if sentinelGettter == nil {
+			sentinelGettter = &sentinelGetter{
+				sentinel:        sentinel,
+				etag:            eTags[sentinel],
+				refreshInterval: provider.Spec.Configuration.Refresh.Interval,
+			}
+		}
+		refreshedSentinel, err := csl.ExecuteFailoverPolicy(ctx, sentinelGettter)
 		if err != nil {
 			return false, eTags, err
 		}
 
-		if refreshedSentinel.ETag != nil {
+		if refreshedSentinel != nil && refreshedSentinel[0].ETag != nil {
 			sentinelChanged = true
-			refreshedETags[sentinel] = refreshedSentinel.ETag
+			refreshedETags[sentinel] = refreshedSentinel[0].ETag
 		}
 	}
 
@@ -401,52 +428,6 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 	return resolvedSecretReferences, nil
 }
 
-func (csl *ConfigurationSettingLoader) getSentinelSetting(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, sentinel acpv1.Sentinel, etag *azcore.ETag) (*azappconfig.Setting, error) {
-	if provider.Spec.Configuration.Refresh == nil {
-		return nil, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
-	}
-
-	clients := csl.ClientManager.GetClients()
-	if len(clients) == 0 {
-		csl.ClientManager.RefreshClients()
-		return nil, fmt.Errorf("no client is available to get sentinel setting")
-	}
-	for _, clientWrapper := range clients {
-		successful := false
-		sentinelSetting, err := clientWrapper.Client.GetSetting(ctx, sentinel.Key, &azappconfig.GetSettingOptions{Label: &sentinel.Label, OnlyIfChanged: etag})
-		if err == nil {
-			successful = true
-			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
-			return &sentinelSetting.Setting, nil
-		}
-		if IsFailoverable(err) {
-			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
-			continue
-		} else {
-			var respErr *azcore.ResponseError
-			if errors.As(err, &respErr) {
-				var label string
-				if sentinel.Label == "\x00" { // NUL is escaped to \x00 in golang
-					label = "no"
-				} else {
-					label = fmt.Sprintf("'%s'", sentinel.Label)
-				}
-				switch respErr.StatusCode {
-				case 404:
-					klog.Warningf("Sentinel key '%s' with %s label does not exists, revisit the sentinel after %s", sentinel.Key, label, provider.Spec.Configuration.Refresh.Interval)
-					return &azappconfig.Setting{}, nil
-				case 304:
-					klog.V(3).Infof("There's no change to the sentinel key '%s' with %s label , just exit and revisit the sentinel after %s", sentinel.Key, label, provider.Spec.Configuration.Refresh.Interval)
-					return &sentinelSetting.Setting, nil
-				}
-			}
-			return nil, err
-		}
-	}
-
-	return nil, nil
-}
-
 func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context.Context) (SecretReferenceResolver, error) {
 	var defaultAuth *acpv1.AzureAppConfigurationProviderAuth = nil
 	if csl.Spec.Secret != nil && csl.Spec.Secret.Auth != nil {
@@ -468,7 +449,57 @@ func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context
 	return resolver, nil
 }
 
-func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, filters []acpv1.Selector, getSettingsFunc GetSettingsFunc) ([]azappconfig.Setting, error) {
+func (s *sentinelGetter) GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, error) {
+	sentinelSetting, err := client.GetSetting(ctx, s.sentinel.Key, &azappconfig.GetSettingOptions{Label: &s.sentinel.Label, OnlyIfChanged: s.etag})
+	if err != nil {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			var label string
+			if s.sentinel.Label == "\x00" { // NUL is escaped to \x00 in golang
+				label = "no"
+			} else {
+				label = fmt.Sprintf("'%s'", s.sentinel.Label)
+			}
+			switch respErr.StatusCode {
+			case 404:
+				klog.Warningf("Sentinel key '%s' with %s label does not exists, revisit the sentinel after %s", s.sentinel.Key, label, s.refreshInterval)
+				return nil, nil
+			case 304:
+				klog.V(3).Infof("There's no change to the sentinel key '%s' with %s label , just exit and revisit the sentinel after %s", s.sentinel.Key, label, s.refreshInterval)
+				return []azappconfig.Setting{sentinelSetting.Setting}, nil
+			}
+		}
+
+		return nil, err
+	}
+
+	return []azappconfig.Setting{sentinelSetting.Setting}, nil
+}
+
+func (s *settingsGetter) GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, error) {
+	settingsToReturn := make([]azappconfig.Setting, 0)
+	settingsChan := make(chan []azappconfig.Setting)
+	errChan := make(chan error)
+	go getConfigurationSettings(ctx, s.selectors, client, settingsChan, errChan)
+
+	var configSettings []azappconfig.Setting
+	for {
+		select {
+		case configSettings = <-settingsChan:
+			if len(configSettings) == 0 {
+				return settingsToReturn, nil
+			} else {
+				settingsToReturn = append(settingsToReturn, configSettings...)
+			}
+		case err := <-errChan:
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+}
+
+func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, settingsGetter GetSettings) ([]azappconfig.Setting, error) {
 	clients := csl.ClientManager.GetClients()
 	if len(clients) == 0 {
 		csl.ClientManager.RefreshClients()
@@ -476,38 +507,19 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	}
 
 	for _, clientWrapper := range clients {
-		settingsChan := make(chan []azappconfig.Setting)
-		errChan := make(chan error)
-		successful := false
-
-		go getSettingsFunc(ctx, filters, clientWrapper.Client, settingsChan, errChan)
-
-		var configSettings []azappconfig.Setting
-		settingsToReturn := make([]azappconfig.Setting, 0)
-		for {
-			select {
-			case configSettings = <-settingsChan:
-				if len(configSettings) == 0 {
-					successful = true
-					goto update
-				} else {
-					settingsToReturn = append(settingsToReturn, configSettings...)
-				}
-			case err := <-errChan:
-				if err != nil {
-					if csl.AzureAppConfigurationProvider.Spec.ReplicaDiscovery &&
-						IsFailoverable(err) {
-						goto update
-					}
-					return nil, err
-				}
+		successful := true
+		settingsToReturn, err := settingsGetter.GetSettings(ctx, clientWrapper.Client)
+		if err != nil {
+			if csl.AzureAppConfigurationProvider.Spec.ReplicaDiscovery && IsFailoverable(err) {
+				successful = false
+				csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
+				continue
 			}
+			return nil, err
 		}
-	update:
+
 		csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
-		if successful {
-			return settingsToReturn, nil
-		}
+		return settingsToReturn, nil
 	}
 
 	// Failed to execute failover policy
@@ -527,11 +539,7 @@ func trimPrefix(key string, prefixToTrim []string) string {
 	return key
 }
 
-func getConfigurationSettings(
-	ctx context.Context,
-	filters []acpv1.Selector,
-	client *azappconfig.Client,
-	c chan []azappconfig.Setting, e chan error) {
+func getConfigurationSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
 	nullString := "\x00"
 
 	for _, filter := range filters {

@@ -59,23 +59,50 @@ func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappc
 
 func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, error) {
 	settingsToReturn := make([]azappconfig.Setting, 0)
-	settingsChan := make(chan []azappconfig.Setting)
-	errChan := make(chan error)
-	go getConfigurationSettings(ctx, s.selectors, client, settingsChan, errChan)
+	nullString := "\x00"
 
-	var configSettings []azappconfig.Setting
-	for {
-		select {
-		case configSettings = <-settingsChan:
-			if len(configSettings) == 0 {
-				return settingsToReturn, nil
-			} else {
-				settingsToReturn = append(settingsToReturn, configSettings...)
+	for _, filter := range s.selectors {
+		if filter.KeyFilter != nil {
+			if filter.LabelFilter == nil {
+				filter.LabelFilter = &nullString // NUL is escaped to \x00 in golang
 			}
-		case err := <-errChan:
+			selector := azappconfig.SettingSelector{
+				KeyFilter:   filter.KeyFilter,
+				LabelFilter: filter.LabelFilter,
+				Fields:      azappconfig.AllSettingFields(),
+			}
+			pager := client.NewListSettingsPager(selector, nil)
+
+			for pager.More() {
+				page, err := pager.NextPage(ctx)
+				if err != nil {
+					return nil, err
+				} else if len(page.Settings) > 0 {
+					settingsToReturn = append(settingsToReturn, page.Settings...)
+				}
+			}
+		} else {
+			snapshot, err := client.GetSnapshot(ctx, *filter.SnapshotName, nil)
 			if err != nil {
 				return nil, err
 			}
+
+			if *snapshot.CompositionType != azappconfig.CompositionTypeKey {
+				return nil, fmt.Errorf("compositionType for the selected snapshot '%s' must be 'key', found '%s'", *filter.SnapshotName, *snapshot.CompositionType)
+			}
+
+			pager := client.NewListSettingsForSnapshotPager(*filter.SnapshotName, nil)
+
+			for pager.More() {
+				page, err := pager.NextPage(ctx)
+				if err != nil {
+					return nil, err
+				} else if len(page.Settings) > 0 {
+					settingsToReturn = append(settingsToReturn, page.Settings...)
+				}
+			}
 		}
 	}
+
+	return settingsToReturn, nil
 }

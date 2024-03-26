@@ -31,16 +31,16 @@ import (
 //go:generate mockgen -destination=mocks/mock_configuration_client_manager.go -package mocks . ClientManager
 
 type ConfigurationClientManager struct {
-	ReplicaDiscoveryEnabled   bool
-	StaticClientWrappers      []*ConfigurationClientWrapper
-	DynamicClientWrappers     []*ConfigurationClientWrapper
-	validDomain               string
-	endpoint                  string
-	credential                azcore.TokenCredential
-	secret                    string
-	id                        string
-	lastFallbackClientAttempt metav1.Time
-	lastFallbackClientRefresh metav1.Time
+	ReplicaDiscoveryEnabledEnabled bool
+	StaticClientWrappers           []*ConfigurationClientWrapper
+	DynamicClientWrappers          []*ConfigurationClientWrapper
+	validDomain                    string
+	endpoint                       string
+	credential                     azcore.TokenCredential
+	secret                         string
+	id                             string
+	lastFallbackClientAttempt      metav1.Time
+	lastFallbackClientRefresh      metav1.Time
 }
 
 type ConfigurationClientWrapper struct {
@@ -51,8 +51,8 @@ type ConfigurationClientWrapper struct {
 }
 
 type ClientManager interface {
-	GetClients() []*ConfigurationClientWrapper
-	RefreshClients()
+	GetClients() ([]*ConfigurationClientWrapper, error)
+	RefreshClients() error
 	UpdateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool)
 }
 
@@ -63,8 +63,8 @@ const (
 	EndpointSection                     string        = "Endpoint"
 	SecretSection                       string        = "Secret"
 	IdSection                           string        = "Id"
-	AzConfigDomainLabel                 string        = ".azconfig"
-	AppConfigDomainLabel                string        = ".appconfig"
+	AzConfigDomainLabel                 string        = ".azconfig."
+	AppConfigDomainLabel                string        = ".appconfig."
 	FallbackClientRefreshExpireInterval time.Duration = time.Hour
 	MinimalClientRefreshInterval        time.Duration = time.Second * 30
 	MaxBackoffDuration                  time.Duration = time.Minute * 10
@@ -85,7 +85,7 @@ var (
 
 func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (ClientManager, error) {
 	manager := &ConfigurationClientManager{
-		ReplicaDiscoveryEnabled: provider.Spec.ReplicaDiscovery,
+		ReplicaDiscoveryEnabledEnabled: provider.Spec.ReplicaDiscoveryEnabled,
 	}
 
 	var err error
@@ -128,7 +128,7 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 	return manager, nil
 }
 
-func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWrapper {
+func (manager *ConfigurationClientManager) GetClients() ([]*ConfigurationClientWrapper, error) {
 	currentTime := metav1.Now()
 	clients := make([]*ConfigurationClientWrapper, 0)
 	for _, clientWrapper := range manager.StaticClientWrappers {
@@ -137,8 +137,8 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 		}
 	}
 
-	if !manager.ReplicaDiscoveryEnabled {
-		return clients
+	if !manager.ReplicaDiscoveryEnabledEnabled {
+		return clients, nil
 	}
 
 	if currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) &&
@@ -146,7 +146,10 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 			currentTime.After(manager.lastFallbackClientRefresh.Time.Add(FallbackClientRefreshExpireInterval))) {
 		manager.lastFallbackClientAttempt = currentTime
 		url, _ := url.Parse(manager.endpoint)
-		_ = manager.DiscoverFallbackClients(url.Host)
+		err := manager.DiscoverFallbackClients(url.Host)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for _, clientWrapper := range manager.DynamicClientWrappers {
@@ -155,17 +158,22 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 		}
 	}
 
-	return clients
+	return clients, nil
 }
 
-func (manager *ConfigurationClientManager) RefreshClients() {
+func (manager *ConfigurationClientManager) RefreshClients() error {
 	currentTime := metav1.Now()
-	if manager.ReplicaDiscoveryEnabled &&
+	if manager.ReplicaDiscoveryEnabledEnabled &&
 		currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) {
 		manager.lastFallbackClientAttempt = currentTime
 		url, _ := url.Parse(manager.endpoint)
-		_ = manager.DiscoverFallbackClients(url.Host)
+		err := manager.DiscoverFallbackClients(url.Host)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) error {
@@ -184,9 +192,12 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 	for _, host := range srvTargetHosts {
 		if isValidEndpoint(host, manager.validDomain) {
 			targetEndpoint := "https://" + host
+			if targetEndpoint == manager.endpoint {
+				continue
+			}
 			client, err := manager.newConfigurationClient(targetEndpoint)
 			if err != nil {
-				return fmt.Errorf("build fallback clients failed")
+				return fmt.Errorf("build fallback clients failed, %s", err.Error())
 			}
 			newDynamicClients = append(newDynamicClients, &ConfigurationClientWrapper{
 				Endpoint:       targetEndpoint,
@@ -218,10 +229,15 @@ func QuerySrvTargetHost(host string) ([]string, error) {
 	_, originRecords, err := net.LookupSRV(Origin, TCP, host)
 	if err != nil {
 		// If the host does not have SRV records => no replicas
-		return results, err
+		if _, ok := err.(*net.DNSError); ok {
+			return results, nil
+		} else {
+			return results, err
+		}
 	}
 
 	originHost := strings.TrimSuffix(originRecords[0].Target, ".")
+	results = append(results, originHost)
 	index := 0
 	for {
 		currentAlt := Alt + strconv.Itoa(index)
@@ -231,7 +247,7 @@ func QuerySrvTargetHost(host string) ([]string, error) {
 			if _, ok := err.(*net.DNSError); ok {
 				break
 			} else {
-				return nil, err
+				return results, err
 			}
 		}
 
@@ -294,13 +310,13 @@ func buildConnectionString(endpoint string, secret string, id string) string {
 
 func parseConnectionString(connectionString string, token string) (string, error) {
 	if connectionString == "" {
-		return "", NewArgumentError("connectionString", fmt.Errorf("connectionString cannot be empty"))
+		return "", fmt.Errorf("connectionString is empty")
 	}
 
 	parseToken := token + "="
 	startIndex := strings.Index(connectionString, parseToken)
 	if startIndex < 0 {
-		return "", NewArgumentError("connectionString", fmt.Errorf("invalid connectionString %s", connectionString))
+		return "", fmt.Errorf("invalid connectionString %s", connectionString)
 	}
 
 	endIndex := strings.Index(connectionString[startIndex:], ";")
@@ -313,16 +329,16 @@ func parseConnectionString(connectionString string, token string) (string, error
 	endpoint := connectionString[startIndex+len(parseToken) : endIndex]
 	url, err := url.Parse(strings.ToLower(endpoint))
 	if err != nil {
-		return "", NewArgumentError("invalid endpoint from connectionString", err)
+		return "", fmt.Errorf("invalid endpoint %q from connectionString %s", endpoint, connectionString)
 	}
 	if url.Host == "" {
-		return "", NewArgumentError("invalid endpoint from connectionString", fmt.Errorf("%q is not a valid endpoint. Host must be specified", endpoint))
+		return "", fmt.Errorf("invalid endpoint %q from connectionString %s, host must be specified", endpoint, connectionString)
 	}
 	if url.Scheme != "https" {
-		return "", NewArgumentError("invalid endpoint from connectionString", fmt.Errorf("%q is not a valid endpoint. Only https scheme is allowed", endpoint))
+		return "", fmt.Errorf("invalid endpoint %q from connectionString %s, only https scheme is allowed", endpoint, connectionString)
 	}
 	if strings.Trim(url.Path, "/") != "" {
-		return "", NewArgumentError("invalid endpoint from connectionString", fmt.Errorf("%q is not a valid endpoint. Only host name is allowed", endpoint))
+		return "", fmt.Errorf("invalid endpoint %q from connectionString %s, only host name is allowed", endpoint, connectionString)
 	}
 
 	return endpoint, nil
@@ -418,10 +434,6 @@ func calculateBackoffDuration(failedAttempts int) time.Duration {
 }
 
 func Jitter(duration time.Duration) time.Duration {
-	if JitterRatio < 0 || JitterRatio > 1 {
-		panic("jitterRatio must be between 0 and 1")
-	}
-
 	// Calculate the amount of jitter to add to the duration
 	jitter := float64(duration) * JitterRatio
 

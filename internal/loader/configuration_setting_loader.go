@@ -436,7 +436,11 @@ func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context
 }
 
 func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, settingsClient SettingsClient) ([]azappconfig.Setting, error) {
-	clients := csl.ClientManager.GetClients()
+	clients, err := csl.ClientManager.GetClients()
+	if err != nil {
+		return nil, err
+	}
+
 	if len(clients) == 0 {
 		csl.ClientManager.RefreshClients()
 		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
@@ -460,7 +464,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 
 	// Failed to execute failover policy
 	csl.ClientManager.RefreshClients()
-	return nil, fmt.Errorf("failed to execute failover policy: all clients failed")
+	return nil, fmt.Errorf("all app configuration clients failed to get settings")
 }
 
 func trimPrefix(key string, prefixToTrim []string) string {
@@ -473,55 +477,6 @@ func trimPrefix(key string, prefixToTrim []string) string {
 	}
 
 	return key
-}
-
-func getConfigurationSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
-	nullString := "\x00"
-
-	for _, filter := range filters {
-		if filter.KeyFilter != nil {
-			if filter.LabelFilter == nil {
-				filter.LabelFilter = &nullString // NUL is escaped to \x00 in golang
-			}
-			selector := azappconfig.SettingSelector{
-				KeyFilter:   filter.KeyFilter,
-				LabelFilter: filter.LabelFilter,
-				Fields:      azappconfig.AllSettingFields(),
-			}
-			pager := client.NewListSettingsPager(selector, nil)
-
-			for pager.More() {
-				page, err := pager.NextPage(ctx)
-				if err != nil {
-					e <- err
-				} else if len(page.Settings) > 0 {
-					c <- page.Settings
-				}
-			}
-		} else {
-			snapshot, err := client.GetSnapshot(ctx, *filter.SnapshotName, nil)
-			if err != nil {
-				e <- err
-			}
-
-			if *snapshot.CompositionType != azappconfig.CompositionTypeKey {
-				e <- fmt.Errorf("compositionType for the selected snapshot '%s' must be 'key', found '%s'", *filter.SnapshotName, *snapshot.CompositionType)
-			}
-
-			pager := client.NewListSettingsForSnapshotPager(*filter.SnapshotName, nil)
-
-			for pager.More() {
-				page, err := pager.NextPage(ctx)
-				if err != nil {
-					e <- err
-				} else if len(page.Settings) > 0 {
-					c <- page.Settings
-				}
-			}
-		}
-	}
-
-	c <- make([]azappconfig.Setting, 0)
 }
 
 func getConfigMap(ctx context.Context, namespacedConfigMapName types.NamespacedName) (*corev1.ConfigMap, error) {

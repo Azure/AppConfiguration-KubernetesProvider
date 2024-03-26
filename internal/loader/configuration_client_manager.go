@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 )
 
 //go:generate mockgen -destination=mocks/mock_configuration_client_manager.go -package mocks . ClientManager
@@ -32,10 +33,10 @@ import (
 type ConfigurationClientManager struct {
 	ReplicaDiscoveryEnabled   bool
 	StaticClientWrappers      []*ConfigurationClientWrapper
-	DynamicClientwrappers     []*ConfigurationClientWrapper
-	ValidDomain               string
-	Endpoint                  string
-	Credential                azcore.TokenCredential
+	DynamicClientWrappers     []*ConfigurationClientWrapper
+	validDomain               string
+	endpoint                  string
+	credential                azcore.TokenCredential
 	secret                    string
 	id                        string
 	lastFallbackClientAttempt metav1.Time
@@ -62,8 +63,8 @@ const (
 	EndpointSection                     string        = "Endpoint"
 	SecretSection                       string        = "Secret"
 	IdSection                           string        = "Id"
-	AzConfigDomainLabel                 string        = "azconfig"
-	AppConfigDomainLabel                string        = "appconfig"
+	AzConfigDomainLabel                 string        = ".azconfig"
+	AppConfigDomainLabel                string        = ".appconfig"
 	FallbackClientRefreshExpireInterval time.Duration = time.Hour
 	MinimalClientRefreshInterval        time.Duration = time.Second * 30
 	MaxBackoffDuration                  time.Duration = time.Minute * 10
@@ -94,7 +95,7 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 		if err != nil {
 			return nil, err
 		}
-		if manager.Endpoint, err = parseConnectionString(connectionString, EndpointSection); err != nil {
+		if manager.endpoint, err = parseConnectionString(connectionString, EndpointSection); err != nil {
 			return nil, err
 		}
 		if manager.secret, err = parseConnectionString(connectionString, SecretSection); err != nil {
@@ -107,18 +108,18 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 			return nil, err
 		}
 	} else {
-		if manager.Credential, err = CreateTokenCredential(ctx, provider.Spec.Auth, provider.Namespace); err != nil {
+		if manager.credential, err = CreateTokenCredential(ctx, provider.Spec.Auth, provider.Namespace); err != nil {
 			return nil, err
 		}
-		if staticClient, err = azappconfig.NewClient(*provider.Spec.Endpoint, manager.Credential, clientOptionWithModuleInfo); err != nil {
+		if staticClient, err = azappconfig.NewClient(*provider.Spec.Endpoint, manager.credential, clientOptionWithModuleInfo); err != nil {
 			return nil, err
 		}
-		manager.Endpoint = *provider.Spec.Endpoint
+		manager.endpoint = *provider.Spec.Endpoint
 	}
 
-	manager.ValidDomain = getValidDomain(manager.Endpoint)
+	manager.validDomain = getValidDomain(manager.endpoint)
 	manager.StaticClientWrappers = []*ConfigurationClientWrapper{{
-		Endpoint:       manager.Endpoint,
+		Endpoint:       manager.endpoint,
 		Client:         staticClient,
 		BackOffEndTime: metav1.Time{},
 		FailedAttempts: 0,
@@ -141,14 +142,14 @@ func (manager *ConfigurationClientManager) GetClients() []*ConfigurationClientWr
 	}
 
 	if currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) &&
-		(manager.DynamicClientwrappers == nil ||
+		(manager.DynamicClientWrappers == nil ||
 			currentTime.After(manager.lastFallbackClientRefresh.Time.Add(FallbackClientRefreshExpireInterval))) {
 		manager.lastFallbackClientAttempt = currentTime
-		url, _ := url.Parse(manager.Endpoint)
+		url, _ := url.Parse(manager.endpoint)
 		_ = manager.DiscoverFallbackClients(url.Host)
 	}
 
-	for _, clientWrapper := range manager.DynamicClientwrappers {
+	for _, clientWrapper := range manager.DynamicClientWrappers {
 		if currentTime.After(clientWrapper.BackOffEndTime.Time) {
 			clients = append(clients, clientWrapper)
 		}
@@ -162,7 +163,7 @@ func (manager *ConfigurationClientManager) RefreshClients() {
 	if manager.ReplicaDiscoveryEnabled &&
 		currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) {
 		manager.lastFallbackClientAttempt = currentTime
-		url, _ := url.Parse(manager.Endpoint)
+		url, _ := url.Parse(manager.endpoint)
 		_ = manager.DiscoverFallbackClients(url.Host)
 	}
 }
@@ -170,7 +171,7 @@ func (manager *ConfigurationClientManager) RefreshClients() {
 func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) error {
 	srvTargetHosts, err := QuerySrvTargetHost(host)
 	if err != nil {
-		return err
+		klog.Warningf("Fail to build fall back clients %s", err.Error())
 	}
 
 	// Shuffle the list of SRV target hosts
@@ -181,11 +182,11 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 
 	newDynamicClients := make([]*ConfigurationClientWrapper, 0)
 	for _, host := range srvTargetHosts {
-		if isValidEndpoint(host, manager.ValidDomain) {
+		if isValidEndpoint(host, manager.validDomain) {
 			targetEndpoint := "https://" + host
 			client, err := manager.newConfigurationClient(targetEndpoint)
 			if err != nil {
-				return fmt.Errorf("build fallback client look up failed")
+				return fmt.Errorf("build fallback clients failed")
 			}
 			newDynamicClients = append(newDynamicClients, &ConfigurationClientWrapper{
 				Endpoint:       targetEndpoint,
@@ -196,7 +197,7 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 		}
 	}
 
-	manager.DynamicClientwrappers = newDynamicClients
+	manager.DynamicClientWrappers = newDynamicClients
 	manager.lastFallbackClientRefresh = metav1.Now()
 	return nil
 }
@@ -247,14 +248,15 @@ func QuerySrvTargetHost(host string) ([]string, error) {
 }
 
 func (manager *ConfigurationClientManager) newConfigurationClient(endpoint string) (*azappconfig.Client, error) {
-	if manager.Credential != nil {
-		return azappconfig.NewClient(endpoint, manager.Credential, clientOptionWithModuleInfo)
+	if manager.credential != nil {
+		return azappconfig.NewClient(endpoint, manager.credential, clientOptionWithModuleInfo)
 	}
 
 	connectionStr := buildConnectionString(endpoint, manager.secret, manager.id)
 	if connectionStr == "" {
 		return nil, fmt.Errorf("failed to build connection string for fallback client")
 	}
+
 	return azappconfig.NewClientFromConnectionString(connectionStr, clientOptionWithModuleInfo)
 }
 
@@ -308,7 +310,22 @@ func parseConnectionString(connectionString string, token string) (string, error
 		endIndex += startIndex
 	}
 
-	return connectionString[startIndex+len(parseToken) : endIndex], nil
+	endpoint := connectionString[startIndex+len(parseToken) : endIndex]
+	url, err := url.Parse(strings.ToLower(endpoint))
+	if err != nil {
+		return "", NewArgumentError("invalid endpoint from connectionString", err)
+	}
+	if url.Host == "" {
+		return "", NewArgumentError("invalid endpoint from connectionString", fmt.Errorf("%q is not a valid endpoint. Host must be specified", endpoint))
+	}
+	if url.Scheme != "https" {
+		return "", NewArgumentError("invalid endpoint from connectionString", fmt.Errorf("%q is not a valid endpoint. Only https scheme is allowed", endpoint))
+	}
+	if strings.Trim(url.Path, "/") != "" {
+		return "", NewArgumentError("invalid endpoint from connectionString", fmt.Errorf("%q is not a valid endpoint. Only host name is allowed", endpoint))
+	}
+
+	return endpoint, nil
 }
 
 func CreateTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigurationProviderAuth, namespace string) (azcore.TokenCredential, error) {

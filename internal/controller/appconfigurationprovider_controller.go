@@ -212,7 +212,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 
 	/* Create ConfigurationSettingLoader to get the key-value settings from Azure AppConfiguration. */
 	clientManager := reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager
-	configLoader, err := loader.NewConfigurationSettingLoader(ctx, *provider, clientManager, nil)
+	configLoader, err := loader.NewConfigurationSettingLoader(*provider, clientManager, nil)
 	if err != nil {
 		reconciler.logAndSetFailStatus(ctx, err, provider)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil

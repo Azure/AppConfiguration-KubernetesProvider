@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -35,7 +34,7 @@ import (
 type ConfigurationSettingLoader struct {
 	acpv1.AzureAppConfigurationProvider
 	ClientManager  ClientManager
-	SettingsGetter GetSettings
+	SettingsClient SettingsClient
 }
 
 type TargetKeyValueSettings struct {
@@ -72,19 +71,6 @@ type ServicePrincipleAuthenticationParameters struct {
 	ClientSecret string
 	TenantId     string
 }
-type settingsGetter struct {
-	selectors []acpv1.Selector
-}
-
-type sentinelGetter struct {
-	sentinel        acpv1.Sentinel
-	etag            *azcore.ETag
-	refreshInterval string
-}
-
-type GetSettings interface {
-	GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, error)
-}
 
 const (
 	SecretReferenceContentType            string = "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8"
@@ -103,11 +89,11 @@ const (
 	TlsCrt                                string = "tls.crt"
 )
 
-func NewConfigurationSettingLoader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsGetter GetSettings) (*ConfigurationSettingLoader, error) {
+func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
 	return &ConfigurationSettingLoader{
 		AzureAppConfigurationProvider: provider,
 		ClientManager:                 clientManager,
-		SettingsGetter:                settingsGetter,
+		SettingsClient:                settingsClient,
 	}, nil
 }
 
@@ -185,13 +171,13 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 
 func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver) (*RawSettings, error) {
 	keyValueFilters := getKeyValueFilters(csl.Spec)
-	settingGetter := csl.SettingsGetter
-	if settingGetter == nil {
-		settingGetter = &settingsGetter{
+	settingsClient := csl.SettingsClient
+	if settingsClient == nil {
+		settingsClient = &SelectorSettingsClient{
 			selectors: keyValueFilters,
 		}
 	}
-	settings, err := csl.ExecuteFailoverPolicy(ctx, settingGetter)
+	settings, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -285,13 +271,13 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, error) {
 	featureFlagFilters := getFeatureFlagFilters(csl.Spec)
-	settingGetter := csl.SettingsGetter
-	if settingGetter == nil {
-		settingGetter = &settingsGetter{
+	settingsClient := csl.SettingsClient
+	if settingsClient == nil {
+		settingsClient = &SelectorSettingsClient{
 			selectors: featureFlagFilters,
 		}
 	}
-	featureFlagSettings, err := csl.ExecuteFailoverPolicy(ctx, settingGetter)
+	featureFlagSettings, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -327,15 +313,15 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 			// Initialize the updatedETags with the current eTags
 			refreshedETags[sentinel] = eTag
 		}
-		sentinelGettter := csl.SettingsGetter
-		if sentinelGettter == nil {
-			sentinelGettter = &sentinelGetter{
+		settingsClient := csl.SettingsClient
+		if settingsClient == nil {
+			settingsClient = &SentinelSettingsClient{
 				sentinel:        sentinel,
 				etag:            eTags[sentinel],
 				refreshInterval: provider.Spec.Configuration.Refresh.Interval,
 			}
 		}
-		refreshedSentinel, err := csl.ExecuteFailoverPolicy(ctx, sentinelGettter)
+		refreshedSentinel, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 		if err != nil {
 			return false, eTags, err
 		}
@@ -449,66 +435,16 @@ func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context
 	return resolver, nil
 }
 
-func (s *sentinelGetter) GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, error) {
-	sentinelSetting, err := client.GetSetting(ctx, s.sentinel.Key, &azappconfig.GetSettingOptions{Label: &s.sentinel.Label, OnlyIfChanged: s.etag})
-	if err != nil {
-		var respErr *azcore.ResponseError
-		if errors.As(err, &respErr) {
-			var label string
-			if s.sentinel.Label == "\x00" { // NUL is escaped to \x00 in golang
-				label = "no"
-			} else {
-				label = fmt.Sprintf("'%s'", s.sentinel.Label)
-			}
-			switch respErr.StatusCode {
-			case 404:
-				klog.Warningf("Sentinel key '%s' with %s label does not exists, revisit the sentinel after %s", s.sentinel.Key, label, s.refreshInterval)
-				return nil, nil
-			case 304:
-				klog.V(3).Infof("There's no change to the sentinel key '%s' with %s label , just exit and revisit the sentinel after %s", s.sentinel.Key, label, s.refreshInterval)
-				return []azappconfig.Setting{sentinelSetting.Setting}, nil
-			}
-		}
-
-		return nil, err
-	}
-
-	return []azappconfig.Setting{sentinelSetting.Setting}, nil
-}
-
-func (s *settingsGetter) GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, error) {
-	settingsToReturn := make([]azappconfig.Setting, 0)
-	settingsChan := make(chan []azappconfig.Setting)
-	errChan := make(chan error)
-	go getConfigurationSettings(ctx, s.selectors, client, settingsChan, errChan)
-
-	var configSettings []azappconfig.Setting
-	for {
-		select {
-		case configSettings = <-settingsChan:
-			if len(configSettings) == 0 {
-				return settingsToReturn, nil
-			} else {
-				settingsToReturn = append(settingsToReturn, configSettings...)
-			}
-		case err := <-errChan:
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-}
-
-func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, settingsGetter GetSettings) ([]azappconfig.Setting, error) {
+func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, settingsClient SettingsClient) ([]azappconfig.Setting, error) {
 	clients := csl.ClientManager.GetClients()
 	if len(clients) == 0 {
 		csl.ClientManager.RefreshClients()
-		return nil, fmt.Errorf("no client is available to execute failover policy")
+		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
 	}
 
 	for _, clientWrapper := range clients {
 		successful := true
-		settingsToReturn, err := settingsGetter.GetSettings(ctx, clientWrapper.Client)
+		settingsToReturn, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
 		if err != nil {
 			successful = false
 			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)

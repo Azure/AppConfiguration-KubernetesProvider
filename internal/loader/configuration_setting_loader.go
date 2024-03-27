@@ -23,6 +23,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/syncmap"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -451,20 +452,30 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 		settingsToReturn, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
 		if err != nil {
 			successful = false
-			csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
+			updateClientBackoffStatus(clientWrapper, successful)
 			if IsFailoverable(err) {
 				continue
 			}
 			return nil, err
 		}
 
-		csl.ClientManager.UpdateClientBackoffStatus(clientWrapper, successful)
+		updateClientBackoffStatus(clientWrapper, successful)
 		return settingsToReturn, nil
 	}
 
 	// Failed to execute failover policy
 	csl.ClientManager.RefreshClients()
 	return nil, fmt.Errorf("all app configuration clients failed to get settings")
+}
+
+func updateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {
+	if successful {
+		clientWrapper.BackOffEndTime = metav1.Time{}
+		clientWrapper.FailedAttempts = 0
+	} else {
+		clientWrapper.FailedAttempts++
+		clientWrapper.BackOffEndTime = metav1.Time{Time: metav1.Now().Add(calculateBackoffDuration(clientWrapper.FailedAttempts))}
+	}
 }
 
 func trimPrefix(key string, prefixToTrim []string) string {

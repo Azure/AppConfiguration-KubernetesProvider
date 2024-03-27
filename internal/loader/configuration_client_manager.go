@@ -53,7 +53,6 @@ type ConfigurationClientWrapper struct {
 type ClientManager interface {
 	GetClients() ([]*ConfigurationClientWrapper, error)
 	RefreshClients() error
-	UpdateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool)
 }
 
 const (
@@ -213,23 +212,13 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 	return nil
 }
 
-func (manager *ConfigurationClientManager) UpdateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {
-	if successful {
-		clientWrapper.BackOffEndTime = metav1.Time{}
-		clientWrapper.FailedAttempts = 0
-	} else {
-		clientWrapper.FailedAttempts++
-		clientWrapper.BackOffEndTime = metav1.Time{Time: metav1.Now().Add(calculateBackoffDuration(clientWrapper.FailedAttempts))}
-	}
-}
-
 func QuerySrvTargetHost(host string) ([]string, error) {
 	results := make([]string, 0)
 
 	_, originRecords, err := net.LookupSRV(Origin, TCP, host)
 	if err != nil {
 		// If the host does not have SRV records => no replicas
-		if _, ok := err.(*net.DNSError); ok {
+		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
 			return results, nil
 		} else {
 			return results, err
@@ -244,7 +233,7 @@ func QuerySrvTargetHost(host string) ([]string, error) {
 		_, altRecords, err := net.LookupSRV(currentAlt, TCP, originHost)
 		if err != nil {
 			// If the host does not have SRV records => no more replicas
-			if _, ok := err.(*net.DNSError); ok {
+			if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
 				break
 			} else {
 				return results, err
@@ -326,22 +315,25 @@ func parseConnectionString(connectionString string, token string) (string, error
 		endIndex += startIndex
 	}
 
-	endpoint := connectionString[startIndex+len(parseToken) : endIndex]
+	return connectionString[startIndex+len(parseToken) : endIndex], nil
+}
+
+func verfityEndpointFromConnectionString(endpoint string) error {
 	url, err := url.Parse(strings.ToLower(endpoint))
 	if err != nil {
-		return "", fmt.Errorf("invalid endpoint %q from connectionString %s", endpoint, connectionString)
+		return fmt.Errorf("invalid endpoint %q from connectionString", endpoint)
 	}
 	if url.Host == "" {
-		return "", fmt.Errorf("invalid endpoint %q from connectionString %s, host must be specified", endpoint, connectionString)
+		return fmt.Errorf("invalid endpoint %q from connectionString, host must be specified", endpoint)
 	}
 	if url.Scheme != "https" {
-		return "", fmt.Errorf("invalid endpoint %q from connectionString %s, only https scheme is allowed", endpoint, connectionString)
+		return fmt.Errorf("invalid endpoint %q from connectionString, only https scheme is allowed", endpoint)
 	}
 	if strings.Trim(url.Path, "/") != "" {
-		return "", fmt.Errorf("invalid endpoint %q from connectionString %s, only host name is allowed", endpoint, connectionString)
+		return fmt.Errorf("invalid endpoint %q from connectionString, only host name is allowed", endpoint)
 	}
 
-	return endpoint, nil
+	return nil
 }
 
 func CreateTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigurationProviderAuth, namespace string) (azcore.TokenCredential, error) {

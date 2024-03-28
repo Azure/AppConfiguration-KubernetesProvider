@@ -97,6 +97,9 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 		if manager.endpoint, err = parseConnectionString(connectionString, EndpointSection); err != nil {
 			return nil, err
 		}
+		if err = verifyEndpointFromConnectionString(manager.endpoint); err != nil {
+			return nil, err
+		}
 		if manager.secret, err = parseConnectionString(connectionString, SecretSection); err != nil {
 			return nil, err
 		}
@@ -318,7 +321,7 @@ func parseConnectionString(connectionString string, token string) (string, error
 	return connectionString[startIndex+len(parseToken) : endIndex], nil
 }
 
-func verfityEndpointFromConnectionString(endpoint string) error {
+func verifyEndpointFromConnectionString(endpoint string) error {
 	url, err := url.Parse(strings.ToLower(endpoint))
 	if err != nil {
 		return fmt.Errorf("invalid endpoint %q from connectionString", endpoint)

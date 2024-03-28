@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"reflect"
 	"testing"
 	"time"
@@ -33,14 +34,21 @@ import (
 )
 
 var (
-	mockResolveSecretReference *MockResolveSecretReference
-	mockCtrl                   *gomock.Controller
-	EndpointName               string = "https://fake-endpoint"
+	mockResolveSecretReference    *MockResolveSecretReference
+	mockSettingsClient            *MockSettingsClient
+	mockCtrl                      *gomock.Controller
+	mockCongiurationClientManager *MockClientManager
+	endpointName                  string = "https://fake-endpoint"
+	fakeClientWrapper                    = ConfigurationClientWrapper{
+		Client:         nil,
+		Endpoint:       endpointName,
+		BackOffEndTime: metav1.Time{},
+		FailedAttempts: 0,
+	}
 )
 
-func mockGetConfigurationSettings(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
+func mockConfigurationSettings() []azappconfig.Setting {
 	settingsToReturn := make([]azappconfig.Setting, 6)
-	settingsToEnd := make([]azappconfig.Setting, 0)
 	settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
 	settingsToReturn[1] = newCommonKeyValueSettings("app:", "value2", "label1")
 	settingsToReturn[2] = newCommonKeyValueSettings("test:", "value3", "label1")
@@ -48,30 +56,16 @@ func mockGetConfigurationSettings(ctx context.Context, filters []acpv1.Selector,
 	settingsToReturn[4] = newCommonKeyValueSettings("app:test:some", "value5", "label1")
 	settingsToReturn[5] = newCommonKeyValueSettings("app:test:", "value6", "label1")
 
-	c <- settingsToReturn
-	c <- settingsToEnd
+	return settingsToReturn
 }
 
-func mockGetConfigurationSettingsWithKV(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
+func mockConfigurationSettingsWithKV() []azappconfig.Setting {
 	settingsToReturn := make([]azappconfig.Setting, 3)
-	settingsToEnd := make([]azappconfig.Setting, 0)
 	settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
 	settingsToReturn[1] = newCommonKeyValueSettings("app:someSubKey1:1", "value4", "label1")
 	settingsToReturn[2] = newKeyVaultSettings("app:secret:1", "label1")
 
-	c <- settingsToReturn
-	c <- settingsToEnd
-}
-
-func mockGetConfigurationSettingsThrowError(ctx context.Context, filters []acpv1.Selector, client *azappconfig.Client, c chan []azappconfig.Setting, e chan error) {
-	settingsToReturn := make([]azappconfig.Setting, 3)
-	err := errors.New("a fake error")
-	settingsToReturn[0] = newCommonKeyValueSettings("someKey1", "value1", "label1")
-	settingsToReturn[1] = newCommonKeyValueSettings("app:someSubKey1:1", "value4", "label1")
-	settingsToReturn[2] = newKeyVaultSettings("app:secret:1", "label1")
-
-	c <- settingsToReturn
-	e <- err
+	return settingsToReturn
 }
 
 func newCommonKeyValueSettings(key string, value string, label string) azappconfig.Setting {
@@ -131,6 +125,96 @@ func (mr *MockResolveSecretReferenceMockRecorder) Resolve(arg0, arg1 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockResolveSecretReference)(nil).Resolve), arg0, arg1)
 }
 
+// MockClientManager is a mock of ClientManager interface.
+type MockClientManager struct {
+	ctrl     *gomock.Controller
+	recorder *MockClientManagerMockRecorder
+}
+
+// MockClientManagerMockRecorder is the mock recorder for MockClientManager.
+type MockClientManagerMockRecorder struct {
+	mock *MockClientManager
+}
+
+// NewMockClientManager creates a new mock instance.
+func NewMockClientManager(ctrl *gomock.Controller) *MockClientManager {
+	mock := &MockClientManager{ctrl: ctrl}
+	mock.recorder = &MockClientManagerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockClientManager) EXPECT() *MockClientManagerMockRecorder {
+	return m.recorder
+}
+
+// GetClients mocks base method.
+func (m *MockClientManager) GetClients(arg0 context.Context) ([]*ConfigurationClientWrapper, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClients", arg0)
+	ret0, _ := ret[0].([]*ConfigurationClientWrapper)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClients indicates an expected call of GetClients.
+func (mr *MockClientManagerMockRecorder) GetClients(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClients", reflect.TypeOf((*MockClientManager)(nil).GetClients), arg0)
+}
+
+// RefreshClients mocks base method.
+func (m *MockClientManager) RefreshClients(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshClients", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshClients indicates an expected call of RefreshClients.
+func (mr *MockClientManagerMockRecorder) RefreshClients(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshClients", reflect.TypeOf((*MockClientManager)(nil).RefreshClients), arg0)
+}
+
+// MockSettingsClient is a mock of SettingsClient interface.
+type MockSettingsClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockSettingsClientMockRecorder
+}
+
+// MockSettingsClientMockRecorder is the mock recorder for MockSettingsClient.
+type MockSettingsClientMockRecorder struct {
+	mock *MockSettingsClient
+}
+
+// NewMockSettingsClient creates a new mock instance.
+func NewMockSettingsClient(ctrl *gomock.Controller) *MockSettingsClient {
+	mock := &MockSettingsClient{ctrl: ctrl}
+	mock.recorder = &MockSettingsClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSettingsClient) EXPECT() *MockSettingsClientMockRecorder {
+	return m.recorder
+}
+
+// GetSettings mocks base method.
+func (m *MockSettingsClient) GetSettings(arg0 context.Context, arg1 *azappconfig.Client) ([]azappconfig.Setting, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSettings", arg0, arg1)
+	ret0, _ := ret[0].([]azappconfig.Setting)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSettings indicates an expected call of GetSettings.
+func (mr *MockSettingsClientMockRecorder) GetSettings(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSettings", reflect.TypeOf((*MockSettingsClient)(nil).GetSettings), arg0, arg1)
+}
+
 const (
 	ProviderName      = "test-appconfigurationprovider"
 	ProviderNamespace = "default"
@@ -146,6 +230,8 @@ func TestLoaderAPIs(t *testing.T) {
 var _ = BeforeEach(func() {
 	mockCtrl = gomock.NewController(GinkgoT())
 	mockResolveSecretReference = NewMockResolveSecretReference(mockCtrl)
+	mockCongiurationClientManager = NewMockClientManager(mockCtrl)
+	mockSettingsClient = NewMockSettingsClient(mockCtrl)
 
 	go func() {
 		defer GinkgoRecover()
@@ -167,7 +253,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			By("By resolving the settings from Azure Key Vault")
 			managedIdentity := uuid.New().String()
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
-				Endpoint: &EndpointName,
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
@@ -197,7 +284,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue := "fakeSecretValue"
 			secret1 := azsecrets.GetSecretResponse{
 				SecretBundle: azsecrets.SecretBundle{
@@ -205,6 +293,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				},
 			}
 
+			settingsToReturn := mockConfigurationSettingsWithKV()
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
 			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -219,7 +309,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		It("Should throw exception", func() {
 			By("By resolving Key Vault reference to fail")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
-				Endpoint: &EndpointName,
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
@@ -239,12 +330,67 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
-
+			settingsToReturn := mockConfigurationSettingsWithKV()
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
 			Expect(allSettings).Should(BeNil())
-			Expect(err.Error()).Should(Equal("a Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider 'testName' in namespace 'testNamespace'"))
+			Expect(err.Error()).Should(Equal("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider 'testName' in namespace 'testNamespace'"))
+		})
+
+		It("Should throw unknown content type error", func() {
+			By("By getting unknown cert type from Azure Key Vault")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			secretValue := "fakeSecretValue"
+			secretName := "targetSecret"
+			contentType := "fake-content-type"
+			kidStr := "fakeKid"
+			secret1 := azsecrets.GetSecretResponse{
+				SecretBundle: azsecrets.SecretBundle{
+					Value:       &secretValue,
+					Kid:         &kidStr,
+					ContentType: &contentType,
+				},
+			}
+			secretReferencesToResolve := map[string]*TargetSecretReference{
+				secretName: {
+					Type: corev1.SecretTypeTLS,
+					UriSegments: map[string]KeyVaultSecretUriSegment{
+						secretName: {
+							HostName:      "fake-vault",
+							SecretName:    "fake-secret",
+							SecretVersion: "fake-version",
+						},
+					},
+				},
+			}
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			_, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
+			Expect(err.Error()).Should(Equal("fail to decode the cert 'targetSecret': unknown content type 'fake-content-type'"))
 		})
 
 		It("Should throw unknown content type error", func() {
@@ -270,7 +416,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := "fake-content-type"
@@ -305,7 +451,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		It("Should throw decode pem block error", func() {
 			By("By getting unexpected secret value of pem cert from Azure Key Vault")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
-				Endpoint: &EndpointName,
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
@@ -325,7 +472,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := CertTypePem
@@ -360,7 +507,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		It("Should throw decode pfx error", func() {
 			By("By getting unexpected secret value of pfx cert from Azure Key Vault")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
-				Endpoint: &EndpointName,
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
@@ -380,7 +528,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := CertTypePfx
@@ -415,7 +563,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		It("Succeeded to get tls type secret", func() {
 			By("By getting valid pfx cert from Azure Key Vault")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
-				Endpoint: &EndpointName,
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
@@ -435,7 +584,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue, _ := createFakePfx()
 			secretName := "targetSecret"
 			contentType := CertTypePfx
@@ -473,7 +622,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		It("Succeeded to get target tls type secret", func() {
 			By("By getting valid pem cert from Azure Key Vault")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
-				Endpoint: &EndpointName,
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
@@ -493,7 +643,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue, _ := createFakePem()
 			secretName := "targetSecret"
 			contentType := CertTypePem
@@ -531,7 +681,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		It("Succeeded to get tls type secret", func() {
 			By("By getting valid non cert based secret from Azure Key Vault")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
-				Endpoint: &EndpointName,
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
@@ -551,7 +702,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue, _ := createFakePfx()
 			secretName := "targetSecret"
 			ct := CertTypePfx
@@ -587,7 +738,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		It("Succeeded to get tls type secret", func() {
 			By("By getting valid non cert based pem secret from Azure Key Vault")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
-				Endpoint: &EndpointName,
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
@@ -607,7 +759,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			configurationProvider, _ := NewConfigurationSettingLoader(context.Background(), testProvider, mockGetConfigurationSettingsWithKV)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue, _ := createFakePem()
 			secretName := "targetSecret"
 			ct := CertTypePem
@@ -640,132 +792,212 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			Expect(string(secrets[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN RSA PRIVATE KEY"))
 		})
 	})
+
+	Context("Get settings when autofailover not enabled", func() {
+		It("Succeed to get all configuration settings", func() {
+			By("By not trimming any key prefixes")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			settingsToReturn := mockConfigurationSettings()
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(6))
+			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
+			Expect(allSettings.ConfigMapSettings["app:"]).Should(Equal("value2"))
+			Expect(allSettings.ConfigMapSettings["test:"]).Should(Equal("value3"))
+			Expect(allSettings.ConfigMapSettings["app:someSubKey1:1"]).Should(Equal("value4"))
+			Expect(allSettings.ConfigMapSettings["app:test:some"]).Should(Equal("value5"))
+			Expect(allSettings.ConfigMapSettings["app:test:"]).Should(Equal("value6"))
+		})
+
+		It("Succeed to get all configuration settings", func() {
+			By("By trimming single key prefix")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			settingsToReturn := mockConfigurationSettings()
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(4))
+			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
+			Expect(allSettings.ConfigMapSettings["someSubKey1:1"]).Should(Equal("value4"))
+			Expect(allSettings.ConfigMapSettings["test:some"]).Should(Equal("value5"))
+			Expect(allSettings.ConfigMapSettings["test:"]).Should(Equal("value6"))
+		})
+
+		It("Succeed to get all configuration settings", func() {
+			By("By trimming multiple key prefixes")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:", "test:"},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			settingsToReturn := mockConfigurationSettings()
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(4))
+			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
+			Expect(allSettings.ConfigMapSettings["someSubKey1:1"]).Should(Equal("value4"))
+			Expect(allSettings.ConfigMapSettings["test:some"]).Should(Equal("value5"))
+			Expect(allSettings.ConfigMapSettings["test:"]).Should(Equal("value6"))
+		})
+
+		It("Fail to get all configuration settings", func() {
+			By("By getting error from Azure App Configuration")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			err := errors.New("fake error")
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(nil, err)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(allSettings).Should(BeNil())
+			Expect(err).ShouldNot(BeNil())
+		})
+	})
+
+	Context("Get settings when autofailover enabled", func() {
+		It("Succeed to get settings when origin endpoint not available", func() {
+			By("By Discovering Fallback Clients")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: true,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			netErr := &net.OpError{Err: errors.New("fake network error")}
+			settingsToReturn := mockConfigurationSettings()
+			failedClient := ConfigurationClientWrapper{
+				Client:         nil,
+				Endpoint:       endpointName,
+				BackOffEndTime: metav1.Time{},
+				FailedAttempts: 0,
+			}
+
+			succeededClient := ConfigurationClientWrapper{
+				Client:         nil,
+				Endpoint:       endpointName,
+				BackOffEndTime: metav1.Time{},
+				FailedAttempts: 0,
+			}
+
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(nil, netErr).Times(1)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil).Times(1)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&failedClient, &succeededClient}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(failedClient.FailedAttempts).Should(Equal(1))
+			Expect(failedClient.BackOffEndTime.IsZero()).Should(BeFalse())
+			Expect(succeededClient.FailedAttempts).Should(Equal(0))
+			Expect(succeededClient.BackOffEndTime.IsZero()).Should(BeTrue())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(6))
+			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
+			Expect(allSettings.ConfigMapSettings["app:"]).Should(Equal("value2"))
+			Expect(allSettings.ConfigMapSettings["test:"]).Should(Equal("value3"))
+			Expect(allSettings.ConfigMapSettings["app:someSubKey1:1"]).Should(Equal("value4"))
+			Expect(allSettings.ConfigMapSettings["app:test:some"]).Should(Equal("value5"))
+			Expect(allSettings.ConfigMapSettings["app:test:"]).Should(Equal("value6"))
+		})
+	})
 })
-
-func TestGetAllConfigurationSettingsNoTrim(t *testing.T) {
-	testSpec := acpv1.AzureAppConfigurationProviderSpec{
-		Endpoint: &EndpointName,
-		Target: acpv1.ConfigurationGenerationParameters{
-			ConfigMapName: ConfigMapName,
-		},
-	}
-	testProvider := acpv1.AzureAppConfigurationProvider{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "azconfig.io/v1",
-			Kind:       "AzureAppConfigurationProvider",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testName",
-			Namespace: "testNamespace",
-		},
-		Spec: testSpec,
-	}
-
-	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettings)
-	allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), nil)
-
-	assert.Equal(t, 6, len(allSettings.ConfigMapSettings))
-	assert.Equal(t, "value1", allSettings.ConfigMapSettings["someKey1"])
-	assert.Equal(t, "value2", allSettings.ConfigMapSettings["app:"])
-	assert.Equal(t, "value3", allSettings.ConfigMapSettings["test:"])
-	assert.Equal(t, "value4", allSettings.ConfigMapSettings["app:someSubKey1:1"])
-	assert.Equal(t, "value5", allSettings.ConfigMapSettings["app:test:some"])
-	assert.Equal(t, "value6", allSettings.ConfigMapSettings["app:test:"])
-	assert.Nil(t, err)
-}
-
-func TestGetAllConfigurationSettingsTrimSinglePrefix(t *testing.T) {
-	testSpec := acpv1.AzureAppConfigurationProviderSpec{
-		Endpoint: &EndpointName,
-		Target: acpv1.ConfigurationGenerationParameters{
-			ConfigMapName: ConfigMapName,
-		},
-		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			TrimKeyPrefixes: []string{"app:"},
-		},
-	}
-	testProvider := acpv1.AzureAppConfigurationProvider{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "azconfig.io/v1",
-			Kind:       "AzureAppConfigurationProvider",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testName",
-			Namespace: "testNamespace",
-		},
-		Spec: testSpec,
-	}
-
-	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettings)
-	allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), nil)
-
-	assert.Equal(t, 4, len(allSettings.ConfigMapSettings))
-	assert.Equal(t, "value1", allSettings.ConfigMapSettings["someKey1"])
-	assert.Equal(t, "value4", allSettings.ConfigMapSettings["someSubKey1:1"])
-	assert.Equal(t, "value5", allSettings.ConfigMapSettings["test:some"])
-	assert.Equal(t, "value6", allSettings.ConfigMapSettings["test:"])
-	assert.Nil(t, err)
-}
-
-func TestGetAllConfigurationSettingsTrimMultiplePrefix(t *testing.T) {
-	testSpec := acpv1.AzureAppConfigurationProviderSpec{
-		Endpoint: &EndpointName,
-		Target: acpv1.ConfigurationGenerationParameters{
-			ConfigMapName: ConfigMapName,
-		},
-		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			TrimKeyPrefixes: []string{"app:", "test:"},
-		},
-	}
-	testProvider := acpv1.AzureAppConfigurationProvider{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "azconfig.io/v1",
-			Kind:       "AzureAppConfigurationProvider",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testName",
-			Namespace: "testNamespace",
-		},
-		Spec: testSpec,
-	}
-
-	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettings)
-	allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), nil)
-
-	assert.Equal(t, 4, len(allSettings.ConfigMapSettings))
-	assert.Equal(t, "value1", allSettings.ConfigMapSettings["someKey1"])
-	assert.Equal(t, "value4", allSettings.ConfigMapSettings["someSubKey1:1"])
-	assert.Equal(t, "value5", allSettings.ConfigMapSettings["test:some"])
-	assert.Equal(t, "value6", allSettings.ConfigMapSettings["test:"])
-	assert.Nil(t, err)
-}
-
-func TestErrorWhenGetAllConfiguration(t *testing.T) {
-	testSpec := acpv1.AzureAppConfigurationProviderSpec{
-		Endpoint: &EndpointName,
-		Target: acpv1.ConfigurationGenerationParameters{
-			ConfigMapName: ConfigMapName,
-		},
-	}
-	testProvider := acpv1.AzureAppConfigurationProvider{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "azconfig.io/v1",
-			Kind:       "AzureAppConfigurationProvider",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testName",
-			Namespace: "testNamespace",
-		},
-		Spec: testSpec,
-	}
-
-	configurationProvider, _ := NewConfigurationSettingLoader(context.TODO(), testProvider, mockGetConfigurationSettingsThrowError)
-
-	allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), nil)
-
-	assert.Nil(t, allSettings)
-	assert.NotNil(t, err)
-}
 
 func TestReverse(t *testing.T) {
 	one := "one"
@@ -946,7 +1178,7 @@ func TestCreateSecretClients(t *testing.T) {
 			Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 		},
 		Spec: acpv1.AzureAppConfigurationProviderSpec{
-			Endpoint: &EndpointName,
+			Endpoint: &endpointName,
 			Target: acpv1.ConfigurationGenerationParameters{
 				ConfigMapName: "configMap-test",
 			},
@@ -978,7 +1210,7 @@ func TestCreateSecretClients(t *testing.T) {
 			Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 		},
 		Spec: acpv1.AzureAppConfigurationProviderSpec{
-			Endpoint: &EndpointName,
+			Endpoint: &endpointName,
 			Target: acpv1.ConfigurationGenerationParameters{
 				ConfigMapName: "configMap-test",
 			},
@@ -1017,6 +1249,35 @@ func TestCreateSecretClients(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, r1)
 	assert.NotNil(t, r2)
+}
+
+func testEndpointValidation(t *testing.T) {
+	specifiedEndpoint := "https://fake.azconfig.io"
+	validDomain := getValidDomain(specifiedEndpoint)
+
+	assert.True(t, isValidEndpoint("azure.azconfig.io", validDomain))
+	assert.True(t, isValidEndpoint("appconfig.azconfig.io", validDomain))
+	assert.True(t, isValidEndpoint("azure.privatelink.azconfig.io", validDomain))
+	assert.True(t, isValidEndpoint("azure-replica.azconfig.io", validDomain))
+	assert.False(t, isValidEndpoint("azure.badazconfig.io", validDomain))
+	assert.False(t, isValidEndpoint("azure.azconfigbad.io", validDomain))
+	assert.False(t, isValidEndpoint("azure.appconfig.azure.com", validDomain))
+	assert.False(t, isValidEndpoint("azure.azconfig.bad.io", validDomain))
+
+	specifiedEndpoint2 := "https://foobar.appconfig.azure.com"
+	validDomain2 := getValidDomain(specifiedEndpoint2)
+
+	assert.True(t, isValidEndpoint("azure.appconfig.azure.com", validDomain2))
+	assert.True(t, isValidEndpoint("azure.z1.appconfig.azure.com", validDomain2))
+	assert.True(t, isValidEndpoint("azure-replia.z1.appconfig.azure.com", validDomain2))
+	assert.True(t, isValidEndpoint("azure.privatelink.appconfig.azure.com", validDomain2))
+	assert.True(t, isValidEndpoint("azconfig.appconfig.azure.com", validDomain2))
+	assert.False(t, isValidEndpoint("azure.azconfig.io", validDomain2))
+	assert.False(t, isValidEndpoint("azure.badappconfig.azure.com", validDomain2))
+	assert.False(t, isValidEndpoint("azure.appconfigbad.azure.com", validDomain2))
+
+	specifiedEndpoint3 := "https://foobar.azconfig-test.io"
+	assert.False(t, isValidEndpoint("azure.azconfig.io", getValidDomain(specifiedEndpoint3)))
 }
 
 func createFakeKeyPem(key *rsa.PrivateKey) (string, error) {

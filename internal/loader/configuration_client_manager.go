@@ -31,16 +31,16 @@ import (
 //go:generate mockgen -destination=mocks/mock_configuration_client_manager.go -package mocks . ClientManager
 
 type ConfigurationClientManager struct {
-	ReplicaDiscoveryEnabledEnabled bool
-	StaticClientWrappers           []*ConfigurationClientWrapper
-	DynamicClientWrappers          []*ConfigurationClientWrapper
-	validDomain                    string
-	endpoint                       string
-	credential                     azcore.TokenCredential
-	secret                         string
-	id                             string
-	lastFallbackClientAttempt      metav1.Time
-	lastFallbackClientRefresh      metav1.Time
+	ReplicaDiscoveryEnabled   bool
+	StaticClientWrappers      []*ConfigurationClientWrapper
+	DynamicClientWrappers     []*ConfigurationClientWrapper
+	validDomain               string
+	endpoint                  string
+	credential                azcore.TokenCredential
+	secret                    string
+	id                        string
+	lastFallbackClientAttempt metav1.Time
+	lastFallbackClientRefresh metav1.Time
 }
 
 type ConfigurationClientWrapper struct {
@@ -84,7 +84,7 @@ var (
 
 func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (ClientManager, error) {
 	manager := &ConfigurationClientManager{
-		ReplicaDiscoveryEnabledEnabled: provider.Spec.ReplicaDiscoveryEnabled,
+		ReplicaDiscoveryEnabled: provider.Spec.ReplicaDiscoveryEnabled,
 	}
 
 	var err error
@@ -136,7 +136,7 @@ func (manager *ConfigurationClientManager) GetClients(ctx context.Context) ([]*C
 		}
 	}
 
-	if !manager.ReplicaDiscoveryEnabledEnabled {
+	if !manager.ReplicaDiscoveryEnabled {
 		return clients, nil
 	}
 
@@ -159,7 +159,7 @@ func (manager *ConfigurationClientManager) GetClients(ctx context.Context) ([]*C
 
 func (manager *ConfigurationClientManager) RefreshClients(ctx context.Context) error {
 	currentTime := metav1.Now()
-	if manager.ReplicaDiscoveryEnabledEnabled &&
+	if manager.ReplicaDiscoveryEnabled &&
 		currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) {
 		manager.lastFallbackClientAttempt = currentTime
 		url, _ := url.Parse(manager.endpoint)
@@ -173,6 +173,7 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.C
 	srvTargetHosts, err := QuerySrvTargetHost(ctx, host)
 	if err != nil {
 		klog.Warningf("Fail to build fall back clients %s", err.Error())
+		return
 	}
 
 	// Shuffle the list of SRV target hosts
@@ -191,6 +192,7 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.C
 			client, err := manager.newConfigurationClient(targetEndpoint)
 			if err != nil {
 				klog.Warningf("build fallback clients failed, %s", err.Error())
+				return
 			}
 			newDynamicClients = append(newDynamicClients, &ConfigurationClientWrapper{
 				Endpoint:       targetEndpoint,

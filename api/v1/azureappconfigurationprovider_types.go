@@ -32,7 +32,7 @@ type AzureAppConfigurationProviderSpec struct {
 	// +kubebuilder:validation:Format=uri
 	Endpoint *string `json:"endpoint,omitempty"`
 	// +kubebuilder:default=true
-	ReplicaDiscoveryEnabled   bool                                     `json:"ReplicaDiscoveryEnabled,omitempty"`
+	ReplicaDiscoveryEnabled   bool                                     `json:"replicaDiscoveryEnabled,omitempty"`
 	ConnectionStringReference *string                                  `json:"connectionStringReference,omitempty"`
 	Target                    ConfigurationGenerationParameters        `json:"target"`
 	Auth                      *AzureAppConfigurationProviderAuth       `json:"auth,omitempty"`

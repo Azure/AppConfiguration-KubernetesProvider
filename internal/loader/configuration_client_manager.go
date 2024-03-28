@@ -51,8 +51,8 @@ type ConfigurationClientWrapper struct {
 }
 
 type ClientManager interface {
-	GetClients() ([]*ConfigurationClientWrapper, error)
-	RefreshClients() error
+	GetClients(ctx context.Context) ([]*ConfigurationClientWrapper, error)
+	RefreshClients(ctx context.Context) error
 }
 
 const (
@@ -127,7 +127,7 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 	return manager, nil
 }
 
-func (manager *ConfigurationClientManager) GetClients() ([]*ConfigurationClientWrapper, error) {
+func (manager *ConfigurationClientManager) GetClients(ctx context.Context) ([]*ConfigurationClientWrapper, error) {
 	currentTime := metav1.Now()
 	clients := make([]*ConfigurationClientWrapper, 0)
 	for _, clientWrapper := range manager.StaticClientWrappers {
@@ -145,10 +145,7 @@ func (manager *ConfigurationClientManager) GetClients() ([]*ConfigurationClientW
 			currentTime.After(manager.lastFallbackClientRefresh.Time.Add(FallbackClientRefreshExpireInterval))) {
 		manager.lastFallbackClientAttempt = currentTime
 		url, _ := url.Parse(manager.endpoint)
-		err := manager.DiscoverFallbackClients(url.Host)
-		if err != nil {
-			return nil, err
-		}
+		go manager.DiscoverFallbackClients(ctx, url.Host)
 	}
 
 	for _, clientWrapper := range manager.DynamicClientWrappers {
@@ -160,23 +157,20 @@ func (manager *ConfigurationClientManager) GetClients() ([]*ConfigurationClientW
 	return clients, nil
 }
 
-func (manager *ConfigurationClientManager) RefreshClients() error {
+func (manager *ConfigurationClientManager) RefreshClients(ctx context.Context) error {
 	currentTime := metav1.Now()
 	if manager.ReplicaDiscoveryEnabledEnabled &&
 		currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) {
 		manager.lastFallbackClientAttempt = currentTime
 		url, _ := url.Parse(manager.endpoint)
-		err := manager.DiscoverFallbackClients(url.Host)
-		if err != nil {
-			return err
-		}
+		go manager.DiscoverFallbackClients(ctx, url.Host)
 	}
 
 	return nil
 }
 
-func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) error {
-	srvTargetHosts, err := QuerySrvTargetHost(host)
+func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.Context, host string) {
+	srvTargetHosts, err := QuerySrvTargetHost(ctx, host)
 	if err != nil {
 		klog.Warningf("Fail to build fall back clients %s", err.Error())
 	}
@@ -191,12 +185,12 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 	for _, host := range srvTargetHosts {
 		if isValidEndpoint(host, manager.validDomain) {
 			targetEndpoint := "https://" + host
-			if targetEndpoint == manager.endpoint {
+			if strings.ToLower(targetEndpoint) == strings.ToLower(manager.endpoint) {
 				continue
 			}
 			client, err := manager.newConfigurationClient(targetEndpoint)
 			if err != nil {
-				return fmt.Errorf("build fallback clients failed, %s", err.Error())
+				klog.Warningf("build fallback clients failed, %s", err.Error())
 			}
 			newDynamicClients = append(newDynamicClients, &ConfigurationClientWrapper{
 				Endpoint:       targetEndpoint,
@@ -209,13 +203,13 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(host string) 
 
 	manager.DynamicClientWrappers = newDynamicClients
 	manager.lastFallbackClientRefresh = metav1.Now()
-	return nil
 }
 
-func QuerySrvTargetHost(host string) ([]string, error) {
+func QuerySrvTargetHost(ctx context.Context, host string) ([]string, error) {
 	results := make([]string, 0)
+	resolver := net.DefaultResolver
 
-	_, originRecords, err := net.LookupSRV(Origin, TCP, host)
+	_, originRecords, err := resolver.LookupSRV(ctx, Origin, TCP, host)
 	if err != nil {
 		// If the host does not have SRV records => no replicas
 		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
@@ -223,6 +217,10 @@ func QuerySrvTargetHost(host string) ([]string, error) {
 		} else {
 			return results, err
 		}
+	}
+
+	if len(originRecords) == 0 {
+		return results, nil
 	}
 
 	originHost := strings.TrimSuffix(originRecords[0].Target, ".")

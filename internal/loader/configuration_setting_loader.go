@@ -437,13 +437,13 @@ func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context
 }
 
 func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, settingsClient SettingsClient) ([]azappconfig.Setting, error) {
-	clients, err := csl.ClientManager.GetClients()
+	clients, err := csl.ClientManager.GetClients(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(clients) == 0 {
-		csl.ClientManager.RefreshClients()
+		csl.ClientManager.RefreshClients(ctx)
 		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
 	}
 
@@ -464,7 +464,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	}
 
 	// Failed to execute failover policy
-	csl.ClientManager.RefreshClients()
+	csl.ClientManager.RefreshClients(ctx)
 	return nil, fmt.Errorf("all app configuration clients failed to get settings")
 }
 

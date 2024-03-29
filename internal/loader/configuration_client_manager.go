@@ -148,7 +148,7 @@ func (manager *ConfigurationClientManager) GetClients(ctx context.Context) ([]*C
 			currentTime.After(manager.lastFallbackClientRefresh.Time.Add(FallbackClientRefreshExpireInterval))) {
 		manager.lastFallbackClientAttempt = currentTime
 		url, _ := url.Parse(manager.endpoint)
-		go manager.DiscoverFallbackClients(ctx, url.Host)
+		manager.DiscoverFallbackClients(ctx, url.Host)
 	}
 
 	for _, clientWrapper := range manager.DynamicClientWrappers {
@@ -166,14 +166,16 @@ func (manager *ConfigurationClientManager) RefreshClients(ctx context.Context) e
 		currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) {
 		manager.lastFallbackClientAttempt = currentTime
 		url, _ := url.Parse(manager.endpoint)
-		go manager.DiscoverFallbackClients(ctx, url.Host)
+		manager.DiscoverFallbackClients(ctx, url.Host)
 	}
 
 	return nil
 }
 
 func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.Context, host string) {
-	srvTargetHosts, err := QuerySrvTargetHost(ctx, host)
+	newCtx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+	srvTargetHosts, err := QuerySrvTargetHost(newCtx, host)
 	if err != nil {
 		klog.Warningf("Fail to build fall back clients %s", err.Error())
 		return
@@ -214,45 +216,50 @@ func QuerySrvTargetHost(ctx context.Context, host string) ([]string, error) {
 	results := make([]string, 0)
 	resolver := net.DefaultResolver
 
-	_, originRecords, err := resolver.LookupSRV(ctx, Origin, TCP, host)
-	if err != nil {
-		// If the host does not have SRV records => no replicas
-		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
-			return results, nil
-		} else {
-			return results, err
-		}
-	}
-
-	if len(originRecords) == 0 {
-		return results, nil
-	}
-
-	originHost := strings.TrimSuffix(originRecords[0].Target, ".")
-	results = append(results, originHost)
-	index := 0
-	for {
-		currentAlt := Alt + strconv.Itoa(index)
-		_, altRecords, err := net.LookupSRV(currentAlt, TCP, originHost)
+	select {
+	case <-ctx.Done():
+		return results, ctx.Err()
+	default:
+		_, originRecords, err := resolver.LookupSRV(ctx, Origin, TCP, host)
 		if err != nil {
-			// If the host does not have SRV records => no more replicas
+			// If the host does not have SRV records => no replicas
 			if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
-				break
+				return results, nil
 			} else {
 				return results, err
 			}
 		}
 
-		for _, record := range altRecords {
-			altHost := strings.TrimSuffix(record.Target, ".")
-			if altHost != "" {
-				results = append(results, altHost)
-			}
+		if len(originRecords) == 0 {
+			return results, nil
 		}
-		index = index + 1
-	}
 
-	return results, nil
+		originHost := strings.TrimSuffix(originRecords[0].Target, ".")
+		results = append(results, originHost)
+		index := 0
+		for {
+			currentAlt := Alt + strconv.Itoa(index)
+			_, altRecords, err := net.LookupSRV(currentAlt, TCP, originHost)
+			if err != nil {
+				// If the host does not have SRV records => no more replicas
+				if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
+					break
+				} else {
+					return results, err
+				}
+			}
+
+			for _, record := range altRecords {
+				altHost := strings.TrimSuffix(record.Target, ".")
+				if altHost != "" {
+					results = append(results, altHost)
+				}
+			}
+			index = index + 1
+		}
+
+		return results, nil
+	}
 }
 
 func (manager *ConfigurationClientManager) newConfigurationClient(endpoint string) (*azappconfig.Client, error) {

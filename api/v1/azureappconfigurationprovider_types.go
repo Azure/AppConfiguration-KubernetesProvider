@@ -30,7 +30,9 @@ import (
 type AzureAppConfigurationProviderSpec struct {
 	// The endpoint url of AppConfiguration which should sync the configuration key-values from.
 	// +kubebuilder:validation:Format=uri
-	Endpoint                  *string                                  `json:"endpoint,omitempty"`
+	Endpoint *string `json:"endpoint,omitempty"`
+	// +kubebuilder:default=true
+	ReplicaDiscoveryEnabled   bool                                     `json:"replicaDiscoveryEnabled,omitempty"`
 	ConnectionStringReference *string                                  `json:"connectionStringReference,omitempty"`
 	Target                    ConfigurationGenerationParameters        `json:"target"`
 	Auth                      *AzureAppConfigurationProviderAuth       `json:"auth,omitempty"`

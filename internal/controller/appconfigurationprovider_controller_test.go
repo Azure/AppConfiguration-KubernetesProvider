@@ -60,7 +60,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Namespace: ProviderNamespace,
 				},
 				Spec: acpv1.AzureAppConfigurationProviderSpec{
-					Endpoint: &EndpointName,
+					Endpoint:                &EndpointName,
+					ReplicaDiscoveryEnabled: false,
 					Target: acpv1.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},

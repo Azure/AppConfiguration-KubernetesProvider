@@ -208,11 +208,11 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 			continue // ignore feature flag while getting key value settings
 		case SecretReferenceContentType:
 			if setting.Value == nil {
-				return nil, fmt.Errorf("The value of Key Vault reference '%s' is null", *setting.Key)
+				return nil, fmt.Errorf("the value of Key Vault reference '%s' is null", *setting.Key)
 			}
 
 			if csl.Spec.Secret == nil {
-				return nil, fmt.Errorf("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
+				return nil, fmt.Errorf("a Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
 			}
 
 			var secretType corev1.SecretType = corev1.SecretTypeOpaque
@@ -291,7 +291,7 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 		var out interface{}
 		err := json.Unmarshal([]byte(*setting.Value), &out)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to unmarshal feature flag settings: %s", err.Error())
+			return nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
 		featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
 	}
@@ -447,6 +447,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
 	}
 
+	errors := make([]error, 0)
 	for _, clientWrapper := range clients {
 		successful := true
 		settingsToReturn, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
@@ -454,6 +455,8 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 			successful = false
 			updateClientBackoffStatus(clientWrapper, successful)
 			if IsFailoverable(err) {
+				klog.V(3).Info("current client of '%s' failed to get settings: %s", clientWrapper.Endpoint, err.Error())
+				errors = append(errors, err)
 				continue
 			}
 			return nil, err
@@ -465,7 +468,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 
 	// Failed to execute failover policy
 	csl.ClientManager.RefreshClients(ctx)
-	return nil, fmt.Errorf("all app configuration clients failed to get settings")
+	return nil, fmt.Errorf("all app configuration clients failed to get settings: %v", errors)
 }
 
 func updateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {

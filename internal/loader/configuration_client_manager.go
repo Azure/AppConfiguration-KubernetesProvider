@@ -92,7 +92,7 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 	if provider.Spec.ConnectionStringReference != nil {
 		connectionString, err := getConnectionStringParameter(ctx, types.NamespacedName{Namespace: provider.Namespace, Name: *provider.Spec.ConnectionStringReference})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("fail to retrieve connection string from secret '%s': %s", *provider.Spec.ConnectionStringReference, err.Error())
 		}
 		if manager.endpoint, err = parseConnectionString(connectionString, EndpointSection); err != nil {
 			return nil, err
@@ -175,91 +175,103 @@ func (manager *ConfigurationClientManager) RefreshClients(ctx context.Context) e
 func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.Context, host string) {
 	newCtx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
-	srvTargetHosts, err := QuerySrvTargetHost(newCtx, host)
-	if err != nil {
-		klog.Warningf("Fail to build fall back clients %s", err.Error())
-		return
-	}
 
-	// Shuffle the list of SRV target hosts
-	for i := range srvTargetHosts {
-		j := rand.Intn(i + 1)
-		srvTargetHosts[i], srvTargetHosts[j] = srvTargetHosts[j], srvTargetHosts[i]
-	}
-
-	newDynamicClients := make([]*ConfigurationClientWrapper, 0)
-	for _, host := range srvTargetHosts {
-		if isValidEndpoint(host, manager.validDomain) {
-			targetEndpoint := "https://" + host
-			if strings.ToLower(targetEndpoint) == strings.ToLower(manager.endpoint) {
-				continue
-			}
-			client, err := manager.newConfigurationClient(targetEndpoint)
-			if err != nil {
-				klog.Warningf("build fallback clients failed, %s", err.Error())
-				return
-			}
-			newDynamicClients = append(newDynamicClients, &ConfigurationClientWrapper{
-				Endpoint:       targetEndpoint,
-				Client:         client,
-				BackOffEndTime: metav1.Time{},
-				FailedAttempts: 0,
-			})
+	resultChan := make(chan []string)
+	errChan := make(chan error)
+	go func() {
+		srvTargetHosts, err := QuerySrvTargetHost(newCtx, host)
+		if err != nil {
+			errChan <- err
+		} else {
+			resultChan <- srvTargetHosts
 		}
-	}
+		close(resultChan)
+		close(errChan)
+	}()
 
-	manager.DynamicClientWrappers = newDynamicClients
-	manager.lastFallbackClientRefresh = metav1.Now()
+	select {
+	case <-newCtx.Done():
+		klog.Warningf("fail to build fall back clients, SRV DNS lookup is timeout")
+		break
+	case err := <-errChan:
+		klog.Warningf("fail to build fall back clients %s", err.Error())
+		break
+	case srvTargetHosts := <-resultChan:
+		// Shuffle the list of SRV target hosts
+		for i := range srvTargetHosts {
+			j := rand.Intn(i + 1)
+			srvTargetHosts[i], srvTargetHosts[j] = srvTargetHosts[j], srvTargetHosts[i]
+		}
+
+		newDynamicClients := make([]*ConfigurationClientWrapper, 0)
+		for _, host := range srvTargetHosts {
+			if isValidEndpoint(host, manager.validDomain) {
+				targetEndpoint := "https://" + host
+				if strings.EqualFold(targetEndpoint, manager.endpoint) {
+					continue
+				}
+				client, err := manager.newConfigurationClient(targetEndpoint)
+				if err != nil {
+					klog.Warningf("build fallback clients failed, %s", err.Error())
+					return
+				}
+				newDynamicClients = append(newDynamicClients, &ConfigurationClientWrapper{
+					Endpoint:       targetEndpoint,
+					Client:         client,
+					BackOffEndTime: metav1.Time{},
+					FailedAttempts: 0,
+				})
+			}
+		}
+
+		manager.DynamicClientWrappers = newDynamicClients
+		manager.lastFallbackClientRefresh = metav1.Now()
+		break
+	}
 }
 
 func QuerySrvTargetHost(ctx context.Context, host string) ([]string, error) {
 	results := make([]string, 0)
-	resolver := net.DefaultResolver
 
-	select {
-	case <-ctx.Done():
-		return results, ctx.Err()
-	default:
-		_, originRecords, err := resolver.LookupSRV(ctx, Origin, TCP, host)
+	_, originRecords, err := net.DefaultResolver.LookupSRV(ctx, Origin, TCP, host)
+	if err != nil {
+		// If the host does not have SRV records => no replicas
+		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
+			return results, nil
+		} else {
+			return results, err
+		}
+	}
+
+	if len(originRecords) == 0 {
+		return results, nil
+	}
+
+	originHost := strings.TrimSuffix(originRecords[0].Target, ".")
+	results = append(results, originHost)
+	index := 0
+	for {
+		currentAlt := Alt + strconv.Itoa(index)
+		_, altRecords, err := net.DefaultResolver.LookupSRV(ctx, currentAlt, TCP, originHost)
 		if err != nil {
-			// If the host does not have SRV records => no replicas
+			// If the host does not have SRV records => no more replicas
 			if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
-				return results, nil
+				break
 			} else {
 				return results, err
 			}
 		}
 
-		if len(originRecords) == 0 {
-			return results, nil
-		}
-
-		originHost := strings.TrimSuffix(originRecords[0].Target, ".")
-		results = append(results, originHost)
-		index := 0
-		for {
-			currentAlt := Alt + strconv.Itoa(index)
-			_, altRecords, err := net.LookupSRV(currentAlt, TCP, originHost)
-			if err != nil {
-				// If the host does not have SRV records => no more replicas
-				if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
-					break
-				} else {
-					return results, err
-				}
+		for _, record := range altRecords {
+			altHost := strings.TrimSuffix(record.Target, ".")
+			if altHost != "" {
+				results = append(results, altHost)
 			}
-
-			for _, record := range altRecords {
-				altHost := strings.TrimSuffix(record.Target, ".")
-				if altHost != "" {
-					results = append(results, altHost)
-				}
-			}
-			index = index + 1
 		}
-
-		return results, nil
+		index = index + 1
 	}
+
+	return results, nil
 }
 
 func (manager *ConfigurationClientManager) newConfigurationClient(endpoint string) (*azappconfig.Client, error) {
@@ -403,6 +415,10 @@ func getConnectionStringParameter(ctx context.Context, namespacedSecretName type
 	secret, err := GetSecret(ctx, namespacedSecretName)
 	if err != nil {
 		return "", err
+	}
+
+	if _, ok := secret.Data[AzureAppConfigurationConnectionString]; !ok {
+		return "", fmt.Errorf("key '%s' does not exist", AzureAppConfigurationConnectionString)
 	}
 
 	return string(secret.Data[AzureAppConfigurationConnectionString]), nil

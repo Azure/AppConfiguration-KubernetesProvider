@@ -337,7 +337,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
 			Expect(allSettings).Should(BeNil())
-			Expect(err.Error()).Should(Equal("A Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider 'testName' in namespace 'testNamespace'"))
+			Expect(err.Error()).Should(Equal("a Key Vault reference is found in App Configuration, but 'spec.secret' was not configured in the Azure App Configuration provider 'testName' in namespace 'testNamespace'"))
 		})
 
 		It("Should throw unknown content type error", func() {
@@ -1251,7 +1251,7 @@ func TestCreateSecretClients(t *testing.T) {
 	assert.NotNil(t, r2)
 }
 
-func testEndpointValidation(t *testing.T) {
+func TestEndpointValidation(t *testing.T) {
 	specifiedEndpoint := "https://fake.azconfig.io"
 	validDomain := getValidDomain(specifiedEndpoint)
 

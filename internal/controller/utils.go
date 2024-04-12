@@ -237,12 +237,26 @@ func verifyRefreshInterval(interval string, allowedMinimalRefreshInterval time.D
 }
 
 func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityParameters) error {
-	if workloadIdentity.ManagedIdentityClientId == nil && workloadIdentity.ManagedIdentityClientIdReference == nil {
-		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("one of managedIdentityClientId and managedIdentityClientIdReference is required"))
+	var authCount int = 0
+
+	if workloadIdentity.ManagedIdentityClientId != nil {
+		authCount++
 	}
 
-	if workloadIdentity.ManagedIdentityClientId != nil && workloadIdentity.ManagedIdentityClientIdReference != nil {
-		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("only one of managedIdentityClientId and managedIdentityClientIdReference is allowed"))
+	if workloadIdentity.ManagedIdentityClientIdReference != nil {
+		authCount++
+	}
+
+	if workloadIdentity.ServiceAccountName != nil {
+		authCount++
+	}
+
+	if authCount == 0 {
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("one of managedIdentityClientId, managedIdentityClientIdReference and serviceAccountName is required"))
+	}
+
+	if authCount > 1 {
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("only one of managedIdentityClientId, managedIdentityClientIdReference and serviceAccountName is allowed"))
 	}
 
 	if workloadIdentity.ManagedIdentityClientId != nil {

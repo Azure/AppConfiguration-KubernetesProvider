@@ -1,13 +1,14 @@
 module azappconfig/provider
 
-go 1.20
+go 1.22
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.9.1
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.11.0
 	github.com/golang/mock v1.6.0
 	github.com/onsi/gomega v1.27.8
-	golang.org/x/sync v0.3.0
+	golang.org/x/crypto v0.21.0
+	golang.org/x/sync v0.6.0
 	k8s.io/apimachinery v0.26.2
 	k8s.io/client-go v0.26.2
 	sigs.k8s.io/controller-runtime v0.14.5
@@ -27,12 +28,14 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/tools v0.12.1-0.20230815132531-74c255bcf846 // indirect
+	github.com/rogpeppe/go-internal v1.11.0 // indirect
+	golang.org/x/tools v0.19.0 // indirect
 )
 
 require (
@@ -67,12 +70,11 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.17.0 // indirect
-	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
-	golang.org/x/net v0.19.0 // indirect
+	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8
+	golang.org/x/net v0.22.0 // indirect
 	golang.org/x/oauth2 v0.5.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
-	golang.org/x/term v0.15.0 // indirect
+	golang.org/x/sys v0.18.0 // indirect
+	golang.org/x/term v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
@@ -90,4 +92,5 @@ require (
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
+	software.sslmate.com/src/go-pkcs12 v0.4.0
 )

@@ -115,8 +115,8 @@ spec:
                           type: string
                         labelFilter:
                           type: string
-                      required:
-                      - keyFilter
+                        snapshotName:
+                          type: string
                       type: object
                     type: array
                   trimKeyPrefixes:
@@ -157,14 +157,17 @@ spec:
                           type: string
                         labelFilter:
                           type: string
-                      required:
-                      - keyFilter
+                        snapshotName:
+                          type: string
                       type: object
                     type: array
                 type: object
+              replicaDiscoveryEnabled:
+                default: true
+                type: boolean
               secret:
-                description: AzureKeyVaultReference defines the authentication type
-                  used to Azure KeyVault resolve KeyVaultReference
+                description: SecretReference defines the settings for resolving secret
+                  reference type items
                 properties:
                   auth:
                     properties:

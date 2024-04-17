@@ -22,12 +22,13 @@ const (
 )
 
 func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
+	var err error = nil
 	if spec.Endpoint == nil && spec.ConnectionStringReference == nil {
-		return loader.NewArgumentError("spec", fmt.Errorf("One of endpoint and connectionStringReference field must be set"))
+		return loader.NewArgumentError("spec", fmt.Errorf("one of endpoint and connectionStringReference field must be set"))
 	}
 	if spec.ConnectionStringReference != nil {
 		if spec.Endpoint != nil {
-			return loader.NewArgumentError("spec", fmt.Errorf("Both endpoint and connectionStringReference field are set"))
+			return loader.NewArgumentError("spec", fmt.Errorf("both endpoint and connectionStringReference field are set"))
 		}
 		if spec.Auth != nil {
 			return loader.NewArgumentError("spec.auth", fmt.Errorf("auth field is not allowed when connectionStringReference field is set"))
@@ -52,11 +53,10 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 		}
 	}
 
-	if len(spec.Configuration.Selectors) > 0 {
-		for i := range spec.Configuration.Selectors {
-			if spec.Configuration.Selectors[i].LabelFilter != nil && hasNonEscapedValueInLabel(*spec.Configuration.Selectors[i].LabelFilter) {
-				return loader.NewArgumentError("spec.configuration.selectors", fmt.Errorf("non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters"))
-			}
+	for i := range spec.Configuration.Selectors {
+		err = verifySelectorObject(spec.Configuration.Selectors[i])
+		if err != nil {
+			return loader.NewArgumentError("spec.configuration.selectors", err)
 		}
 	}
 
@@ -71,21 +71,21 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 
 		// Check if feature flag label filters are valid
 		for i := range spec.FeatureFlag.Selectors {
-			if spec.FeatureFlag.Selectors[i].LabelFilter != nil && hasNonEscapedValueInLabel(*spec.FeatureFlag.Selectors[i].LabelFilter) {
-				return loader.NewArgumentError("spec.featureFlag.selectors", fmt.Errorf("non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters"))
+			err = verifySelectorObject(spec.FeatureFlag.Selectors[i])
+			if err != nil {
+				return loader.NewArgumentError("spec.featureFlag.selectors", err)
 			}
 		}
 
 		// Check if feature flag refresh interval is valid
 		if spec.FeatureFlag.Refresh != nil {
-			err := verifyRefreshInterval(spec.FeatureFlag.Refresh.Interval, MinimalFeatureFlagRefreshInterval, "featureFlag.refresh.interval")
+			err = verifyRefreshInterval(spec.FeatureFlag.Refresh.Interval, MinimalFeatureFlagRefreshInterval, "featureFlag.refresh.interval")
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	var err error = nil
 	if spec.Endpoint != nil {
 		err = verifyEndpoint(*spec.Endpoint)
 		if err != nil {
@@ -227,7 +227,7 @@ func verifyRefreshInterval(interval string, allowedMinimalRefreshInterval time.D
 	refreshInterval, err := time.ParseDuration(interval)
 	if err == nil {
 		if refreshInterval < allowedMinimalRefreshInterval {
-			return loader.NewArgumentError(refreshArgument, fmt.Errorf("%s can not be shorter than %s.", refreshArgument, allowedMinimalRefreshInterval.String()))
+			return loader.NewArgumentError(refreshArgument, fmt.Errorf("%s can not be shorter than %s", refreshArgument, allowedMinimalRefreshInterval.String()))
 		}
 	} else {
 		return loader.NewArgumentError(refreshArgument, err)
@@ -250,6 +250,27 @@ func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityPa
 		if err != nil {
 			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientId", fmt.Errorf("managedIdentityClientId %q in auth.workloadIdentity is not a valid uuid", *workloadIdentity.ManagedIdentityClientId))
 		}
+	}
+
+	return nil
+}
+
+func verifySelectorObject(selector acpv1.Selector) error {
+	if selector.KeyFilter == nil && selector.SnapshotName == nil {
+		return fmt.Errorf("one of keyFilter and snapshotName field must be set")
+	}
+
+	if selector.SnapshotName != nil {
+		if selector.KeyFilter != nil {
+			return fmt.Errorf("set both keyFilter and snapshotName in one selector causes ambiguity, only one of them should be set")
+		}
+		if selector.LabelFilter != nil {
+			return fmt.Errorf("labelFilter is not allowed when snapshotName is set")
+		}
+	}
+
+	if selector.LabelFilter != nil && hasNonEscapedValueInLabel(*selector.LabelFilter) {
+		return fmt.Errorf("non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters")
 	}
 
 	return nil

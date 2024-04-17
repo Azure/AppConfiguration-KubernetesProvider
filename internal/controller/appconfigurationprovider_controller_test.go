@@ -60,7 +60,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Namespace: ProviderNamespace,
 				},
 				Spec: acpv1.AzureAppConfigurationProviderSpec{
-					Endpoint: &EndpointName,
+					Endpoint:                &EndpointName,
+					ReplicaDiscoveryEnabled: false,
 					Target: acpv1.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
@@ -146,13 +147,38 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should create new secret", func() {
 			By("By getting multiple secret reference settings from AppConfig")
-			mapResult := make(map[string][]byte)
-			mapResult["testSecretKey"] = []byte("testValue")
-			mapResult["testSecretKey2"] = []byte("testValue2")
-			mapResult["testSecretKey3"] = []byte("testValue3")
+			secretResult1 := make(map[string][]byte)
+			secretResult1["tls.crt"] = []byte("fakeCrt")
+			secretResult1["tls.key"] = []byte("fakeKey")
 
+			secretResult2 := make(map[string][]byte)
+			secretResult2["testSecretKey"] = []byte("testSecretValue")
+			secretResult2["testSecretKey2"] = []byte("testSecretValue2")
+			secretResult2["testSecretKey3"] = []byte("testSecretValue3")
+
+			secretName := "secret-to-be-created-3"
+			secretName2 := "secret-to-be-created-3-1"
 			allSettings := &loader.TargetKeyValueSettings{
-				SecretSettings: mapResult,
+				SecretSettings: map[string]corev1.Secret{
+					secretName: {
+						Data: secretResult1,
+						Type: corev1.SecretTypeTLS,
+					},
+					secretName2: {
+						Data: secretResult2,
+						Type: corev1.SecretTypeOpaque,
+					},
+				},
+				SecretReferences: map[string]*loader.TargetSecretReference{
+					secretName: {
+						Type:        corev1.SecretTypeTLS,
+						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+					},
+					secretName2: {
+						Type:        corev1.SecretTypeOpaque,
+						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+					},
+				},
 			}
 
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
@@ -160,7 +186,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-3"
 			configMapName := "configmap-to-be-created-3"
-			secretName := "secret-to-be-created-3"
 			configProvider := &acpv1.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
@@ -175,7 +200,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Target: acpv1.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
-					Secret: &acpv1.AzureKeyVaultReference{
+					Secret: &acpv1.SecretReference{
 						Target: acpv1.SecretGenerationParameters{
 							SecretName: secretName,
 						},
@@ -184,7 +209,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
 			secretLookupKey := types.NamespacedName{Name: secretName, Namespace: ProviderNamespace}
+			secretLookupKey2 := types.NamespacedName{Name: secretName2, Namespace: ProviderNamespace}
 			secret := &corev1.Secret{}
+			secret2 := &corev1.Secret{}
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, secretLookupKey, secret)
@@ -192,13 +219,26 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					fmt.Print(err.Error())
 				}
 				return err == nil
-			}, time.Second*20, interval).Should(BeTrue())
+			}, time.Second*5, interval).Should(BeTrue())
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, secretLookupKey2, secret2)
+				if err != nil {
+					fmt.Print(err.Error())
+				}
+				return err == nil
+			}, time.Second*5, interval).Should(BeTrue())
 
 			Expect(secret.Namespace).Should(Equal(ProviderNamespace))
-			Expect(string(secret.Data["testSecretKey"])).Should(Equal("testValue"))
-			Expect(string(secret.Data["testSecretKey2"])).Should(Equal("testValue2"))
-			Expect(string(secret.Data["testSecretKey3"])).Should(Equal("testValue3"))
-			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
+			Expect(string(secret.Data["tls.crt"])).Should(Equal("fakeCrt"))
+			Expect(string(secret.Data["tls.key"])).Should(Equal("fakeKey"))
+			Expect(secret.Type).Should(Equal(corev1.SecretTypeTLS))
+
+			Expect(secret2.Namespace).Should(Equal(ProviderNamespace))
+			Expect(string(secret2.Data["testSecretKey"])).Should(Equal("testSecretValue"))
+			Expect(string(secret2.Data["testSecretKey2"])).Should(Equal("testSecretValue2"))
+			Expect(string(secret2.Data["testSecretKey3"])).Should(Equal("testSecretValue3"))
+			Expect(secret2.Type).Should(Equal(corev1.SecretTypeOpaque))
 		})
 
 		It("Should create proper configmap and secret", func() {
@@ -213,9 +253,21 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			secretResult["testSecretKey2"] = []byte("testSecretValue2")
 			secretResult["testSecretKey3"] = []byte("testSecretValue3")
 
+			secretName := "secret-to-be-created-5"
 			allSettings := &loader.TargetKeyValueSettings{
-				SecretSettings:    secretResult,
+				SecretSettings: map[string]corev1.Secret{
+					secretName: {
+						Data: secretResult,
+						Type: corev1.SecretType("Opaque"),
+					},
+				},
 				ConfigMapSettings: configMapResult,
+				SecretReferences: map[string]*loader.TargetSecretReference{
+					secretName: {
+						Type:        corev1.SecretType("Opaque"),
+						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+					},
+				},
 			}
 
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
@@ -223,7 +275,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-5"
 			configMapName := "configmap-to-be-created-5"
-			secretName := "secret-to-be-created-5"
+
 			configProvider := &acpv1.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
@@ -238,7 +290,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Target: acpv1.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
-					Secret: &acpv1.AzureKeyVaultReference{
+					Secret: &acpv1.SecretReference{
 						Target: acpv1.SecretGenerationParameters{
 							SecretName: secretName,
 						},
@@ -345,6 +397,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-8"
 			configMapName := "file-style-configmap-to-be-created-2"
+			wildcard := "*"
 			configProvider := &acpv1.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
@@ -366,7 +419,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
 						Selectors: []acpv1.Selector{
 							{
-								KeyFilter: "*",
+								KeyFilter: &wildcard,
 							},
 						},
 					},
@@ -386,6 +439,293 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Namespace).Should(Equal(ProviderNamespace))
 			Expect(configmap.Data["filestyle.json"]).Should(Equal("{\"testKey\":\"testValue\",\"feature_management\":{\"feature_flags\":[{\"id\": \"testFeatureFlag\",\"enabled\": true,\"conditions\": {\"client_filters\": []}}]}}"))
 			Expect(len(configmap.Data)).Should(Equal(1))
+		})
+
+		It("Should refresh configMap", func() {
+			By("By updating the provider and trigger reconciliation")
+			mapResult := make(map[string]string)
+			mapResult["testKey"] = "testValue"
+			mapResult["testKey2"] = "testValue2"
+			mapResult["testKey3"] = "testValue3"
+
+			allSettings := &loader.TargetKeyValueSettings{
+				ConfigMapSettings: mapResult,
+			}
+
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+
+			ctx := context.Background()
+			providerName := "refresh-appconfigurationprovider-1"
+			configMapName := "configmap-to-be-refresh-1"
+			configProvider := &acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "appconfig.kubernetes.config/v1",
+					Kind:       "AzureAppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      providerName,
+					Namespace: ProviderNamespace,
+					Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
+				},
+				Spec: acpv1.AzureAppConfigurationProviderSpec{
+					Endpoint: &EndpointName,
+					Target: acpv1.ConfigurationGenerationParameters{
+						ConfigMapName: configMapName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
+			configmap := &corev1.ConfigMap{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(configmap.Name).Should(Equal(configMapName))
+			Expect(configmap.Namespace).Should(Equal(ProviderNamespace))
+			Expect(configmap.Labels["foo"]).Should(Equal("fooValue"))
+			Expect(configmap.Labels["bar"]).Should(Equal("barValue"))
+			Expect(configmap.Data["testKey"]).Should(Equal("testValue"))
+			Expect(configmap.Data["testKey2"]).Should(Equal("testValue2"))
+			Expect(configmap.Data["testKey3"]).Should(Equal("testValue3"))
+
+			newEndpoint := "https://fake-endpoint-2"
+
+			mapResult2 := make(map[string]string)
+			mapResult2["testKey"] = "newtestValue"
+			mapResult2["testKey2"] = "newtestValue2"
+			mapResult2["testKey3"] = "newtestValue3"
+
+			allSettings2 := &loader.TargetKeyValueSettings{
+				ConfigMapSettings: mapResult2,
+			}
+
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+
+			k8sClient.Get(ctx, types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}, configProvider)
+			configProvider.Spec.Endpoint = &newEndpoint
+
+			Expect(k8sClient.Update(ctx, configProvider)).Should(Succeed())
+
+			time.Sleep(5 * time.Second)
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(configmap.Data["testKey"]).Should(Equal("newtestValue"))
+			Expect(configmap.Data["testKey2"]).Should(Equal("newtestValue2"))
+			Expect(configmap.Data["testKey3"]).Should(Equal("newtestValue3"))
+
+		})
+
+		It("Should refresh configMap", func() {
+			By("By sentinel value updated in Azure App Configuration")
+			mapResult := make(map[string]string)
+			mapResult["testKey"] = "testValue"
+			mapResult["testKey2"] = "testValue2"
+			mapResult["testKey3"] = "testValue3"
+
+			allSettings := &loader.TargetKeyValueSettings{
+				ConfigMapSettings: mapResult,
+			}
+
+			mapResult2 := make(map[string]string)
+			mapResult2["testKey"] = "newtestValue"
+			mapResult2["testKey2"] = "newtestValue2"
+			mapResult2["testKey3"] = "newtestValue3"
+
+			allSettings2 := &loader.TargetKeyValueSettings{
+				ConfigMapSettings: mapResult2,
+			}
+
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil, nil)
+			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+
+			ctx := context.Background()
+			providerName := "refresh-appconfigurationprovider-2"
+			configMapName := "configmap-to-be-refresh-2"
+			configProvider := &acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "appconfig.kubernetes.config/v1",
+					Kind:       "AzureAppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      providerName,
+					Namespace: ProviderNamespace,
+					Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
+				},
+				Spec: acpv1.AzureAppConfigurationProviderSpec{
+					Endpoint: &EndpointName,
+					Target: acpv1.ConfigurationGenerationParameters{
+						ConfigMapName: configMapName,
+					},
+					Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+						Refresh: &acpv1.DynamicConfigurationRefreshParameters{
+							Interval: "5s",
+							Enabled:  true,
+							Monitoring: &acpv1.RefreshMonitoring{
+								Sentinels: []acpv1.Sentinel{
+									{Key: "testKey", Label: "testLabel"},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
+			configmap := &corev1.ConfigMap{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(configmap.Name).Should(Equal(configMapName))
+			Expect(configmap.Namespace).Should(Equal(ProviderNamespace))
+			Expect(configmap.Labels["foo"]).Should(Equal("fooValue"))
+			Expect(configmap.Labels["bar"]).Should(Equal("barValue"))
+			Expect(configmap.Data["testKey"]).Should(Equal("testValue"))
+			Expect(configmap.Data["testKey2"]).Should(Equal("testValue2"))
+			Expect(configmap.Data["testKey3"]).Should(Equal("testValue3"))
+
+			time.Sleep(6 * time.Second)
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(configmap.Data["testKey"]).Should(Equal("newtestValue"))
+			Expect(configmap.Data["testKey2"]).Should(Equal("newtestValue2"))
+			Expect(configmap.Data["testKey3"]).Should(Equal("newtestValue3"))
+
+			k8sClient.Delete(ctx, configProvider)
+		})
+
+		It("Should refresh secret", func() {
+			By("By enabling refresh on secret")
+			configMapResult := make(map[string]string)
+			configMapResult["testKey"] = "testValue"
+			configMapResult["testKey2"] = "testValue2"
+			configMapResult["testKey3"] = "testValue3"
+
+			secretResult := make(map[string][]byte)
+			secretResult["testSecretKey"] = []byte("testSecretValue")
+			secretResult["testSecretKey2"] = []byte("testSecretValue2")
+			secretResult["testSecretKey3"] = []byte("testSecretValue3")
+
+			secretName := "secret-to-be-refreshed-3"
+			allSettings := &loader.TargetKeyValueSettings{
+				SecretSettings: map[string]corev1.Secret{
+					secretName: {
+						Data: secretResult,
+						Type: corev1.SecretType("Opaque"),
+					},
+				},
+				ConfigMapSettings: configMapResult,
+				SecretReferences: map[string]*loader.TargetSecretReference{
+					secretName: {
+						Type:        corev1.SecretType("Opaque"),
+						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+					},
+				},
+			}
+
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+
+			ctx := context.Background()
+			providerName := "refresh-appconfigurationprovider-3"
+			configMapName := "configmap-to-be-refreshed-3"
+
+			configProvider := &acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "appconfig.kubernetes.config/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      providerName,
+					Namespace: ProviderNamespace,
+				},
+				Spec: acpv1.AzureAppConfigurationProviderSpec{
+					Endpoint: &EndpointName,
+					Target: acpv1.ConfigurationGenerationParameters{
+						ConfigMapName: configMapName,
+					},
+					Secret: &acpv1.SecretReference{
+						Target: acpv1.SecretGenerationParameters{
+							SecretName: secretName,
+						},
+						Refresh: &acpv1.RefreshSettings{
+							Interval: "1m",
+							Enabled:  true,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
+			configmap := &corev1.ConfigMap{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
+				if err != nil {
+					fmt.Print(err.Error())
+				}
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			secretLookupKey := types.NamespacedName{Name: secretName, Namespace: ProviderNamespace}
+			secret := &corev1.Secret{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, secretLookupKey, secret)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(configmap.Name).Should(Equal(configMapName))
+			Expect(configmap.Namespace).Should(Equal(ProviderNamespace))
+			Expect(configmap.Data["testKey"]).Should(Equal("testValue"))
+			Expect(configmap.Data["testKey2"]).Should(Equal("testValue2"))
+			Expect(configmap.Data["testKey3"]).Should(Equal("testValue3"))
+
+			Expect(secret.Namespace).Should(Equal(ProviderNamespace))
+			Expect(string(secret.Data["testSecretKey"])).Should(Equal("testSecretValue"))
+			Expect(string(secret.Data["testSecretKey2"])).Should(Equal("testSecretValue2"))
+			Expect(string(secret.Data["testSecretKey3"])).Should(Equal("testSecretValue3"))
+			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
+
+			newSecretResult := make(map[string][]byte)
+			newSecretResult["testSecretKey"] = []byte("newTestSecretValue")
+			newSecretResult["testSecretKey2"] = []byte("newTestSecretValue2")
+			newSecretResult["testSecretKey3"] = []byte("newTestSecretValue3")
+
+			newResolvedSecret := map[string]corev1.Secret{
+				secretName: {
+					Data: newSecretResult,
+					Type: corev1.SecretType("Opaque"),
+				},
+			}
+
+			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newResolvedSecret, nil)
+			// Refresh interval is 1 minute, wait for 65 seconds to make sure the refresh is triggered
+			time.Sleep(65 * time.Second)
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, secretLookupKey, secret)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(secret.Namespace).Should(Equal(ProviderNamespace))
+			Expect(string(secret.Data["testSecretKey"])).Should(Equal("newTestSecretValue"))
+			Expect(string(secret.Data["testSecretKey2"])).Should(Equal("newTestSecretValue2"))
+			Expect(string(secret.Data["testSecretKey3"])).Should(Equal("newTestSecretValue3"))
+			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 		})
 	})
 
@@ -431,7 +771,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec: Both endpoint and connectionStringReference field are set"))
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec: both endpoint and connectionStringReference field are set"))
 		})
 
 		It("Should return error if configMapData key is set when type is default", func() {
@@ -502,6 +842,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should return error if feature flag is set when data type is default", func() {
 			configMapName := "test-configmap"
+			testKey := "testKey"
 			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
@@ -510,7 +851,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
 					Selectors: []acpv1.Selector{
 						{
-							KeyFilter: "testKey",
+							KeyFilter: &testKey,
 						},
 					},
 				},
@@ -521,6 +862,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should return error if feature flag is set when data type is properties", func() {
 			configMapName := "test-configmap"
+			testKeyFilter := "testKeyFilter"
 			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
@@ -533,7 +875,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
 					Selectors: []acpv1.Selector{
 						{
-							KeyFilter: "testKeyFilter",
+							KeyFilter: &testKeyFilter,
 						},
 					},
 				},
@@ -567,7 +909,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec: One of endpoint and connectionStringReference field must be set"))
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec: one of endpoint and connectionStringReference field must be set"))
 		})
 
 		It("Should return error when both connectionStringReference and auth object are set", func() {
@@ -655,6 +997,63 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 
 			Expect(verifyObject(configProviderSpec)).Should(BeNil())
+		})
+
+		It("Should return error when incorrectly configure the selector", func() {
+			configMapName := "test-configmap"
+			connectionStringReference := "fakeSecret"
+			testKey := "testKey"
+			testSnapshot := "testSnapshot"
+			testLabel := "testLabel"
+			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+				ConnectionStringReference: &connectionStringReference,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter:    &testKey,
+							SnapshotName: &testSnapshot,
+						},
+					},
+				},
+			}
+
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.configuration.selectors: set both keyFilter and snapshotName in one selector causes ambiguity, only one of them should be set"))
+
+			configProviderSpec2 := acpv1.AzureAppConfigurationProviderSpec{
+				ConnectionStringReference: &connectionStringReference,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acpv1.Selector{
+						{
+							SnapshotName: &testSnapshot,
+							LabelFilter:  &testLabel,
+						},
+					},
+				},
+			}
+
+			Expect(verifyObject(configProviderSpec2).Error()).Should(Equal("spec.configuration.selectors: labelFilter is not allowed when snapshotName is set"))
+
+			configProviderSpec3 := acpv1.AzureAppConfigurationProviderSpec{
+				ConnectionStringReference: &connectionStringReference,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: configMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acpv1.Selector{
+						{
+							LabelFilter: &testLabel,
+						},
+					},
+				},
+			}
+
+			Expect(verifyObject(configProviderSpec3).Error()).Should(Equal("spec.configuration.selectors: one of keyFilter and snapshotName field must be set"))
 		})
 	})
 

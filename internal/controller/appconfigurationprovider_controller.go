@@ -76,7 +76,7 @@ const (
 //+kubebuilder:rbac:groups=azconfig.io,resources=azureappconfigurationproviders/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=azconfig.io,resources=azureappconfigurationproviders/finalizers,verbs=update
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;watch
-//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;patch;watch
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;delete;patch;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -250,6 +250,22 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 
 	/* Create secret when there are secret settings */
 	if processor.RefreshOptions.SecretSettingPopulated {
+		// Verify the existence of the secret which is not owned by the current provider
+		for name := range processor.Settings.SecretSettings {
+			if _, ok := existingSecrets[name]; !ok {
+				_, err := reconciler.verifyTargetObjectExistence(ctx, provider, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name,
+					},
+				})
+
+				if err != nil {
+					reconciler.logAndSetFailStatus(ctx, err, provider)
+					return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
+				}
+			}
+		}
+
 		result, err := reconciler.createOrUpdateSecrets(ctx, provider, processor.Settings)
 		if err != nil {
 			return result, nil
@@ -413,6 +429,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 			},
 			Type: secret.Type,
 		}
+
 		// Important: set the ownership of secret
 		if err := controllerutil.SetControllerReference(provider, secretObj, reconciler.Scheme); err != nil {
 			reconciler.logAndSetFailStatus(ctx, err, provider)

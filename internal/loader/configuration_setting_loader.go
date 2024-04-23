@@ -189,6 +189,14 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 		SecretSettings:       make(map[string]corev1.Secret),
 		SecretReferences:     make(map[string]*TargetSecretReference),
 	}
+
+	if csl.Spec.Secret != nil {
+		rawSettings.SecretReferences[csl.Spec.Secret.Target.SecretName] = &TargetSecretReference{
+			Type:        corev1.SecretTypeOpaque,
+			UriSegments: make(map[string]KeyVaultSecretUriSegment),
+		}
+	}
+
 	resolver := secretReferenceResolver
 
 	for _, setting := range settings {

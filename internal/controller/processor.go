@@ -215,15 +215,15 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 		}
 	}
 
-	resolvedSecretData, err := (*processor.Retriever).ResolveSecretReferences(processor.Context, secretReferencesToSolve, processor.SecretReferenceResolver)
+	resolvedSecrets, err := (*processor.Retriever).ResolveSecretReferences(processor.Context, secretReferencesToSolve, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}
 
-	for secretName, targetSecret := range resolvedSecretData {
+	for secretName, resolvedSecret := range resolvedSecrets {
 		existingSecret, ok := existingSecrets[secretName]
 		if ok {
-			maps.Copy(existingSecret.Data, targetSecret.Data)
+			maps.Copy(existingSecret.Data, resolvedSecret.Data)
 		}
 	}
 	processor.Settings.SecretSettings = existingSecrets

@@ -270,8 +270,11 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		if err != nil {
 			return result, nil
 		}
+	}
 
-		result, err = reconciler.expelRemovedSecrets(ctx, provider, existingSecrets, processor.ReconciliationState.ExistingSecretReferences)
+	// Expel the secrets which are no longer selected by the provider.
+	if provider.Spec.Secret == nil || processor.RefreshOptions.SecretSettingPopulated {
+		result, err := reconciler.expelRemovedSecrets(ctx, provider, existingSecrets, processor.ReconciliationState.ExistingSecretReferences)
 		if err != nil {
 			return result, nil
 		}

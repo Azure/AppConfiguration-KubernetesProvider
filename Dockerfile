@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang:1.22-cbl-mariner2.0 as builder
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.22-cbl-mariner2.0 as builder
  
 ARG MODULE_VERSION
 WORKDIR /workspace
@@ -16,14 +16,12 @@ COPY api/ api/
 COPY internal/controller/ internal/controller/
 COPY internal/loader/ internal/loader/
 COPY internal/properties/ internal/properties/
- 
-ARG TARGETARCH
- 
+
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags "-X azappconfig/provider/internal/properties.ModuleVersion=$MODULE_VERSION" -a -o manager cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X azappconfig/provider/internal/properties.ModuleVersion=$MODULE_VERSION" -a -o manager cmd/main.go
  
 # Use distroless as minimal base image to package the manager binary
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/cbl-mariner/distroless/minimal:2.0-nonroot
+FROM mcr.microsoft.com/cbl-mariner/distroless/minimal:2.0-nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532

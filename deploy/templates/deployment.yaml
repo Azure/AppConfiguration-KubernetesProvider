@@ -51,6 +51,10 @@ spec:
         - name: AZURE_TENANT_ID
           value: {{ .Values.env.azureTenantId }}
         {{- end }}
+        - name: WORKLOAD_IDENTITY_ENABLED
+          value: {{ .Values.workloadIdentity.enabled }}
+        - name: WORKLOAD_IDENTITY_CUSTOM_SERVICE_ACCOUNT_ONLY
+          value: {{ .Values.workloadIdentity.allowCustomServiceAccount }}
         livenessProbe:
           httpGet:
             path: /healthz

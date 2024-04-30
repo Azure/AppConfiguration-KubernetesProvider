@@ -1123,9 +1123,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 			Expect(verifyAuthObject(authObj).Error()).Should(Equal("auth: ManagedIdentityClientId \"not-a-uuid\" in auth field is not a valid uuid"))
 			Expect(verifyAuthObject(authObj2).Error()).Should(Equal("auth: more than one authentication methods are specified in 'auth' field"))
-			Expect(verifyAuthObject(authObj3).Error()).Should(Equal("auth.workloadIdentity: only one of managedIdentityClientId and managedIdentityClientIdReference is allowed"))
+			Expect(verifyAuthObject(authObj3).Error()).Should(Equal("auth.workloadIdentity: only one of managedIdentityClientId, managedIdentityClientIdReference and serviceAccountName is allowed"))
 			Expect(verifyAuthObject(authObj4).Error()).Should(Equal("auth.workloadIdentity.managedIdentityClientId: managedIdentityClientId \"not-a-uuid\" in auth.workloadIdentity is not a valid uuid"))
-			Expect(verifyAuthObject(authObj5).Error()).Should(Equal("auth.workloadIdentity: one of managedIdentityClientId and managedIdentityClientIdReference is required"))
+			Expect(verifyAuthObject(authObj5).Error()).Should(Equal("auth.workloadIdentity: one of managedIdentityClientId, managedIdentityClientIdReference and serviceAccountName is required"))
 		})
 	})
 

@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"net"
 	"net/url"
 	"strconv"
@@ -16,16 +17,19 @@ import (
 
 	acpv1 "azappconfig/provider/api/v1"
 
-	"math/rand"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	"github.com/google/uuid"
+	authv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 //go:generate mockgen -destination=mocks/mock_configuration_client_manager.go -package mocks . ClientManager
@@ -70,6 +74,9 @@ const (
 	MinBackoffDuration                  time.Duration = time.Second * 30
 	JitterRatio                         float64       = 0.25
 	SafeShiftLimit                      int           = 63
+	AzureDefaultAudience                string        = "api://AzureADTokenExchange"
+	AnnotationClientID                  string        = "azure.workload.identity/client-id"
+	AnnotationTenantID                  string        = "azure.workload.identity/tenant-id"
 )
 
 var (
@@ -362,10 +369,15 @@ func CreateTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigura
 	// If User explicitly specify the authentication method
 	if acpAuth != nil {
 		if acpAuth.WorkloadIdentity != nil {
+			if acpAuth.WorkloadIdentity.ServiceAccountName != nil {
+				return newClientAssertionCredential(ctx, *acpAuth.WorkloadIdentity.ServiceAccountName, namespace)
+			}
+
 			workloadIdentityClientId, err := getWorkloadIdentityClientId(ctx, acpAuth.WorkloadIdentity, namespace)
 			if err != nil {
 				return nil, fmt.Errorf("fail to retrieve workload identity client ID from configMap '%s' : %s", acpAuth.WorkloadIdentity.ManagedIdentityClientIdReference.ConfigMap, err.Error())
 			}
+
 			return azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
 				ClientID: workloadIdentityClientId,
 			})
@@ -375,6 +387,7 @@ func CreateTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigura
 			if err != nil {
 				return nil, fmt.Errorf("fail to retrieve service principal secret from '%s': %s", *acpAuth.ServicePrincipalReference, err.Error())
 			}
+
 			return azidentity.NewClientSecretCredential(parameter.TenantId, parameter.ClientId, parameter.ClientSecret, nil)
 		}
 		if acpAuth.ManagedIdentityClientId != nil {
@@ -460,4 +473,60 @@ func Jitter(duration time.Duration) time.Duration {
 
 	// Apply the random jitter to the original duration
 	return duration + time.Duration(randomJitter)
+}
+
+func newClientAssertionCredential(ctx context.Context, serviceAccountName string, serviceAccountNamespace string) (azcore.TokenCredential, error) {
+	cfg, err := ctrlcfg.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := client.New(cfg, client.Options{})
+	if err != nil {
+		return nil, err
+	}
+
+	serviceAccountObj := &corev1.ServiceAccount{}
+	err = client.Get(ctx, types.NamespacedName{Namespace: serviceAccountNamespace, Name: serviceAccountName}, serviceAccountObj)
+	if err != nil {
+		return nil, err
+	}
+
+	clientId := serviceAccountObj.ObjectMeta.Annotations[AnnotationClientID]
+	tenantId := serviceAccountObj.Annotations[AnnotationTenantID]
+	getAssertionFunc := newGetAssertionFunc(serviceAccountNamespace, serviceAccountName)
+
+	clientAssertionCredential, err := azidentity.NewClientAssertionCredential(tenantId, clientId, getAssertionFunc, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientAssertionCredential, nil
+}
+
+func newGetAssertionFunc(serviceAccountNamespace string, serviceAccountName string) func(ctx context.Context) (string, error) {
+	audiences := []string{AzureDefaultAudience}
+
+	return func(ctx context.Context) (string, error) {
+		cfg, err := ctrlcfg.GetConfig()
+		if err != nil {
+			return "", err
+		}
+
+		kubeClient, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			return "", err
+		}
+
+		token, err := kubeClient.CoreV1().ServiceAccounts(serviceAccountNamespace).CreateToken(ctx, serviceAccountName, &authv1.TokenRequest{
+			Spec: authv1.TokenRequestSpec{
+				Audiences: audiences,
+			},
+		}, metav1.CreateOptions{})
+		if err != nil {
+			return "", err
+		}
+
+		return token.Status.Token, nil
+	}
 }

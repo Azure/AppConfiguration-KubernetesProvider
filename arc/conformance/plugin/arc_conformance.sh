@@ -49,7 +49,7 @@ setEnviornmentVariables() {
 
 # setup kubeconfig for conformance test
 setupKubeConfig() {
-  KUBECTL_CONTEXT=azure-arc-test
+  KUBECTL_CONTEXT=azure-arc-appconfig-test
   APISERVER=https://kubernetes.default.svc/
   TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
   cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt > ca.crt
@@ -150,12 +150,6 @@ az k8s-extension create \
       --cluster-type managedClusters \
       --release-train preview \
       --release-namespace kube-system 2> "${results_dir}"/error || python3 /arc/setup_failure_handler.py
-
-# wait for secrets store csi driver and provider pods
-kubectl wait pod -n kube-system --for=condition=Ready -l app=secrets-store-csi-driver --timeout=5m
-kubectl wait pod -n kube-system --for=condition=Ready -l app=csi-secrets-store-provider-azure --timeout=5m
-
-/arc/e2e -ginkgo.v -ginkgo.skip="${GINKGO_SKIP}" -ginkgo.focus="${GINKGO_FOCUS}"
 
 # clean up test resources
 echo "INFO: cleaning up test resources" 

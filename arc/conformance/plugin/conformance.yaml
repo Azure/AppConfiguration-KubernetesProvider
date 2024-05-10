@@ -3,7 +3,7 @@ sonobuoy-config:
   plugin-name: azure-arc-app-config-provider
   result-format: junit
 spec:
-  image: 
+  image: mcr.microsoft.com/azure-app-configuration/extension-test-plugin:latest # Currently, the image is not available
   imagePullPolicy: IfNotPresent
   name: plugin
   resources: {}

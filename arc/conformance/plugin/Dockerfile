@@ -1,5 +1,4 @@
 FROM mcr.microsoft.com/azure-cli:latest
-FROM bitnami/kubectl:1.20.9 as kubectl
 ARG KUBE_VERSION=v1.25.3
 ARG TARGETARCH
 
@@ -14,6 +13,3 @@ COPY arc/conformance/plugin/setup_failure_handler.py /arc/setup_failure_handler.
 
 RUN ["chmod", "+x", "/arc/arc_conformance.sh"]
 ENTRYPOINT ["/arc/arc_conformance.sh"]
-
-# install kubectl
-COPY --from=kubectl /opt/bitnami/kubectl/bin/kubectl /usr/local/bin/

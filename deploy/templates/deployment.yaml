@@ -52,9 +52,9 @@ spec:
           value: {{ .Values.env.azureTenantId }}
         {{- end }}
         - name: WORKLOAD_IDENTITY_ENABLED
-          value: {{ .Values.workloadIdentity.enabled }}
-        - name: WORKLOAD_IDENTITY_CUSTOM_SERVICE_ACCOUNT_ONLY
-          value: {{ .Values.workloadIdentity.allowCustomServiceAccount }}
+          value: "{{ .Values.workloadIdentity.enabled }}"
+        - name: WORKLOAD_IDENTITY_DISABLE_GLOBAL_SERVICE_ACCOUNT
+          value: "{{ .Values.workloadIdentity.disableGlobalServiceAccount }}"
         livenessProbe:
           httpGet:
             path: /healthz

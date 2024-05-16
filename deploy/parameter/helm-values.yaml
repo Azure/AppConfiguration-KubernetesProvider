@@ -17,7 +17,7 @@ fullnameOverride: "az-appconfig-k8s-provider"
 
 workloadIdentity:
   enabled: true
-  customServiceAccountOnly: false
+  disableGlobalServiceAccount: false
 
 serviceAccount:
   # Specifies whether a service account should be created

@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -198,10 +199,10 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.C
 
 	select {
 	case <-newCtx.Done():
-		klog.Warningf("fail to build fall back clients, SRV DNS lookup is timeout")
+		klog.Warningf("fail to build fallback clients, SRV DNS lookup is timeout")
 		break
 	case err := <-errChan:
-		klog.Warningf("fail to build fall back clients %s", err.Error())
+		klog.Warningf("fail to build fallback clients %s", err.Error())
 		break
 	case srvTargetHosts := <-resultChan:
 		// Shuffle the list of SRV target hosts
@@ -492,11 +493,22 @@ func newClientAssertionCredential(ctx context.Context, serviceAccountName string
 		return nil, err
 	}
 
-	clientId := serviceAccountObj.ObjectMeta.Annotations[AnnotationClientID]
-	tenantId := serviceAccountObj.Annotations[AnnotationTenantID]
+	tenantId, ok := os.LookupEnv(strings.ToUpper(AzureTenantId))
+	if !ok {
+		return nil, fmt.Errorf("no tenant ID specified. Check pod configuration or set TenantID in the options")
+	}
+
+	if _, ok := serviceAccountObj.Annotations[AnnotationClientID]; !ok {
+		return nil, fmt.Errorf("service account %s/%s does not have annotation %s", serviceAccountNamespace, serviceAccountName, AnnotationClientID)
+	}
+
+	if _, ok := serviceAccountObj.Annotations[AnnotationTenantID]; ok {
+		tenantId = serviceAccountObj.Annotations[AnnotationTenantID]
+	}
+
 	getAssertionFunc := newGetAssertionFunc(serviceAccountNamespace, serviceAccountName)
 
-	clientAssertionCredential, err := azidentity.NewClientAssertionCredential(tenantId, clientId, getAssertionFunc, nil)
+	clientAssertionCredential, err := azidentity.NewClientAssertionCredential(tenantId, serviceAccountObj.Annotations[AnnotationClientID], getAssertionFunc, nil)
 	if err != nil {
 		return nil, err
 	}

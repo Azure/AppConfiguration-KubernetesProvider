@@ -95,13 +95,13 @@ if [ -z "${AZURE_CLIENT_SECRET}" ]; then
   python3 /arc/setup_failure_handler.py
 fi
 
-if [ -z "${ARC_CLUSTER_NAME}" ]; then
-  echo "ERROR: parameter ARC_CLUSTER_NAME is required." > "${results_dir}"/error
+if [ -z "${CLUSTER_NAME}" ]; then
+  echo "ERROR: parameter CLUSTER_NAME is required." > "${results_dir}"/error
   python3 /arc/setup_failure_handler.py
 fi
 
-if [ -z "${ARC_CLUSTER_RG}" ]; then
-  echo "ERROR: parameter ARC_CLUSTER_RG is required." > "${results_dir}"/error
+if [ -z "${CLUSTER_RG}" ]; then
+  echo "ERROR: parameter CLUSTER_RG is required." > "${results_dir}"/error
   python3 /arc/setup_failure_handler.py
 fi
 
@@ -146,8 +146,8 @@ echo "INFO: Creating extension"
 az k8s-extension create \
       --name appconfigurationkubernetesprovider \
       --extension-type Microsoft.AppConfiguration \
-      --cluster-name "${ARC_CLUSTER_NAME}" \
-      --resource-group "${ARC_CLUSTER_RG}" \
+      --cluster-name "${CLUSTER_NAME}" \
+      --resource-group "${CLUSTER_RG}" \
       --cluster-type managedClusters \
       --release-train preview 2> "${results_dir}"/error || python3 /arc/setup_failure_handler.py
 
@@ -158,9 +158,9 @@ kubectl wait pod -n azappconfig-system --for=condition=Ready -l app.kubernetes.i
 echo "INFO: cleaning up test resources" 
 az k8s-extension delete \
   --name appconfigurationkubernetesprovider \
-  --resource-group "${ARC_CLUSTER_RG}" \
+  --resource-group "${CLUSTER_RG}" \
   --cluster-type managedClusters \
-  --cluster-name "${ARC_CLUSTER_NAME}" \
+  --cluster-name "${CLUSTER_NAME}" \
   --force \
   --yes \
   --no-wait

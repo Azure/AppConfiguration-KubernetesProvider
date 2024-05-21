@@ -248,14 +248,14 @@ func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityPa
 
 	if workloadIdentity.ManagedIdentityClientId != nil {
 		if strings.EqualFold(os.Getenv(WorkloadIdentityDisableGlobalServiceAccount), "true") {
-			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientId", fmt.Errorf("managedIdentityClientId is not allowed since only custom service account is allowed"))
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientId", fmt.Errorf("'managedIdentityClientId' is not allowed since global service account is disabled"))
 		}
 		authCount++
 	}
 
 	if workloadIdentity.ManagedIdentityClientIdReference != nil {
 		if strings.EqualFold(os.Getenv(WorkloadIdentityDisableGlobalServiceAccount), "true") {
-			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientIdReference", fmt.Errorf("managedIdentityClientIdReference is not allowed since only custom service account is allowed"))
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientIdReference", fmt.Errorf("'managedIdentityClientIdReference' is not allowed since global service account is disabled"))
 		}
 		authCount++
 	}
@@ -265,11 +265,11 @@ func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityPa
 	}
 
 	if authCount == 0 {
-		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("one of managedIdentityClientId, managedIdentityClientIdReference and serviceAccountName is required"))
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("setting one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is required"))
 	}
 
 	if authCount > 1 {
-		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("only one of managedIdentityClientId, managedIdentityClientIdReference and serviceAccountName is allowed"))
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("setting only one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is allowed"))
 	}
 
 	if workloadIdentity.ManagedIdentityClientId != nil {

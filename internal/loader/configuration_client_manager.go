@@ -75,7 +75,7 @@ const (
 	MinBackoffDuration                  time.Duration = time.Second * 30
 	JitterRatio                         float64       = 0.25
 	SafeShiftLimit                      int           = 63
-	AzureDefaultAudience                string        = "api://AzureADTokenExchange"
+	ApiTokenExchangeAudience            string        = "api://AzureADTokenExchange"
 	AnnotationClientID                  string        = "azure.workload.identity/client-id"
 	AnnotationTenantID                  string        = "azure.workload.identity/tenant-id"
 )
@@ -493,17 +493,18 @@ func newClientAssertionCredential(ctx context.Context, serviceAccountName string
 		return nil, err
 	}
 
-	tenantId, ok := os.LookupEnv(strings.ToUpper(AzureTenantId))
-	if !ok {
-		return nil, fmt.Errorf("no tenant ID specified. Check pod configuration or set TenantID in the options")
+	if _, ok := serviceAccountObj.Annotations[AnnotationClientID]; !ok {
+		return nil, fmt.Errorf("annotation '%s' of service account %s/%s is required", AnnotationClientID, serviceAccountNamespace, serviceAccountName)
 	}
 
-	if _, ok := serviceAccountObj.Annotations[AnnotationClientID]; !ok {
-		return nil, fmt.Errorf("service account %s/%s does not have annotation %s", serviceAccountNamespace, serviceAccountName, AnnotationClientID)
-	}
+	tenantId := ""
 
 	if _, ok := serviceAccountObj.Annotations[AnnotationTenantID]; ok {
 		tenantId = serviceAccountObj.Annotations[AnnotationTenantID]
+	} else if _, ok := os.LookupEnv(strings.ToUpper(AzureTenantId)); ok {
+		tenantId = os.Getenv(strings.ToUpper(AzureTenantId))
+	} else {
+		return nil, fmt.Errorf("annotation '%s' of service account %s/%s is required since using global service account for workload identity is disabled", AnnotationTenantID, serviceAccountNamespace, serviceAccountName)
 	}
 
 	getAssertionFunc := newGetAssertionFunc(serviceAccountNamespace, serviceAccountName)
@@ -517,7 +518,7 @@ func newClientAssertionCredential(ctx context.Context, serviceAccountName string
 }
 
 func newGetAssertionFunc(serviceAccountNamespace string, serviceAccountName string) func(ctx context.Context) (string, error) {
-	audiences := []string{AzureDefaultAudience}
+	audiences := []string{ApiTokenExchangeAudience}
 
 	return func(ctx context.Context) (string, error) {
 		cfg, err := ctrlcfg.GetConfig()

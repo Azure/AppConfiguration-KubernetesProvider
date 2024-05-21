@@ -53,7 +53,7 @@ rules:
   - patch
   - update
   - watch
-{{- if eq .Values.workloadIdentity.enabled true }}
+{{- if .Values.workloadIdentity.enabled }}
 - apiGroups:
   - ""
   resources:

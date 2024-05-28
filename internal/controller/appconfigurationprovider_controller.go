@@ -38,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // AzureAppConfigurationProviderReconciler reconciles a AzureAppConfigurationProvider object
@@ -500,10 +499,10 @@ func newProviderStatus(
 func (r *AzureAppConfigurationProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&acpv1.AzureAppConfigurationProvider{}, builder.WithPredicates(newEventFilter())).
-		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
+		Watches(&corev1.ConfigMap{},
 			&EnqueueRequestsFromWatchedObject{},
 			builder.WithPredicates(WatchedObjectPredicate{})).
-		Watches(&source.Kind{Type: &corev1.Secret{}},
+		Watches(&corev1.Secret{},
 			&EnqueueRequestsFromWatchedObject{},
 			builder.WithPredicates(WatchedObjectPredicate{})).
 		Complete(r)

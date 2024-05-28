@@ -6,7 +6,7 @@ toolchain go1.22.1
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.9.1
-	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.12.0
+	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets v1.1.0
 	github.com/golang/mock v1.6.0
 	github.com/onsi/gomega v1.33.1
 	golang.org/x/crypto v0.23.0
@@ -18,7 +18,7 @@ require (
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.5.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal v1.0.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect

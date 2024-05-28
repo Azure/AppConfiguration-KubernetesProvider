@@ -68,10 +68,10 @@ func main() {
 	ctrl.SetLogger(klog.NewKlogr())
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
+		Scheme: scheme,
 		Metrics: metricsserver.Options{
-            BindAddress:   metricsAddr,
-        },
+			BindAddress: metricsAddr,
+		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "leader.elect.locker.azappconfig.io",

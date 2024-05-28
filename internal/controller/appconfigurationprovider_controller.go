@@ -353,7 +353,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) requeueWhenGetSetting
 		retryAfter, err := strconv.Atoi(respErr.RawResponse.Header.Get(HeaderRetryAfter))
 		if err == nil {
 			requeueAfter = time.Duration(retryAfter) * time.Second
-			klog.Error("Too many requests to the Azure App Configuration endpoint %q, retry the reconciliation after %d seconds", provider.Spec.Endpoint, retryAfter)
+			klog.Errorf("Too many requests to the Azure App Configuration endpoint %s, retry the reconciliation after %d seconds", *provider.Spec.Endpoint, retryAfter)
 		} else {
 			klog.ErrorS(err, "Fail to parse the response header 'Retry-After'")
 		}

@@ -24,13 +24,37 @@ spec:
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
       {{- end }}
-      {{- if .Values.affinity }}
       affinity:
+      {{- if .Values.affinity }}
         {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else }}
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: kubernetes.azure.com/mode
+                operator: In
+                values:
+                - system
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: NotIn
+                values:
+                - windows
+              - key: type
+                operator: NotIn
+                values:
+                - virtual-kubelet
       {{- end }}
-      {{- if .Values.tolerations }}
       tolerations:
-        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- if .Values.tolerations }}
+        {{- toYaml .Values.tolerations | nindent 6 }}
+      {{- else }}
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
       {{- end }}
       containers:
       - args:

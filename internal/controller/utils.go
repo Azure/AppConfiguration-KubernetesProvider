@@ -8,6 +8,7 @@ import (
 	"azappconfig/provider/internal/loader"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -16,9 +17,11 @@ import (
 )
 
 const (
-	MinimalSentinelBasedRefreshInterval time.Duration = time.Second
-	MinimalSecretRefreshInterval        time.Duration = time.Minute
-	MinimalFeatureFlagRefreshInterval   time.Duration = time.Second
+	MinimalSentinelBasedRefreshInterval         time.Duration = time.Second
+	MinimalSecretRefreshInterval                time.Duration = time.Minute
+	MinimalFeatureFlagRefreshInterval           time.Duration = time.Second
+	WorkloadIdentityEnabled                     string        = "WORKLOAD_IDENTITY_ENABLED"
+	WorkloadIdentityDisableGlobalServiceAccount string        = "WORKLOAD_IDENTITY_DISABLE_GLOBAL_SERVICE_ACCOUNT"
 )
 
 func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
@@ -204,7 +207,7 @@ func verifyExistingTargetObject[T client.Object](targetObj T, targetName string,
 		}
 	}
 
-	return fmt.Errorf("A %s with name '%s' already exists in namespace '%s'", objectKind, targetName, targetObj.GetNamespace())
+	return fmt.Errorf("a %s with name '%s' already exists in namespace '%s'", objectKind, targetName, targetObj.GetNamespace())
 }
 
 func hasNonEscapedValueInLabel(label string) bool {
@@ -237,12 +240,36 @@ func verifyRefreshInterval(interval string, allowedMinimalRefreshInterval time.D
 }
 
 func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityParameters) error {
-	if workloadIdentity.ManagedIdentityClientId == nil && workloadIdentity.ManagedIdentityClientIdReference == nil {
-		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("one of managedIdentityClientId and managedIdentityClientIdReference is required"))
+	if !strings.EqualFold(os.Getenv(WorkloadIdentityEnabled), "true") {
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("workloadIdentity is not enabled"))
 	}
 
-	if workloadIdentity.ManagedIdentityClientId != nil && workloadIdentity.ManagedIdentityClientIdReference != nil {
-		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("only one of managedIdentityClientId and managedIdentityClientIdReference is allowed"))
+	var authCount int = 0
+
+	if workloadIdentity.ManagedIdentityClientId != nil {
+		if strings.EqualFold(os.Getenv(WorkloadIdentityDisableGlobalServiceAccount), "true") {
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientId", fmt.Errorf("'managedIdentityClientId' is not allowed since global service account is disabled"))
+		}
+		authCount++
+	}
+
+	if workloadIdentity.ManagedIdentityClientIdReference != nil {
+		if strings.EqualFold(os.Getenv(WorkloadIdentityDisableGlobalServiceAccount), "true") {
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientIdReference", fmt.Errorf("'managedIdentityClientIdReference' is not allowed since global service account is disabled"))
+		}
+		authCount++
+	}
+
+	if workloadIdentity.ServiceAccountName != nil {
+		authCount++
+	}
+
+	if authCount == 0 {
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("setting one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is required"))
+	}
+
+	if authCount > 1 {
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("setting only one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is allowed"))
 	}
 
 	if workloadIdentity.ManagedIdentityClientId != nil {

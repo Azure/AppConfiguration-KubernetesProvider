@@ -8,24 +8,29 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	acpv1 "azappconfig/provider/api/v1"
 
-	"math/rand"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	"github.com/google/uuid"
+	authv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 //go:generate mockgen -destination=mocks/mock_configuration_client_manager.go -package mocks . ClientManager
@@ -70,6 +75,9 @@ const (
 	MinBackoffDuration                  time.Duration = time.Second * 30
 	JitterRatio                         float64       = 0.25
 	SafeShiftLimit                      int           = 63
+	ApiTokenExchangeAudience            string        = "api://AzureADTokenExchange"
+	AnnotationClientID                  string        = "azure.workload.identity/client-id"
+	AnnotationTenantID                  string        = "azure.workload.identity/tenant-id"
 )
 
 var (
@@ -191,10 +199,10 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.C
 
 	select {
 	case <-newCtx.Done():
-		klog.Warningf("fail to build fall back clients, SRV DNS lookup is timeout")
+		klog.Warningf("fail to build fallback clients, SRV DNS lookup is timeout")
 		break
 	case err := <-errChan:
-		klog.Warningf("fail to build fall back clients %s", err.Error())
+		klog.Warningf("fail to build fallback clients %s", err.Error())
 		break
 	case srvTargetHosts := <-resultChan:
 		// Shuffle the list of SRV target hosts
@@ -362,10 +370,15 @@ func CreateTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigura
 	// If User explicitly specify the authentication method
 	if acpAuth != nil {
 		if acpAuth.WorkloadIdentity != nil {
+			if acpAuth.WorkloadIdentity.ServiceAccountName != nil {
+				return newClientAssertionCredential(ctx, *acpAuth.WorkloadIdentity.ServiceAccountName, namespace)
+			}
+
 			workloadIdentityClientId, err := getWorkloadIdentityClientId(ctx, acpAuth.WorkloadIdentity, namespace)
 			if err != nil {
 				return nil, fmt.Errorf("fail to retrieve workload identity client ID from configMap '%s' : %s", acpAuth.WorkloadIdentity.ManagedIdentityClientIdReference.ConfigMap, err.Error())
 			}
+
 			return azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
 				ClientID: workloadIdentityClientId,
 			})
@@ -375,6 +388,7 @@ func CreateTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigura
 			if err != nil {
 				return nil, fmt.Errorf("fail to retrieve service principal secret from '%s': %s", *acpAuth.ServicePrincipalReference, err.Error())
 			}
+
 			return azidentity.NewClientSecretCredential(parameter.TenantId, parameter.ClientId, parameter.ClientSecret, nil)
 		}
 		if acpAuth.ManagedIdentityClientId != nil {
@@ -460,4 +474,72 @@ func Jitter(duration time.Duration) time.Duration {
 
 	// Apply the random jitter to the original duration
 	return duration + time.Duration(randomJitter)
+}
+
+func newClientAssertionCredential(ctx context.Context, serviceAccountName string, serviceAccountNamespace string) (azcore.TokenCredential, error) {
+	cfg, err := ctrlcfg.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := client.New(cfg, client.Options{})
+	if err != nil {
+		return nil, err
+	}
+
+	serviceAccountObj := &corev1.ServiceAccount{}
+	err = client.Get(ctx, types.NamespacedName{Namespace: serviceAccountNamespace, Name: serviceAccountName}, serviceAccountObj)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, ok := serviceAccountObj.Annotations[AnnotationClientID]; !ok {
+		return nil, fmt.Errorf("annotation '%s' of service account %s/%s is required", AnnotationClientID, serviceAccountNamespace, serviceAccountName)
+	}
+
+	tenantId := ""
+
+	if _, ok := serviceAccountObj.Annotations[AnnotationTenantID]; ok {
+		tenantId = serviceAccountObj.Annotations[AnnotationTenantID]
+	} else if _, ok := os.LookupEnv(strings.ToUpper(AzureTenantId)); ok {
+		tenantId = os.Getenv(strings.ToUpper(AzureTenantId))
+	} else {
+		return nil, fmt.Errorf("annotation '%s' of service account %s/%s is required since using global service account for workload identity is disabled", AnnotationTenantID, serviceAccountNamespace, serviceAccountName)
+	}
+
+	getAssertionFunc := newGetAssertionFunc(serviceAccountNamespace, serviceAccountName)
+
+	clientAssertionCredential, err := azidentity.NewClientAssertionCredential(tenantId, serviceAccountObj.Annotations[AnnotationClientID], getAssertionFunc, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientAssertionCredential, nil
+}
+
+func newGetAssertionFunc(serviceAccountNamespace string, serviceAccountName string) func(ctx context.Context) (string, error) {
+	audiences := []string{ApiTokenExchangeAudience}
+
+	return func(ctx context.Context) (string, error) {
+		cfg, err := ctrlcfg.GetConfig()
+		if err != nil {
+			return "", err
+		}
+
+		kubeClient, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			return "", err
+		}
+
+		token, err := kubeClient.CoreV1().ServiceAccounts(serviceAccountNamespace).CreateToken(ctx, serviceAccountName, &authv1.TokenRequest{
+			Spec: authv1.TokenRequestSpec{
+				Audiences: audiences,
+			},
+		}, metav1.CreateOptions{})
+		if err != nil {
+			return "", err
+		}
+
+		return token.Status.Token, nil
+	}
 }

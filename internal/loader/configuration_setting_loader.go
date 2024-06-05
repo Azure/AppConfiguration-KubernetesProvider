@@ -11,11 +11,14 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	"github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets"
 	"golang.org/x/crypto/pkcs12"
@@ -88,6 +91,7 @@ const (
 	CertTypePfx                           string = "application/x-pkcs12"
 	TlsKey                                string = "tls.key"
 	TlsCrt                                string = "tls.crt"
+	AzureExtensionContext                 string = "AZURE_EXTENSION_CONTEXT"
 )
 
 func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
@@ -453,6 +457,10 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	if len(clients) == 0 {
 		csl.ClientManager.RefreshClients(ctx)
 		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
+	}
+
+	if value, ok := os.LookupEnv(AzureExtensionContext); ok {
+		ctx = policy.WithHTTPHeader(ctx, http.Header{"Correlation-Context": []string{value}})
 	}
 
 	errors := make([]error, 0)

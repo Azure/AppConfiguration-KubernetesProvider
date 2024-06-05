@@ -55,6 +55,13 @@ spec:
           value: "{{ .Values.workloadIdentity.enabled }}"
         - name: WORKLOAD_IDENTITY_DISABLE_GLOBAL_SERVICE_ACCOUNT
           value: "{{ .Values.workloadIdentity.disableGlobalServiceAccount }}"
+        {{- if and (hasKey .Values "global") 
+            (hasKey .Values.global "azure")
+            (hasKey .Values.global.azure "extension")
+            (hasKey .Values.global.azure.extension "name") }}
+        - name: AZURE_EXTENSION_CONTEXT
+          value: UseExtension
+        {{- end }}
         livenessProbe:
           httpGet:
             path: /healthz

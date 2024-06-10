@@ -468,7 +468,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 			successful = false
 			updateClientBackoffStatus(clientWrapper, successful)
 			if IsFailoverable(err) {
-				klog.V(3).Infof("current client of '%s' failed to get settings: %s", clientWrapper.Endpoint, err.Error())
+				klog.Warningf("current client of '%s' failed to get settings: %s", clientWrapper.Endpoint, err.Error())
 				errors = append(errors, err)
 				continue
 			}

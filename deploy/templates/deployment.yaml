@@ -62,6 +62,8 @@ spec:
         - name: AZURE_EXTENSION_CONTEXT
           value: UseExtension
         {{- end }}
+        - name: REQUEST_TRACING_ENABLED
+          value: "{{ .Values.requestTracing.enabled }}"
         livenessProbe:
           httpGet:
             path: /healthz

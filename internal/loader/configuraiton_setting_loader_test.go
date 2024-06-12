@@ -17,6 +17,7 @@ import (
 	"math/big"
 	"net"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,10 +70,9 @@ func mockConfigurationSettingsWithKV() []azappconfig.Setting {
 }
 
 func mockFeatureFlagSettings() []azappconfig.Setting {
-	settingsToReturn := make([]azappconfig.Setting, 3)
+	settingsToReturn := make([]azappconfig.Setting, 2)
 	settingsToReturn[0] = newFeatureFlagSettings(".appconfig.featureflag/Beta", "label1")
-	settingsToReturn[1] = newFeatureFlagSettings(".appconfig.featureflag/Alpha", "label1")
-	settingsToReturn[2] = newFeatureFlagSettings(".appconfig.featureflag/Beta", "label1")
+	settingsToReturn[1] = newFeatureFlagSettings(".appconfig.featureflag/Beta", "label1")
 
 	return settingsToReturn
 }
@@ -99,7 +99,15 @@ func newKeyVaultSettings(key string, label string) azappconfig.Setting {
 
 func newFeatureFlagSettings(key string, label string) azappconfig.Setting {
 	featureFlagContentType := FeatureFlagContentType
-	featureFlagValue := "\"conditions\":{},\"description\":\"\",\"enabled\":false,\"id\":\"fakeId\""
+	featureFlagId := strings.TrimPrefix(key, ".appconfig.featureflag/")
+	featureFlagValue := fmt.Sprintf(`{
+		"id": "%s",
+		"description": "",
+		"enabled": false,
+		"conditions": {
+			"client_filters": []
+		}
+	}`, featureFlagId)
 
 	return azappconfig.Setting{
 		Key:         &key,
@@ -967,7 +975,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		})
 
 		It("Succeed to get all configuration settings", func() {
-			By("By loading key values and feature flags")
+			By("By loading and deduplicating feature flags")
 			featureFlagKeyFilter := "*"
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
@@ -978,9 +986,6 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 						Type: acpv1.Json,
 						Key:  "settings.json",
 					},
-				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-					TrimKeyPrefixes: []string{"app:", "test:"},
 				},
 				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
 					Selectors: []acpv1.Selector{
@@ -1002,16 +1007,15 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			settingsToReturn := mockConfigurationSettings()
 			featureFlagsToReturn := mockFeatureFlagSettings()
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(featureFlagsToReturn, nil)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(featureFlagsToReturn, nil).Times(2)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(2)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
 			Expect(err).Should(BeNil())
 			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(1))
+			Expect(allSettings.ConfigMapSettings["settings.json"]).Should(Equal("{\"feature_management\":{\"feature_flags\":[{\"conditions\":{\"client_filters\":[]},\"description\":\"\",\"enabled\":false,\"id\":\"Beta\"}]}}"))
 		})
 
 		It("Fail to get all configuration settings", func() {

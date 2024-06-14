@@ -291,11 +291,16 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 		return nil, err
 	}
 
+	deduplicateFeatureFlags := make(map[string]azappconfig.Setting, len(featureFlagSettings))
+	for _, setting := range featureFlagSettings {
+		deduplicateFeatureFlags[*setting.Key] = setting
+	}
+
 	// featureFlagSection = {"featureFlags": [{...}, {...}]}
 	var featureFlagSection = map[string]interface{}{
 		FeatureFlagSectionName: make([]interface{}, 0),
 	}
-	for _, setting := range featureFlagSettings {
+	for _, setting := range deduplicateFeatureFlags {
 		var out interface{}
 		err := json.Unmarshal([]byte(*setting.Value), &out)
 		if err != nil {

@@ -38,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // AzureAppConfigurationProviderReconciler reconciles a AzureAppConfigurationProvider object
@@ -354,7 +353,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) requeueWhenGetSetting
 		retryAfter, err := strconv.Atoi(respErr.RawResponse.Header.Get(HeaderRetryAfter))
 		if err == nil {
 			requeueAfter = time.Duration(retryAfter) * time.Second
-			klog.Error("Too many requests to the Azure App Configuration endpoint %q, retry the reconciliation after %d seconds", provider.Spec.Endpoint, retryAfter)
+			klog.Errorf("Too many requests to the Azure App Configuration endpoint %s, retry the reconciliation after %d seconds", *provider.Spec.Endpoint, retryAfter)
 		} else {
 			klog.ErrorS(err, "Fail to parse the response header 'Retry-After'")
 		}
@@ -500,10 +499,10 @@ func newProviderStatus(
 func (r *AzureAppConfigurationProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&acpv1.AzureAppConfigurationProvider{}, builder.WithPredicates(newEventFilter())).
-		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
+		Watches(&corev1.ConfigMap{},
 			&EnqueueRequestsFromWatchedObject{},
 			builder.WithPredicates(WatchedObjectPredicate{})).
-		Watches(&source.Kind{Type: &corev1.Secret{}},
+		Watches(&corev1.Secret{},
 			&EnqueueRequestsFromWatchedObject{},
 			builder.WithPredicates(WatchedObjectPredicate{})).
 		Complete(r)

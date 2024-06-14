@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
-	"github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -288,7 +288,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue := "fakeSecretValue"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value: &secretValue,
 				},
 			}
@@ -368,11 +368,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := "fake-content-type"
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -420,11 +420,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := "fake-content-type"
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -476,11 +476,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := CertTypePem
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -532,11 +532,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := CertTypePfx
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -588,11 +588,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue, _ := createFakePfx()
 			secretName := "targetSecret"
 			contentType := CertTypePfx
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -647,11 +647,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue, _ := createFakePem()
 			secretName := "targetSecret"
 			contentType := CertTypePem
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -707,7 +707,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretName := "targetSecret"
 			ct := CertTypePfx
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
 					ContentType: &ct,
 				},
@@ -764,7 +764,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretName := "targetSecret"
 			ct := CertTypePem
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
 					ContentType: &ct,
 				},

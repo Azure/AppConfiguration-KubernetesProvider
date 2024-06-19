@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -92,7 +91,6 @@ const (
 	CertTypePfx                           string = "application/x-pkcs12"
 	TlsKey                                string = "tls.key"
 	TlsCrt                                string = "tls.crt"
-	AzureExtensionContext                 string = "AZURE_EXTENSION_CONTEXT"
 	RequestTracingEnabled                 string = "REQUEST_TRACING_ENABLED"
 )
 
@@ -462,12 +460,8 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	}
 
 	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
-		enabled := true
-		enabled, _ = strconv.ParseBool(value)
-
-		if enabled {
-
-			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(csl.AzureAppConfigurationProvider, csl.ClientManager))
+		if enabled, _ := strconv.ParseBool(value); enabled {
+			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager))
 		}
 	}
 
@@ -758,52 +752,4 @@ func MergeSecret(secret map[string]corev1.Secret, newSecret map[string]corev1.Se
 	}
 
 	return nil
-}
-
-func createCorrelationContextHeader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager) http.Header {
-	header := http.Header{}
-	output := make([]string, 0)
-
-	if provider.Spec.Configuration.Refresh != nil {
-		output = append(output, "RefreshesKeyValue")
-	}
-
-	if provider.Spec.Secret != nil {
-		output = append(output, "UsesKeyVault")
-
-		if provider.Spec.Secret.Refresh != nil &&
-			provider.Spec.Secret.Refresh.Enabled {
-			output = append(output, "RefreshesKeyVault")
-		}
-	}
-
-	if provider.Spec.FeatureFlag != nil {
-		output = append(output, "UsesFeatureFlag")
-
-		if provider.Spec.FeatureFlag.Refresh != nil &&
-			provider.Spec.FeatureFlag.Refresh.Enabled {
-			output = append(output, "RefreshesFeatureFlag")
-		}
-	}
-
-	if provider.Spec.ReplicaDiscoveryEnabled {
-		if manager, ok := clientManager.(*ConfigurationClientManager); ok {
-			replicaCount := 0
-			if manager.DynamicClientWrappers != nil {
-				replicaCount = len(manager.DynamicClientWrappers)
-			}
-
-			output = append(output, fmt.Sprintf("ReplicaCount=%d", replicaCount))
-		}
-	}
-
-	if _, ok := os.LookupEnv(AzureExtensionContext); ok {
-		output = append(output, "InstalledBy=Extension")
-	} else {
-		output = append(output, "InstalledBy=Helm")
-	}
-
-	header.Add("Correlation-Context", strings.Join(output, ","))
-
-	return header
 }

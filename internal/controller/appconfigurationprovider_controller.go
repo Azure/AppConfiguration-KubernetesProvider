@@ -224,6 +224,10 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		retriever = reconciler.Retriever
 	}
 
+	ctx = context.WithValue(ctx, loader.RequestTracingKey, loader.RequestTracing{
+		IsStartUp: reconciler.ProvidersReconcileState[req.NamespacedName].ConfigMapResourceVersion == nil,
+	})
+
 	// Initialize the processor setting in this reconcile
 	processor := &AppConfigurationProviderProcessor{
 		Context:                 ctx,

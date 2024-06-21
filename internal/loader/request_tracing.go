@@ -37,11 +37,6 @@ func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureApp
 		}
 	}
 
-	if provider.Spec.Configuration.Refresh != nil &&
-		provider.Spec.Configuration.Refresh.Enabled {
-		output = append(output, "RefreshesKeyValue")
-	}
-
 	if provider.Spec.Secret != nil {
 		output = append(output, "UsesKeyVault")
 

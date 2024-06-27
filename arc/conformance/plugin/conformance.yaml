@@ -1,0 +1,15 @@
+sonobuoy-config:
+  driver: Job
+  plugin-name: azure-arc-app-config-provider
+  result-format: junit
+spec:
+  image: mcr.microsoft.com/azure-app-configuration/extension-test-plugin:2.0.0-preview # Currently, the image is not available
+  imagePullPolicy: IfNotPresent
+  name: plugin
+  resources: {}
+  volumes:
+  - name: results
+    emptyDir: {}
+  volumeMounts:
+  - mountPath: /tmp/results
+    name: results

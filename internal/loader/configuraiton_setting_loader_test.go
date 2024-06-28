@@ -193,11 +193,9 @@ func (mr *MockClientManagerMockRecorder) GetClients(arg0 interface{}) *gomock.Ca
 }
 
 // RefreshClients mocks base method.
-func (m *MockClientManager) RefreshClients(arg0 context.Context) error {
+func (m *MockClientManager) RefreshClients(arg0 context.Context) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshClients", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "RefreshClients", arg0)
 }
 
 // RefreshClients indicates an expected call of RefreshClients.

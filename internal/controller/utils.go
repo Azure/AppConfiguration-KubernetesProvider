@@ -25,7 +25,7 @@ const (
 )
 
 func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
-	var err error = nil
+	var err error
 	if spec.Endpoint == nil && spec.ConnectionStringReference == nil {
 		return loader.NewArgumentError("spec", fmt.Errorf("one of endpoint and connectionStringReference field must be set"))
 	}

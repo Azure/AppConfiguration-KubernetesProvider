@@ -57,7 +57,7 @@ type ConfigurationClientWrapper struct {
 
 type ClientManager interface {
 	GetClients(ctx context.Context) ([]*ConfigurationClientWrapper, error)
-	RefreshClients(ctx context.Context) error
+	RefreshClients(ctx context.Context)
 }
 
 const (
@@ -168,7 +168,7 @@ func (manager *ConfigurationClientManager) GetClients(ctx context.Context) ([]*C
 	return clients, nil
 }
 
-func (manager *ConfigurationClientManager) RefreshClients(ctx context.Context) error {
+func (manager *ConfigurationClientManager) RefreshClients(ctx context.Context) {
 	currentTime := metav1.Now()
 	if manager.ReplicaDiscoveryEnabled &&
 		currentTime.After(manager.lastFallbackClientAttempt.Time.Add(MinimalClientRefreshInterval)) {
@@ -176,8 +176,6 @@ func (manager *ConfigurationClientManager) RefreshClients(ctx context.Context) e
 		url, _ := url.Parse(manager.endpoint)
 		manager.DiscoverFallbackClients(ctx, url.Host)
 	}
-
-	return nil
 }
 
 func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.Context, host string) {

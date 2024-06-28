@@ -505,7 +505,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
-			k8sClient.Get(ctx, types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}, configProvider)
+			_ = k8sClient.Get(ctx, types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}, configProvider)
 			configProvider.Spec.Endpoint = &newEndpoint
 
 			Expect(k8sClient.Update(ctx, configProvider)).Should(Succeed())
@@ -606,7 +606,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["testKey2"]).Should(Equal("newtestValue2"))
 			Expect(configmap.Data["testKey3"]).Should(Equal("newtestValue3"))
 
-			k8sClient.Delete(ctx, configProvider)
+			_ = k8sClient.Delete(ctx, configProvider)
 		})
 
 		It("Should refresh secret", func() {

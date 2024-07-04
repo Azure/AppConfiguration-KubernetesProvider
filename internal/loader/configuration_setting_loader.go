@@ -12,10 +12,13 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"golang.org/x/crypto/pkcs12"
@@ -88,6 +91,7 @@ const (
 	CertTypePfx                           string = "application/x-pkcs12"
 	TlsKey                                string = "tls.key"
 	TlsCrt                                string = "tls.crt"
+	RequestTracingEnabled                 string = "REQUEST_TRACING_ENABLED"
 )
 
 func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
@@ -458,6 +462,12 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	if len(clients) == 0 {
 		csl.ClientManager.RefreshClients(ctx)
 		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
+	}
+
+	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
+		if enabled, _ := strconv.ParseBool(value); enabled {
+			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager))
+		}
 	}
 
 	errors := make([]error, 0)

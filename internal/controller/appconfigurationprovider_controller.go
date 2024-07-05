@@ -426,35 +426,38 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 	}
 
 	for secretName, secret := range settings.SecretSettings {
-		secretObj := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: provider.Namespace,
-			},
-			Type: secret.Type,
+		if reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName].UpdateNeeded {
+			secretObj := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: provider.Namespace,
+				},
+				Type: secret.Type,
+			}
+	
+			// Important: set the ownership of secret
+			if err := controllerutil.SetControllerReference(provider, secretObj, reconciler.Scheme); err != nil {
+				reconciler.logAndSetFailStatus(provider, err)
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
+			}
+	
+			provider.Annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
+			operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, secretObj, func() error {
+				secretObj.Data = secret.Data
+				secretObj.Labels = provider.Labels
+				secretObj.Annotations = provider.Annotations
+	
+				return nil
+			})
+			if err != nil {
+				reconciler.logAndSetFailStatus(provider, err)
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
+			}
+
+			reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretObj.Name].SecretResourceVersion = secretObj.ResourceVersion
+			reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretObj.Name].UpdateNeeded = false
+			klog.V(5).Infof("Secret %q in %q namespace is %s", secretObj.Name, secretObj.Namespace, string(operationResult))
 		}
-
-		// Important: set the ownership of secret
-		if err := controllerutil.SetControllerReference(provider, secretObj, reconciler.Scheme); err != nil {
-			reconciler.logAndSetFailStatus(provider, err)
-			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
-		}
-
-		provider.Annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
-		operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, secretObj, func() error {
-			secretObj.Data = secret.Data
-			secretObj.Labels = provider.Labels
-			secretObj.Annotations = provider.Annotations
-
-			return nil
-		})
-		if err != nil {
-			reconciler.logAndSetFailStatus(provider, err)
-			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
-		}
-
-		reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretObj.Name].SecretResourceVersion = secretObj.ResourceVersion
-		klog.V(5).Infof("Secret %q in %q namespace is %s", secretObj.Name, secretObj.Namespace, string(operationResult))
 	}
 
 	return reconcile.Result{}, nil

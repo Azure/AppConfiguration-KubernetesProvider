@@ -52,6 +52,7 @@ type TargetSecretReference struct {
 	Type                  corev1.SecretType
 	UriSegments           map[string]KeyVaultSecretUriSegment
 	SecretResourceVersion string
+	UpdateNeeded          bool
 }
 
 type RawSettings struct {
@@ -387,6 +388,9 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 						lock.Lock()
 						defer lock.Unlock()
 						resolvedSecretReferences[name].Data[currentKey] = []byte(*resolvedSecret.Value)
+						currentUriSegment := targetSecretReference.UriSegments[currentKey]
+						currentUriSegment.SecretId = resolvedSecret.ID
+						secretReferencesToResolve[name].UriSegments[currentKey] = currentUriSegment
 						return nil
 					})
 				}
@@ -398,6 +402,9 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 		} else if targetSecretReference.Type == corev1.SecretTypeTLS {
 			eg.Go(func() error {
 				resolvedSecret, err := resolver.Resolve(targetSecretReference.UriSegments[name], ctx)
+				currentUriSegment := targetSecretReference.UriSegments[name]
+				currentUriSegment.SecretId = resolvedSecret.ID
+				secretReferencesToResolve[name].UriSegments[name] = currentUriSegment
 				if err != nil {
 					return fmt.Errorf("fail to resolve the Key Vault reference type setting '%s': %s", name, err.Error())
 				}

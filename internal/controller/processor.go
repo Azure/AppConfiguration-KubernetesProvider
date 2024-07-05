@@ -70,6 +70,9 @@ func (processor *AppConfigurationProviderProcessor) processFullReconciliation() 
 		return err
 	}
 	processor.Settings = updatedSettings
+	for _, reference := range updatedSettings.SecretReferences {
+		reference.UpdateNeeded = true
+	}
 	processor.ReconciliationState.ExistingSecretReferences = updatedSettings.SecretReferences
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
@@ -160,6 +163,12 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 	}
 
 	processor.Settings = keyValueRefreshedSettings
+	checkSecretVersion(processor.ReconciliationState.ExistingSecretReferences, keyValueRefreshedSettings.SecretReferences)
+	for secretName, reference := range keyValueRefreshedSettings.SecretReferences {
+		if _, ok := processor.ReconciliationState.ExistingSecretReferences[secretName]; ok {
+			reference.SecretResourceVersion = processor.ReconciliationState.ExistingSecretReferences[secretName].SecretResourceVersion
+		}
+	}
 	reconcileState.ExistingSecretReferences = keyValueRefreshedSettings.SecretReferences
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
@@ -201,6 +210,7 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 
 	// Only resolve the secret references that not specified the secret version
 	secretReferencesToSolve := make(map[string]*loader.TargetSecretReference)
+	cachedSecretReferences := make(map[string]*loader.TargetSecretReference)
 	for secretName, reference := range reconcileState.ExistingSecretReferences {
 		for key, uriSegment := range reference.UriSegments {
 			if uriSegment.SecretVersion == "" {
@@ -209,8 +219,15 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 						Type:        reference.Type,
 						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
 					}
+					cachedSecretReferences[secretName] = &loader.TargetSecretReference{
+						Type:        reference.Type,
+						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+					}
 				}
 				secretReferencesToSolve[secretName].UriSegments[key] = uriSegment
+				cachedSecretReferences[secretName].UriSegments[key] = loader.KeyVaultSecretUriSegment{
+					SecretId: uriSegment.SecretId,
+				}
 			}
 		}
 	}
@@ -228,6 +245,11 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 	}
 	processor.Settings.SecretSettings = existingSecrets
 	processor.RefreshOptions.SecretSettingPopulated = true
+	checkSecretVersion(cachedSecretReferences, secretReferencesToSolve)
+	for secretName, reference := range secretReferencesToSolve {
+		maps.Copy(reconcileState.ExistingSecretReferences[secretName].UriSegments, reference.UriSegments)
+		reconcileState.ExistingSecretReferences[secretName].UpdateNeeded = reference.UpdateNeeded
+	}
 
 	// Update next refresh time only if settings updated successfully
 	reconcileState.NextSecretReferenceRefreshReconcileTime = nextSecretReferenceRefreshReconcileTime
@@ -331,4 +353,29 @@ func (processor *AppConfigurationProviderProcessor) calculateRequeueAfterInterva
 	}
 
 	return requeueAfterInterval
+}
+
+func checkSecretVersion(existingSecretReferences map[string]*loader.TargetSecretReference, latestSecretReferences map[string]*loader.TargetSecretReference) {
+	for secretName, secretReference := range latestSecretReferences {
+		if _, ok := existingSecretReferences[secretName]; !ok {
+			secretReference.UpdateNeeded = true
+			continue
+		}
+
+		if len(existingSecretReferences[secretName].UriSegments) != len(secretReference.UriSegments) {
+			secretReference.UpdateNeeded = true
+			continue
+		}
+
+		for key, uriSegment := range secretReference.UriSegments {
+			if _, ok := existingSecretReferences[secretName].UriSegments[key]; !ok {
+				secretReference.UpdateNeeded = true
+				break
+			}
+			if *(existingSecretReferences[secretName].UriSegments[key].SecretId) != *(uriSegment.SecretId) {
+				secretReference.UpdateNeeded = true
+				break
+			}
+		}
+	}
 }

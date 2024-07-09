@@ -434,19 +434,19 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 				},
 				Type: secret.Type,
 			}
-	
+
 			// Important: set the ownership of secret
 			if err := controllerutil.SetControllerReference(provider, secretObj, reconciler.Scheme); err != nil {
 				reconciler.logAndSetFailStatus(provider, err)
 				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 			}
-	
+
 			provider.Annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
 			operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, secretObj, func() error {
 				secretObj.Data = secret.Data
 				secretObj.Labels = provider.Labels
 				secretObj.Annotations = provider.Annotations
-	
+
 				return nil
 			})
 			if err != nil {

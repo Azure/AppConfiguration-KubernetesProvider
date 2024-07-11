@@ -284,15 +284,15 @@ func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityPa
 
 func verifySelectorObject(selector acpv1.Selector) error {
 	if selector.KeyFilter == nil && selector.SnapshotName == nil {
-		return fmt.Errorf("one of keyFilter and snapshotName field must be set")
+		return fmt.Errorf("a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering")
 	}
 
 	if selector.SnapshotName != nil {
 		if selector.KeyFilter != nil {
-			return fmt.Errorf("set both keyFilter and snapshotName in one selector causes ambiguity, only one of them should be set")
+			return fmt.Errorf("set both 'keyFilter' and 'snapshotName' in one selector causes ambiguity, only one of them should be set")
 		}
 		if selector.LabelFilter != nil {
-			return fmt.Errorf("labelFilter is not allowed when snapshotName is set")
+			return fmt.Errorf("'labelFilter' is not allowed when 'snapshotName' is set")
 		}
 	}
 

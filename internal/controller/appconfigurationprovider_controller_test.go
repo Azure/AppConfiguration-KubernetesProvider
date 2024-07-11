@@ -1021,7 +1021,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.configuration.selectors: set both keyFilter and snapshotName in one selector causes ambiguity, only one of them should be set"))
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.configuration.selectors: set both 'keyFilter' and 'snapshotName' in one selector causes ambiguity, only one of them should be set"))
 
 			configProviderSpec2 := acpv1.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
@@ -1038,7 +1038,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec2).Error()).Should(Equal("spec.configuration.selectors: labelFilter is not allowed when snapshotName is set"))
+			Expect(verifyObject(configProviderSpec2).Error()).Should(Equal("spec.configuration.selectors: 'labelFilter' is not allowed when 'snapshotName' is set"))
 
 			configProviderSpec3 := acpv1.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
@@ -1054,7 +1054,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec3).Error()).Should(Equal("spec.configuration.selectors: one of keyFilter and snapshotName field must be set"))
+			Expect(verifyObject(configProviderSpec3).Error()).Should(Equal("spec.configuration.selectors: a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering"))
 		})
 	})
 

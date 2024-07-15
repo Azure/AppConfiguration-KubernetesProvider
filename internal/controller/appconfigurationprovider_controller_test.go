@@ -545,7 +545,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil, nil)
+			mockConfigurationSettings.EXPECT().CheckAndRefreshETags(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil, nil)
 			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()

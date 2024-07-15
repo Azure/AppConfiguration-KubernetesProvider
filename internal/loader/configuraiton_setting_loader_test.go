@@ -1167,8 +1167,8 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	keyValueFilters := getKeyValueFilters(testSpec)
-	featureFlagFilters := getFeatureFlagFilters(testSpec)
+	keyValueFilters := GetKeyValueFilters(testSpec)
+	featureFlagFilters := GetFeatureFlagFilters(testSpec)
 	assert.Len(t, keyValueFilters, 3)
 	assert.Len(t, featureFlagFilters, 2)
 	assert.Equal(t, "one", *keyValueFilters[0].KeyFilter)
@@ -1183,7 +1183,7 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	keyValueFilters2 := getKeyValueFilters(testSpec2)
+	keyValueFilters2 := GetKeyValueFilters(testSpec2)
 	assert.Len(t, keyValueFilters2, 1)
 	assert.Equal(t, "*", *keyValueFilters2[0].KeyFilter)
 	assert.Nil(t, keyValueFilters2[0].LabelFilter)
@@ -1203,8 +1203,8 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	keyValueFilters3 := getKeyValueFilters(testSpec3)
-	featureFlagFilters3 := getFeatureFlagFilters(testSpec3)
+	keyValueFilters3 := GetKeyValueFilters(testSpec3)
+	featureFlagFilters3 := GetFeatureFlagFilters(testSpec3)
 	assert.Len(t, keyValueFilters3, 2)
 	assert.Len(t, featureFlagFilters3, 2)
 	assert.Equal(t, "two", *keyValueFilters3[0].KeyFilter)
@@ -1221,8 +1221,8 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	filters4 := getKeyValueFilters(testSpec4)
-	featureFlagFilters4 := getFeatureFlagFilters(testSpec4)
+	filters4 := GetKeyValueFilters(testSpec4)
+	featureFlagFilters4 := GetFeatureFlagFilters(testSpec4)
 	assert.Len(t, filters4, 2)
 	assert.Len(t, featureFlagFilters4, 0)
 	assert.Equal(t, "two", *filters4[0].KeyFilter)
@@ -1239,7 +1239,7 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	filters5 := getKeyValueFilters(testSpec5)
+	filters5 := GetKeyValueFilters(testSpec5)
 	assert.Len(t, filters5, 2)
 	assert.Equal(t, "one", *filters5[0].KeyFilter)
 	assert.Equal(t, "one", *filters5[1].KeyFilter)
@@ -1254,7 +1254,7 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	filters6 := getKeyValueFilters(testSpec6)
+	filters6 := GetKeyValueFilters(testSpec6)
 	assert.Len(t, filters6, 2)
 	assert.Equal(t, "one", *filters6[0].KeyFilter)
 	assert.Equal(t, "test", *filters6[0].LabelFilter)

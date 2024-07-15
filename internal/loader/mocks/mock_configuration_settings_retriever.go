@@ -37,20 +37,20 @@ func (m *MockConfigurationSettingsRetriever) EXPECT() *MockConfigurationSettings
 	return m.recorder
 }
 
-// CheckAndRefreshSentinels mocks base method.
-func (m *MockConfigurationSettingsRetriever) CheckAndRefreshSentinels(arg0 context.Context, arg1 *v1.AzureAppConfigurationProvider, arg2 map[v1.Sentinel]*azcore.ETag) (bool, map[v1.Sentinel]*azcore.ETag, error) {
+// CheckAndRefreshETags mocks base method.
+func (m *MockConfigurationSettingsRetriever) CheckAndRefreshETags(arg0 context.Context, arg1 *v1.AzureAppConfigurationProvider, arg2 map[v1.Selector][]*azcore.ETag) (bool, map[v1.Selector][]*azcore.ETag, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckAndRefreshSentinels", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "CheckAndRefreshETags", arg0, arg1, arg2)
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(map[v1.Sentinel]*azcore.ETag)
+	ret1, _ := ret[1].(map[v1.Selector][]*azcore.ETag)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
-// CheckAndRefreshSentinels indicates an expected call of CheckAndRefreshSentinels.
-func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckAndRefreshSentinels(arg0, arg1, arg2 interface{}) *gomock.Call {
+// CheckAndRefreshETags indicates an expected call of CheckAndRefreshETags.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckAndRefreshETags(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAndRefreshSentinels", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckAndRefreshSentinels), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAndRefreshETags", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckAndRefreshETags), arg0, arg1, arg2)
 }
 
 // CreateTargetSettings mocks base method.

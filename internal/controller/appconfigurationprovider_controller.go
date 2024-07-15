@@ -51,9 +51,10 @@ type AzureAppConfigurationProviderReconciler struct {
 type ReconciliationState struct {
 	Generation                              int64
 	ConfigMapResourceVersion                *string
-	SentinelETags                           map[acpv1.Sentinel]*azcore.ETag
+	KeyValueETags                           map[acpv1.Selector][]*azcore.ETag
+	FeatureFlagETags                        map[acpv1.Selector][]*azcore.ETag
 	ExistingSecretReferences                map[string]*loader.TargetSecretReference
-	NextSentinelBasedRefreshReconcileTime   metav1.Time
+	NextKeyValueRefreshReconcileTime        metav1.Time
 	NextSecretReferenceRefreshReconcileTime metav1.Time
 	NextFeatureFlagRefreshReconcileTime     metav1.Time
 	ClientManager                           loader.ClientManager
@@ -178,7 +179,8 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		reconciler.ProvidersReconcileState[req.NamespacedName] = &ReconciliationState{
 			Generation:               -1,
 			ConfigMapResourceVersion: nil,
-			SentinelETags:            make(map[acpv1.Sentinel]*azcore.ETag),
+			KeyValueETags:            make(map[acpv1.Selector][]*azcore.ETag),
+			FeatureFlagETags:         make(map[acpv1.Selector][]*azcore.ETag),
 			ExistingSecretReferences: make(map[string]*loader.TargetSecretReference),
 			ClientManager:            nil,
 		}

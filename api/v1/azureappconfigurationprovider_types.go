@@ -88,7 +88,7 @@ type Selector struct {
 
 // Defines the settings for dynamic configuration.
 type DynamicConfigurationRefreshParameters struct {
-	Monitoring *RefreshMonitoring `json:"monitoring"`
+	Monitoring *RefreshMonitoring `json:"monitoring,omitempty"`
 	// +kubebuilder:validation:Format=duration
 	// +kubebuilder:default="30s"
 	Interval string `json:"interval,omitempty"`

@@ -66,7 +66,7 @@ type ConfigurationSettingsRetriever interface {
 	CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
-	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
+	CheckAndRefreshETags(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Selector][]*azcore.ETag) (bool, map[acpv1.Selector][]*azcore.ETag, error)
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (*TargetKeyValueSettings, error)
 }
 
@@ -175,7 +175,7 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 }
 
 func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver) (*RawSettings, error) {
-	keyValueFilters := getKeyValueFilters(csl.Spec)
+	keyValueFilters := GetKeyValueFilters(csl.Spec)
 	settingsClient := csl.SettingsClient
 	if settingsClient == nil {
 		settingsClient = &SelectorSettingsClient{
@@ -284,7 +284,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 }
 
 func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, error) {
-	featureFlagFilters := getFeatureFlagFilters(csl.Spec)
+	featureFlagFilters := GetFeatureFlagFilters(csl.Spec)
 	settingsClient := csl.SettingsClient
 	if settingsClient == nil {
 		settingsClient = &SelectorSettingsClient{
@@ -317,41 +317,21 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 	return featureFlagSection, nil
 }
 
-func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
-	ctx context.Context,
-	provider *acpv1.AzureAppConfigurationProvider,
-	eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error) {
-	sentinelChanged := false
-	if provider.Spec.Configuration.Refresh == nil {
-		return sentinelChanged, eTags, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
-	}
-	refreshedETags := make(map[acpv1.Sentinel]*azcore.ETag)
-
-	for _, sentinel := range provider.Spec.Configuration.Refresh.Monitoring.Sentinels {
-		if eTag, ok := eTags[sentinel]; ok {
-			// Initialize the updatedETags with the current eTags
-			refreshedETags[sentinel] = eTag
-		}
-		settingsClient := csl.SettingsClient
-		if settingsClient == nil {
-			settingsClient = &SentinelSettingsClient{
-				sentinel:        sentinel,
-				etag:            eTags[sentinel],
-				refreshInterval: provider.Spec.Configuration.Refresh.Interval,
-			}
-		}
-		refreshedSentinel, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
-		if err != nil {
-			return false, eTags, err
-		}
-
-		if refreshedSentinel != nil && refreshedSentinel[0].ETag != nil {
-			sentinelChanged = true
-			refreshedETags[sentinel] = refreshedSentinel[0].ETag
+func (csl *ConfigurationSettingLoader) CheckAndRefreshETags(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Selector][]*azcore.ETag) (bool, map[acpv1.Selector][]*azcore.ETag, error) {
+	settingsClient := csl.SettingsClient
+	if settingsClient == nil {
+		settingsClient = &SentinelSettingsClient{
+			etags:       eTags,
+			etagChanged: false,
 		}
 	}
 
-	return sentinelChanged, refreshedETags, nil
+	_, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+	if err != nil {
+		return false, eTags, err
+	}
+
+	return settingsClient.(*SentinelSettingsClient).etagChanged, settingsClient.(*SentinelSettingsClient).etags, nil
 }
 
 func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
@@ -565,11 +545,11 @@ func GetSecret(ctx context.Context,
 	return secretObject, nil
 }
 
-func getKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
+func GetKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
 	return deduplicateFilters(acpSpec.Configuration.Selectors)
 }
 
-func getFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
+func GetFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
 	featureFlagFilters := make([]acpv1.Selector, 0)
 
 	if acpSpec.FeatureFlag != nil {

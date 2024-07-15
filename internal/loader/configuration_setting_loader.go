@@ -50,9 +50,8 @@ type TargetKeyValueSettings struct {
 
 type TargetSecretReference struct {
 	Type                  corev1.SecretType
-	UriSegments           map[string]KeyVaultSecretUriSegment
+	UriSegments           map[string]KeyVaultSecretMetadata
 	SecretResourceVersion string
-	UpdateNeeded          bool
 }
 
 type RawSettings struct {
@@ -68,7 +67,7 @@ type ConfigurationSettingsRetriever interface {
 	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
 	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
-	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (map[string]corev1.Secret, error)
+	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (*TargetKeyValueSettings, error)
 }
 
 type ServicePrincipleAuthenticationParameters struct {
@@ -198,7 +197,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 	if csl.Spec.Secret != nil {
 		rawSettings.SecretReferences[csl.Spec.Secret.Target.SecretName] = &TargetSecretReference{
 			Type:        corev1.SecretTypeOpaque,
-			UriSegments: make(map[string]KeyVaultSecretUriSegment),
+			UriSegments: make(map[string]KeyVaultSecretMetadata),
 		}
 	}
 
@@ -246,7 +245,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 			}
 
 			currentUrl := *setting.Value
-			secretUriSegment, err := parse(currentUrl)
+			secretMetadata, err := parse(currentUrl)
 			if err != nil {
 				return nil, err
 			}
@@ -260,10 +259,10 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 			if _, ok := rawSettings.SecretReferences[secretName]; !ok {
 				rawSettings.SecretReferences[secretName] = &TargetSecretReference{
 					Type:        secretType,
-					UriSegments: make(map[string]KeyVaultSecretUriSegment),
+					UriSegments: make(map[string]KeyVaultSecretMetadata),
 				}
 			}
-			rawSettings.SecretReferences[secretName].UriSegments[trimmedKey] = *secretUriSegment
+			rawSettings.SecretReferences[secretName].UriSegments[trimmedKey] = *secretMetadata
 		default:
 			rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 			rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
@@ -274,7 +273,8 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 	if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.SecretReferences, resolver); err != nil {
 		return nil, err
 	} else {
-		err = MergeSecret(rawSettings.SecretSettings, resolvedSecret)
+		rawSettings.SecretReferences = resolvedSecret.SecretReferences
+		err = MergeSecret(rawSettings.SecretSettings, resolvedSecret.SecretSettings)
 		if err != nil {
 			return nil, err
 		}
@@ -357,7 +357,7 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 	ctx context.Context,
 	secretReferencesToResolve map[string]*TargetSecretReference,
-	resolver SecretReferenceResolver) (map[string]corev1.Secret, error) {
+	resolver SecretReferenceResolver) (*TargetKeyValueSettings, error) {
 	if resolver == nil {
 		if kvResolver, err := csl.createSecretReferenceResolver(ctx); err != nil {
 			return nil, err
@@ -366,9 +366,9 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 		}
 	}
 
-	resolvedSecretReferences := make(map[string]corev1.Secret)
+	resolvedSecrets := make(map[string]corev1.Secret)
 	for name, targetSecretReference := range secretReferencesToResolve {
-		resolvedSecretReferences[name] = corev1.Secret{
+		resolvedSecrets[name] = corev1.Secret{
 			Data: make(map[string][]byte),
 			Type: targetSecretReference.Type,
 		}
@@ -387,7 +387,7 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 						}
 						lock.Lock()
 						defer lock.Unlock()
-						resolvedSecretReferences[name].Data[currentKey] = []byte(*resolvedSecret.Value)
+						resolvedSecrets[name].Data[currentKey] = []byte(*resolvedSecret.Value)
 						currentUriSegment := targetSecretReference.UriSegments[currentKey]
 						currentUriSegment.SecretId = resolvedSecret.ID
 						secretReferencesToResolve[name].UriSegments[currentKey] = currentUriSegment
@@ -415,9 +415,9 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 
 				switch *resolvedSecret.ContentType {
 				case CertTypePfx:
-					resolvedSecretReferences[name].Data[TlsKey], resolvedSecretReferences[name].Data[TlsCrt], err = decodePkcs12(*resolvedSecret.Value)
+					resolvedSecrets[name].Data[TlsKey], resolvedSecrets[name].Data[TlsCrt], err = decodePkcs12(*resolvedSecret.Value)
 				case CertTypePem:
-					resolvedSecretReferences[name].Data[TlsKey], resolvedSecretReferences[name].Data[TlsCrt], err = decodePem(*resolvedSecret.Value)
+					resolvedSecrets[name].Data[TlsKey], resolvedSecrets[name].Data[TlsCrt], err = decodePem(*resolvedSecret.Value)
 				default:
 					err = fmt.Errorf("unknown content type '%s'", *resolvedSecret.ContentType)
 				}
@@ -436,7 +436,10 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 		}
 	}
 
-	return resolvedSecretReferences, nil
+	return &TargetKeyValueSettings{
+		SecretSettings:   resolvedSecrets,
+		SecretReferences: secretReferencesToResolve,
+	}, nil
 }
 
 func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context.Context) (SecretReferenceResolver, error) {

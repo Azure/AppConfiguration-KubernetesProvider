@@ -70,10 +70,6 @@ func (processor *AppConfigurationProviderProcessor) processFullReconciliation() 
 		return err
 	}
 	processor.Settings = updatedSettings
-	for _, reference := range updatedSettings.SecretReferences {
-		reference.UpdateNeeded = true
-	}
-	processor.ReconciliationState.ExistingSecretReferences = updatedSettings.SecretReferences
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
@@ -163,13 +159,6 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 	}
 
 	processor.Settings = keyValueRefreshedSettings
-	checkSecretVersion(processor.ReconciliationState.ExistingSecretReferences, keyValueRefreshedSettings.SecretReferences)
-	for secretName, reference := range keyValueRefreshedSettings.SecretReferences {
-		if _, ok := processor.ReconciliationState.ExistingSecretReferences[secretName]; ok {
-			reference.SecretResourceVersion = processor.ReconciliationState.ExistingSecretReferences[secretName].SecretResourceVersion
-		}
-	}
-	reconcileState.ExistingSecretReferences = keyValueRefreshedSettings.SecretReferences
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
@@ -217,18 +206,19 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 				if secretReferencesToSolve[secretName] == nil {
 					secretReferencesToSolve[secretName] = &loader.TargetSecretReference{
 						Type:        reference.Type,
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
-					}
-					cachedSecretReferences[secretName] = &loader.TargetSecretReference{
-						Type:        reference.Type,
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+						UriSegments: make(map[string]loader.KeyVaultSecretMetadata),
 					}
 				}
 				secretReferencesToSolve[secretName].UriSegments[key] = uriSegment
-				cachedSecretReferences[secretName].UriSegments[key] = loader.KeyVaultSecretUriSegment{
-					SecretId: uriSegment.SecretId,
+			}
+
+			if cachedSecretReferences[secretName] == nil {
+				cachedSecretReferences[secretName] = &loader.TargetSecretReference{
+					Type:        reference.Type,
+					UriSegments: make(map[string]loader.KeyVaultSecretMetadata),
 				}
 			}
+			cachedSecretReferences[secretName].UriSegments[key] = uriSegment
 		}
 	}
 
@@ -237,19 +227,20 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 		return err
 	}
 
-	for secretName, resolvedSecret := range resolvedSecrets {
+	for secretName, resolvedSecret := range resolvedSecrets.SecretSettings {
 		existingSecret, ok := existingSecrets[secretName]
 		if ok {
 			maps.Copy(existingSecret.Data, resolvedSecret.Data)
 		}
 	}
-	processor.Settings.SecretSettings = existingSecrets
-	processor.RefreshOptions.SecretSettingPopulated = true
-	checkSecretVersion(cachedSecretReferences, secretReferencesToSolve)
-	for secretName, reference := range secretReferencesToSolve {
-		maps.Copy(reconcileState.ExistingSecretReferences[secretName].UriSegments, reference.UriSegments)
-		reconcileState.ExistingSecretReferences[secretName].UpdateNeeded = reference.UpdateNeeded
+
+	for secretName, reference := range resolvedSecrets.SecretReferences {
+		maps.Copy(cachedSecretReferences[secretName].UriSegments, reference.UriSegments)
 	}
+
+	processor.Settings.SecretSettings = existingSecrets
+	processor.Settings.SecretReferences = cachedSecretReferences
+	processor.RefreshOptions.SecretSettingPopulated = true
 
 	// Update next refresh time only if settings updated successfully
 	reconcileState.NextSecretReferenceRefreshReconcileTime = nextSecretReferenceRefreshReconcileTime
@@ -292,6 +283,9 @@ func (processor *AppConfigurationProviderProcessor) shouldReconcile(
 
 func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error) {
 	processor.ReconciliationState.Generation = processor.Provider.Generation
+	if processor.RefreshOptions.SecretSettingPopulated {
+	 	processor.ReconciliationState.ExistingSecretReferences = processor.Settings.SecretReferences
+	}
 	if !processor.RefreshOptions.secretReferenceRefreshEnabled &&
 		!processor.RefreshOptions.sentinelBasedRefreshEnabled &&
 		!processor.RefreshOptions.featureFlagRefreshEnabled {
@@ -353,29 +347,4 @@ func (processor *AppConfigurationProviderProcessor) calculateRequeueAfterInterva
 	}
 
 	return requeueAfterInterval
-}
-
-func checkSecretVersion(existingSecretReferences map[string]*loader.TargetSecretReference, latestSecretReferences map[string]*loader.TargetSecretReference) {
-	for secretName, secretReference := range latestSecretReferences {
-		if _, ok := existingSecretReferences[secretName]; !ok {
-			secretReference.UpdateNeeded = true
-			continue
-		}
-
-		if len(existingSecretReferences[secretName].UriSegments) != len(secretReference.UriSegments) {
-			secretReference.UpdateNeeded = true
-			continue
-		}
-
-		for key, uriSegment := range secretReference.UriSegments {
-			if _, ok := existingSecretReferences[secretName].UriSegments[key]; !ok {
-				secretReference.UpdateNeeded = true
-				break
-			}
-			if *(existingSecretReferences[secretName].UriSegments[key].SecretId) != *(uriSegment.SecretId) {
-				secretReference.UpdateNeeded = true
-				break
-			}
-		}
-	}
 }

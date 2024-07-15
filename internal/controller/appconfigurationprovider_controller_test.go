@@ -173,11 +173,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				SecretReferences: map[string]*loader.TargetSecretReference{
 					secretName: {
 						Type:        corev1.SecretTypeTLS,
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+						UriSegments: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 					secretName2: {
 						Type:        corev1.SecretTypeOpaque,
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+						UriSegments: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 				},
 			}
@@ -266,7 +266,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				SecretReferences: map[string]*loader.TargetSecretReference{
 					secretName: {
 						Type:        corev1.SecretType("Opaque"),
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+						UriSegments: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 				},
 			}

@@ -302,3 +302,40 @@ func verifySelectorObject(selector acpv1.Selector) error {
 
 	return nil
 }
+
+func checkAndUpdateSecretRef(existingSecretReferences map[string]*loader.TargetSecretReference, latestSecretReferences map[string]*loader.TargetSecretReference, shouldReconcile bool) map[string]bool {
+	secretUpdateNeeded := make(map[string]bool)
+	if shouldReconcile {
+		for secretName, _ := range latestSecretReferences {
+			secretUpdateNeeded[secretName] = true
+		}
+		return secretUpdateNeeded
+	}
+	
+	for secretName, secretReference := range latestSecretReferences {
+		if _, ok := existingSecretReferences[secretName]; !ok {
+			secretUpdateNeeded[secretName] = true
+			continue
+		} else {
+			latestSecretReferences[secretName].SecretResourceVersion = existingSecretReferences[secretName].SecretResourceVersion
+		}
+
+		if len(existingSecretReferences[secretName].UriSegments) != len(secretReference.UriSegments) {
+			secretUpdateNeeded[secretName] = true
+			continue
+		}
+
+		for key, uriSegment := range secretReference.UriSegments {
+			if _, ok := existingSecretReferences[secretName].UriSegments[key]; !ok {
+				secretUpdateNeeded[secretName] = true
+				break
+			}
+			if *(existingSecretReferences[secretName].UriSegments[key].SecretId) != *(uriSegment.SecretId) {
+				secretUpdateNeeded[secretName] = true
+				break
+			}
+		}
+	}
+
+	return secretUpdateNeeded
+}

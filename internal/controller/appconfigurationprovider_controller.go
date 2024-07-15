@@ -269,7 +269,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 			}
 		}
 
-		result, err := reconciler.createOrUpdateSecrets(ctx, provider, processor.Settings)
+		result, err := reconciler.createOrUpdateSecrets(ctx, provider, processor)
 		if err != nil {
 			return result, nil
 		}
@@ -277,7 +277,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 
 	// Expel the secrets which are no longer selected by the provider.
 	if provider.Spec.Secret == nil || processor.RefreshOptions.SecretSettingPopulated {
-		result, err := reconciler.expelRemovedSecrets(ctx, provider, existingSecrets, processor.ReconciliationState.ExistingSecretReferences)
+		result, err := reconciler.expelRemovedSecrets(ctx, provider, existingSecrets, processor.Settings.SecretReferences)
 		if err != nil {
 			return result, nil
 		}
@@ -411,8 +411,8 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets(
 	ctx context.Context,
 	provider *acpv1.AzureAppConfigurationProvider,
-	settings *loader.TargetKeyValueSettings) (reconcile.Result, error) {
-	if len(settings.SecretSettings) == 0 {
+	processor *AppConfigurationProviderProcessor) (reconcile.Result, error) {
+	if len(processor.Settings.SecretSettings) == 0 {
 		klog.V(3).Info("No secret settings are fetched from Azure AppConfiguration")
 	}
 
@@ -425,8 +425,9 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 		Namespace: provider.Namespace,
 	}
 
-	for secretName, secret := range settings.SecretSettings {
-		if reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName].UpdateNeeded {
+	secretToUpdate := checkAndUpdateSecretRef(reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences, processor.Settings.SecretReferences, processor.ShouldReconcile)
+	for secretName, secret := range processor.Settings.SecretSettings {
+		if _, ok := secretToUpdate[secretName]; ok {
 			secretObj := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      secretName,
@@ -454,9 +455,10 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 			}
 
-			reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretObj.Name].SecretResourceVersion = secretObj.ResourceVersion
-			reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretObj.Name].UpdateNeeded = false
+			processor.Settings.SecretReferences[secretName].SecretResourceVersion = secretObj.ResourceVersion
 			klog.V(5).Infof("Secret %q in %q namespace is %s", secretObj.Name, secretObj.Namespace, string(operationResult))
+		} else {
+			klog.V(5).Infof("Skip updating the secret %q in %q namespace since its data is up-to-date", secretName, provider.Namespace)
 		}
 	}
 

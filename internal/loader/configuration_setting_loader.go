@@ -46,6 +46,8 @@ type TargetKeyValueSettings struct {
 	// Multiple secrets could be managed
 	SecretSettings   map[string]corev1.Secret
 	SecretReferences map[string]*TargetSecretReference
+	KeyValueETags    map[acpv1.Selector][]*azcore.ETag
+	FeatureFlagETags map[acpv1.Selector][]*azcore.ETag
 }
 
 type TargetSecretReference struct {
@@ -60,12 +62,14 @@ type RawSettings struct {
 	FeatureFlagSettings  map[string]interface{}
 	SecretSettings       map[string]corev1.Secret
 	SecretReferences     map[string]*TargetSecretReference
+	KeyValueETags        map[acpv1.Selector][]*azcore.ETag
+	FeatureFlagETags     map[acpv1.Selector][]*azcore.ETag
 }
 
 type ConfigurationSettingsRetriever interface {
-	CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
-	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
-	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
+	CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver, keyValueETags map[acpv1.Selector][]*azcore.ETag, featureFlagETags map[acpv1.Selector][]*azcore.ETag) (*TargetKeyValueSettings, error)
+	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver, keyValueETags map[acpv1.Selector][]*azcore.ETag) (*TargetKeyValueSettings, error)
+	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string, featureFlagETags map[acpv1.Selector][]*azcore.ETag) (*TargetKeyValueSettings, error)
 	CheckAndRefreshETags(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Selector][]*azcore.ETag) (bool, map[acpv1.Selector][]*azcore.ETag, error)
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (*TargetKeyValueSettings, error)
 }
@@ -102,14 +106,14 @@ func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider,
 	}, nil
 }
 
-func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error) {
-	rawSettings, err := csl.CreateKeyValueSettings(ctx, resolveSecretReference)
+func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver, keyValueETags map[acpv1.Selector][]*azcore.ETag, featureFlagETags map[acpv1.Selector][]*azcore.ETag) (*TargetKeyValueSettings, error) {
+	rawSettings, err := csl.CreateKeyValueSettings(ctx, resolveSecretReference, keyValueETags)
 	if err != nil {
 		return nil, err
 	}
 
 	if csl.Spec.FeatureFlag != nil {
-		if rawSettings.FeatureFlagSettings, err = csl.getFeatureFlagSettings(ctx); err != nil {
+		if rawSettings.FeatureFlagSettings, rawSettings.FeatureFlagETags, err = csl.getFeatureFlagSettings(ctx, featureFlagETags); err != nil {
 			return nil, err
 		}
 	}
@@ -123,13 +127,21 @@ func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context,
 		ConfigMapSettings: typedSettings,
 		SecretSettings:    rawSettings.SecretSettings,
 		SecretReferences:  rawSettings.SecretReferences,
+		KeyValueETags:     rawSettings.KeyValueETags,
+		FeatureFlagETags:  rawSettings.FeatureFlagETags,
 	}, nil
 }
 
-func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Context, existingConfigMapSetting *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error) {
-	rawSettings, err := csl.CreateKeyValueSettings(ctx, resolveSecretReference)
+func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Context, existingConfigMapSetting *map[string]string, resolveSecretReference SecretReferenceResolver, keyValueETags map[acpv1.Selector][]*azcore.ETag) (*TargetKeyValueSettings, error) {
+	rawSettings, err := csl.CreateKeyValueSettings(ctx, resolveSecretReference, keyValueETags)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(rawSettings.KeyValueETags) == 0 {
+		return &TargetKeyValueSettings{
+			KeyValueETags: rawSettings.KeyValueETags,
+		}, nil
 	}
 
 	if csl.Spec.FeatureFlag != nil {
@@ -148,14 +160,22 @@ func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Conte
 		ConfigMapSettings: typedSettings,
 		SecretSettings:    rawSettings.SecretSettings,
 		SecretReferences:  rawSettings.SecretReferences,
+		KeyValueETags:     rawSettings.KeyValueETags,
 	}, nil
 }
 
-func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSetting *map[string]string) (*TargetKeyValueSettings, error) {
-	latestFeatureFlagSettings, err := csl.getFeatureFlagSettings(ctx)
+func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSetting *map[string]string, featureFlagETags map[acpv1.Selector][]*azcore.ETag) (*TargetKeyValueSettings, error) {
+	latestFeatureFlagSettings, latestFeatureFlagETags, err := csl.getFeatureFlagSettings(ctx, featureFlagETags)
 	if err != nil {
 		return nil, err
 	}
+
+	if len(latestFeatureFlagETags) == 0 {
+		return &TargetKeyValueSettings{
+			FeatureFlagETags: latestFeatureFlagETags,
+		}, nil
+	}
+
 	_, existingSettings, err := unmarshalConfigMap(existingConfigMapSetting, csl.Spec.Target.ConfigMapData)
 	if err != nil {
 		return nil, err
@@ -171,18 +191,23 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 		ConfigMapSettings: map[string]string{
 			csl.Spec.Target.ConfigMapData.Key: typedStr,
 		},
+		FeatureFlagETags: latestFeatureFlagETags,
 	}, nil
 }
 
-func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver) (*RawSettings, error) {
+func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Context, secretReferenceResolver SecretReferenceResolver, keyValueETags map[acpv1.Selector][]*azcore.ETag) (*RawSettings, error) {
 	keyValueFilters := GetKeyValueFilters(csl.Spec)
 	settingsClient := csl.SettingsClient
+	sentinelUsed := checkIfSentinelUsed(csl.Spec)
 	if settingsClient == nil {
 		settingsClient = &SelectorSettingsClient{
-			selectors: keyValueFilters,
+			selectors:    keyValueFilters,
+			etagChanged:  false,
+			etags:        keyValueETags,
+			sentinelUsed: sentinelUsed,
 		}
 	}
-	settings, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+	settings, etags, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -192,6 +217,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 		IsJsonContentTypeMap: make(map[string]bool),
 		SecretSettings:       make(map[string]corev1.Secret),
 		SecretReferences:     make(map[string]*TargetSecretReference),
+		KeyValueETags:        etags,
 	}
 
 	if csl.Spec.Secret != nil {
@@ -283,17 +309,20 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 	return rawSettings, nil
 }
 
-func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, error) {
+func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context, featureFlagETags map[acpv1.Selector][]*azcore.ETag) (map[string]interface{}, map[acpv1.Selector][]*azcore.ETag, error) {
 	featureFlagFilters := GetFeatureFlagFilters(csl.Spec)
 	settingsClient := csl.SettingsClient
 	if settingsClient == nil {
 		settingsClient = &SelectorSettingsClient{
-			selectors: featureFlagFilters,
+			selectors:    featureFlagFilters,
+			etagChanged:  false,
+			etags:        featureFlagETags,
+			sentinelUsed: false,
 		}
 	}
-	featureFlagSettings, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+	featureFlagSettings, featureFlagETags, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	deduplicateFeatureFlags := make(map[string]azappconfig.Setting, len(featureFlagSettings))
@@ -309,29 +338,12 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 		var out interface{}
 		err := json.Unmarshal([]byte(*setting.Value), &out)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
+			return nil, nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
 		featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
 	}
 
-	return featureFlagSection, nil
-}
-
-func (csl *ConfigurationSettingLoader) CheckAndRefreshETags(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Selector][]*azcore.ETag) (bool, map[acpv1.Selector][]*azcore.ETag, error) {
-	settingsClient := csl.SettingsClient
-	if settingsClient == nil {
-		settingsClient = &SentinelSettingsClient{
-			etags:       eTags,
-			etagChanged: false,
-		}
-	}
-
-	_, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
-	if err != nil {
-		return false, eTags, err
-	}
-
-	return settingsClient.(*SentinelSettingsClient).etagChanged, settingsClient.(*SentinelSettingsClient).etags, nil
+	return featureFlagSection, featureFlagETags, nil
 }
 
 func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
@@ -443,15 +455,15 @@ func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context
 	return resolver, nil
 }
 
-func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, settingsClient SettingsClient) ([]azappconfig.Setting, error) {
+func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, settingsClient SettingsClient) ([]azappconfig.Setting, map[acpv1.Selector][]*azcore.ETag, error) {
 	clients, err := csl.ClientManager.GetClients(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len(clients) == 0 {
 		csl.ClientManager.RefreshClients(ctx)
-		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
+		return nil, nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
 	}
 
 	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
@@ -463,7 +475,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	errors := make([]error, 0)
 	for _, clientWrapper := range clients {
 		successful := true
-		settingsToReturn, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
+		settingsToReturn, refreshedETags, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
 		if err != nil {
 			successful = false
 			updateClientBackoffStatus(clientWrapper, successful)
@@ -472,16 +484,16 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 				errors = append(errors, err)
 				continue
 			}
-			return nil, err
+			return nil, nil, err
 		}
 
 		updateClientBackoffStatus(clientWrapper, successful)
-		return settingsToReturn, nil
+		return settingsToReturn, refreshedETags, nil
 	}
 
 	// Failed to execute failover policy
 	csl.ClientManager.RefreshClients(ctx)
-	return nil, fmt.Errorf("all app configuration clients failed to get settings: %v", errors)
+	return nil, nil, fmt.Errorf("all app configuration clients failed to get settings: %v", errors)
 }
 
 func updateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {
@@ -747,4 +759,11 @@ func MergeSecret(secret map[string]corev1.Secret, newSecret map[string]corev1.Se
 	}
 
 	return nil
+}
+
+func checkIfSentinelUsed(acpSpec acpv1.AzureAppConfigurationProviderSpec) bool {
+	if acpSpec.Configuration.Refresh != nil && acpSpec.Configuration.Refresh.Monitoring != nil {
+		return true
+	}
+	return false
 }

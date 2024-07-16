@@ -66,11 +66,14 @@ func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingCon
 }
 
 func (processor *AppConfigurationProviderProcessor) processFullReconciliation() error {
-	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.SecretReferenceResolver)
+	processor.ReconciliationState.KeyValueETags, processor.ReconciliationState.FeatureFlagETags = initializeEtags(processor.Provider)
+	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.SecretReferenceResolver, processor.ReconciliationState.KeyValueETags, processor.ReconciliationState.FeatureFlagETags)
 	if err != nil {
 		return err
 	}
 	processor.Settings = updatedSettings
+	processor.ReconciliationState.KeyValueETags = updatedSettings.KeyValueETags
+	processor.ReconciliationState.FeatureFlagETags = updatedSettings.FeatureFlagETags
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
@@ -104,24 +107,18 @@ func (processor *AppConfigurationProviderProcessor) processFeatureFlagRefresh(ex
 		return nil
 	}
 
-	featureFlagSelectors := loader.GetFeatureFlagFilters(provider.Spec)
-	for _, selector := range featureFlagSelectors {
-		if _, ok := reconcileState.FeatureFlagETags[selector]; !ok {
-			reconcileState.FeatureFlagETags[selector] = []*azcore.ETag{}
-		}
-	}
-	if processor.RefreshOptions.featureFlagRefreshNeeded, processor.RefreshOptions.updatedFeatureFlagETags, err = (*processor.Retriever).CheckAndRefreshETags(processor.Context, processor.Provider, reconcileState.FeatureFlagETags); err != nil {
+	featureFlagRefreshedSettings, err := (*processor.Retriever).RefreshFeatureFlagSettings(processor.Context, &existingConfigMap.Data, processor.ReconciliationState.FeatureFlagETags)
+	if err != nil {
 		return err
 	}
-	if !processor.RefreshOptions.featureFlagRefreshNeeded {
+
+	if len(featureFlagRefreshedSettings.FeatureFlagETags) == 0 {
 		reconcileState.NextFeatureFlagRefreshReconcileTime = nextFeatureFlagRefreshReconcileTime
 		return nil
 	}
 
-	featureFlagRefreshedSettings, err := (*processor.Retriever).RefreshFeatureFlagSettings(processor.Context, &existingConfigMap.Data)
-	if err != nil {
-		return err
-	}
+	processor.RefreshOptions.featureFlagRefreshNeeded = true
+	processor.RefreshOptions.updatedFeatureFlagETags = featureFlagRefreshedSettings.FeatureFlagETags
 	processor.Settings = featureFlagRefreshedSettings
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	// Update next refresh time only if settings updated successfully
@@ -154,42 +151,23 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 		return nil
 	}
 
-	keyValueSelectors := make([]acpv1.Selector, 0)
-	if provider.Spec.Configuration.Refresh.Monitoring != nil {
-		for _, sentinel := range provider.Spec.Configuration.Refresh.Monitoring.Sentinels {
-			filter := acpv1.Selector{
-				KeyFilter:   &sentinel.Key,
-				LabelFilter: &sentinel.Label,
-			}
-			keyValueSelectors = append(keyValueSelectors, filter)
-		}
-	} else {
-		keyValueSelectors = loader.GetKeyValueFilters(provider.Spec)
-	}
-
-	for _, selector := range keyValueSelectors {
-		if _, ok := reconcileState.KeyValueETags[selector]; !ok {
-			reconcileState.KeyValueETags[selector] = []*azcore.ETag{}
-		}
-	}
-	if processor.RefreshOptions.keyValueRefreshNeeded, processor.RefreshOptions.updatedKeyValueETags, err = (*processor.Retriever).CheckAndRefreshETags(processor.Context, processor.Provider, reconcileState.KeyValueETags); err != nil {
-		return err
-	}
-
-	if !processor.RefreshOptions.keyValueRefreshNeeded {
-		reconcileState.NextKeyValueRefreshReconcileTime = nextKeyValueRefreshReconcileTime
-		return nil
-	}
 	// Get the latest key value settings
 	existingConfigMapSettings := &existingConfigMap.Data
 	if processor.Settings.ConfigMapSettings != nil {
 		existingConfigMapSettings = &processor.Settings.ConfigMapSettings
 	}
-	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.SecretReferenceResolver)
+	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.SecretReferenceResolver, processor.ReconciliationState.KeyValueETags)
 	if err != nil {
 		return err
 	}
 
+	if len(keyValueRefreshedSettings.KeyValueETags) == 0 {
+		reconcileState.NextKeyValueRefreshReconcileTime = nextKeyValueRefreshReconcileTime
+		return nil
+	}
+
+	processor.RefreshOptions.keyValueRefreshNeeded = true
+	processor.RefreshOptions.updatedKeyValueETags = keyValueRefreshedSettings.KeyValueETags
 	processor.Settings = keyValueRefreshedSettings
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
@@ -383,4 +361,34 @@ func (processor *AppConfigurationProviderProcessor) calculateRequeueAfterInterva
 	}
 
 	return requeueAfterInterval
+}
+
+func initializeEtags(provider *acpv1.AzureAppConfigurationProvider) (keyValueETags map[acpv1.Selector][]*azcore.ETag, featureFlagETags map[acpv1.Selector][]*azcore.ETag) {
+	keyValueETags = make(map[acpv1.Selector][]*azcore.ETag)
+	if provider.Spec.Configuration.Refresh != nil {
+		if provider.Spec.Configuration.Refresh.Monitoring != nil {
+			for _, sentinel := range provider.Spec.Configuration.Refresh.Monitoring.Sentinels {
+				filter := acpv1.Selector{
+					KeyFilter:   &sentinel.Key,
+					LabelFilter: &sentinel.Label,
+				}
+				keyValueETags[filter] = []*azcore.ETag{}
+			}
+		} else {
+			keyValueFilters := loader.GetKeyValueFilters(provider.Spec)
+			for _, selector := range keyValueFilters {
+				keyValueETags[selector] = []*azcore.ETag{}
+			}
+		}
+	}
+
+	featureFlagETags = make(map[acpv1.Selector][]*azcore.ETag)
+	if provider.Spec.FeatureFlag != nil {
+		featureFlagFilters := loader.GetFeatureFlagFilters(provider.Spec)
+		for _, selector := range featureFlagFilters {
+			featureFlagETags[selector] = []*azcore.ETag{}
+		}
+	}
+
+	return keyValueETags, featureFlagETags
 }

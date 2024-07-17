@@ -72,9 +72,9 @@ func (processor *AppConfigurationProviderProcessor) processFullReconciliation() 
 		return err
 	}
 	processor.Settings = updatedSettings
-	processor.ReconciliationState.KeyValueETags = updatedSettings.KeyValueETags
-	processor.ReconciliationState.FeatureFlagETags = updatedSettings.FeatureFlagETags
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
+	processor.RefreshOptions.updatedKeyValueETags = updatedSettings.KeyValueETags
+	processor.RefreshOptions.updatedFeatureFlagETags = updatedSettings.FeatureFlagETags
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
 	}
@@ -298,6 +298,14 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 		processor.ReconciliationState.ExistingSecretReferences = processor.Settings.SecretReferences
 	}
 
+	if len(processor.RefreshOptions.updatedKeyValueETags) > 0 {
+		processor.ReconciliationState.KeyValueETags = processor.RefreshOptions.updatedKeyValueETags
+	}
+
+	if len(processor.RefreshOptions.updatedFeatureFlagETags) > 0 {
+		processor.ReconciliationState.FeatureFlagETags = processor.RefreshOptions.updatedFeatureFlagETags
+	}
+
 	if !processor.RefreshOptions.secretReferenceRefreshEnabled &&
 		!processor.RefreshOptions.keyValueRefreshEnabled &&
 		!processor.RefreshOptions.featureFlagRefreshEnabled {
@@ -307,7 +315,6 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 	} else {
 		// Update the sentinel ETags and last sentinel refresh time
 		if processor.RefreshOptions.keyValueRefreshNeeded {
-			processor.ReconciliationState.KeyValueETags = processor.RefreshOptions.updatedKeyValueETags
 			processor.Provider.Status.RefreshStatus.LastSentinelBasedRefreshTime = processor.CurrentTime
 		}
 		// Update provider last key vault refresh time
@@ -316,7 +323,6 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 		}
 		// Update provider last feature flag refresh time
 		if processor.RefreshOptions.featureFlagRefreshNeeded {
-			processor.ReconciliationState.FeatureFlagETags = processor.RefreshOptions.updatedFeatureFlagETags
 			processor.Provider.Status.RefreshStatus.LastFeatureFlagRefreshTime = processor.CurrentTime
 		}
 		// At least one dynamic feature is enabled, requeueAfterInterval need be recalculated

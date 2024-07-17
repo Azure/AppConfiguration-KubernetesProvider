@@ -4,7 +4,7 @@
 package controller
 
 import (
-	acpv1 "azappconfig/provider/api/v1"
+	acp "azappconfig/provider/api/v2"
 	"azappconfig/provider/internal/loader"
 	"context"
 	"time"
@@ -21,7 +21,7 @@ import (
 type AppConfigurationProviderProcessor struct {
 	Context                 context.Context
 	Retriever               *loader.ConfigurationSettingsRetriever
-	Provider                *acpv1.AzureAppConfigurationProvider
+	Provider                *acp.AzureAppConfigurationProvider
 	Settings                *loader.TargetKeyValueSettings
 	ShouldReconcile         bool
 	ReconciliationState     *ReconciliationState
@@ -39,7 +39,7 @@ type RefreshOptions struct {
 	featureFlagRefreshNeeded      bool
 	ConfigMapSettingPopulated     bool
 	SecretSettingPopulated        bool
-	updatedSentinelETags          map[acpv1.Sentinel]*azcore.ETag
+	updatedSentinelETags          map[acp.Sentinel]*azcore.ETag
 }
 
 func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingConfigMap *corev1.ConfigMap, existingSecrets map[string]corev1.Secret) error {
@@ -308,7 +308,7 @@ func NewRefreshOptions() *RefreshOptions {
 		featureFlagRefreshNeeded:      false,
 		ConfigMapSettingPopulated:     false,
 		SecretSettingPopulated:        false,
-		updatedSentinelETags:          make(map[acpv1.Sentinel]*azcore.ETag),
+		updatedSentinelETags:          make(map[acp.Sentinel]*azcore.ETag),
 	}
 }
 

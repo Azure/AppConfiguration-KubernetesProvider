@@ -5,7 +5,7 @@
 package mocks
 
 import (
-	v1 "azappconfig/provider/api/v1"
+	v1 "azappconfig/provider/api/v2"
 	loader "azappconfig/provider/internal/loader"
 	context "context"
 	reflect "reflect"

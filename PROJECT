@@ -16,4 +16,12 @@ resources:
   kind: AzureAppConfigurationProvider
   path: azappconfig/provider/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: io
+  group: azconfig
+  kind: AzureAppConfigurationProvider
+  path: azappconfig/provider/api/v2
+  version: v2
 version: "3"

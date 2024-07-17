@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	acpv1 "azappconfig/provider/api/v1"
+	acp "azappconfig/provider/api/v2"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -90,7 +90,7 @@ var (
 	}
 )
 
-func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (ClientManager, error) {
+func NewConfigurationClientManager(ctx context.Context, provider acp.AzureAppConfigurationProvider) (ClientManager, error) {
 	manager := &ConfigurationClientManager{
 		ReplicaDiscoveryEnabled: provider.Spec.ReplicaDiscoveryEnabled,
 	}
@@ -364,7 +364,7 @@ func verifyEndpointFromConnectionString(endpoint string) error {
 	return nil
 }
 
-func CreateTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigurationProviderAuth, namespace string) (azcore.TokenCredential, error) {
+func CreateTokenCredential(ctx context.Context, acpAuth *acp.AzureAppConfigurationProviderAuth, namespace string) (azcore.TokenCredential, error) {
 	// If User explicitly specify the authentication method
 	if acpAuth != nil {
 		if acpAuth.WorkloadIdentity != nil {
@@ -401,7 +401,7 @@ func CreateTokenCredential(ctx context.Context, acpAuth *acpv1.AzureAppConfigura
 	return nil, nil
 }
 
-func getWorkloadIdentityClientId(ctx context.Context, workloadIdentityAuth *acpv1.WorkloadIdentityParameters, namespace string) (string, error) {
+func getWorkloadIdentityClientId(ctx context.Context, workloadIdentityAuth *acp.WorkloadIdentityParameters, namespace string) (string, error) {
 	if workloadIdentityAuth.ManagedIdentityClientIdReference == nil {
 		return *workloadIdentityAuth.ManagedIdentityClientId, nil
 	} else {

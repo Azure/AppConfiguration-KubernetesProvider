@@ -4,7 +4,7 @@
 package loader
 
 import (
-	acpv1 "azappconfig/provider/api/v1"
+	acp "azappconfig/provider/api/v2"
 	"context"
 	"fmt"
 	"net/http"
@@ -23,7 +23,7 @@ const (
 	AzureExtensionContext string     = "AZURE_EXTENSION_CONTEXT"
 )
 
-func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager) http.Header {
+func createCorrelationContextHeader(ctx context.Context, provider acp.AzureAppConfigurationProvider, clientManager ClientManager) http.Header {
 	header := http.Header{}
 	output := make([]string, 0)
 

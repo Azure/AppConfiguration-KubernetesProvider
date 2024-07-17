@@ -4,7 +4,7 @@
 package loader
 
 import (
-	acpv1 "azappconfig/provider/api/v1"
+	acp "azappconfig/provider/api/v2"
 	"context"
 	"crypto/x509"
 	"encoding/base64"
@@ -36,7 +36,7 @@ import (
 //go:generate mockgen -destination=mocks/mock_configuration_settings_retriever.go -package mocks . ConfigurationSettingsRetriever
 
 type ConfigurationSettingLoader struct {
-	acpv1.AzureAppConfigurationProvider
+	acp.AzureAppConfigurationProvider
 	ClientManager  ClientManager
 	SettingsClient SettingsClient
 }
@@ -66,7 +66,7 @@ type ConfigurationSettingsRetriever interface {
 	CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
-	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
+	CheckAndRefreshSentinels(ctx context.Context, provider *acp.AzureAppConfigurationProvider, eTags map[acp.Sentinel]*azcore.ETag) (bool, map[acp.Sentinel]*azcore.ETag, error)
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (map[string]corev1.Secret, error)
 }
 
@@ -94,7 +94,7 @@ const (
 	RequestTracingEnabled                 string = "REQUEST_TRACING_ENABLED"
 )
 
-func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
+func NewConfigurationSettingLoader(provider acp.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
 	return &ConfigurationSettingLoader{
 		AzureAppConfigurationProvider: provider,
 		ClientManager:                 clientManager,
@@ -318,13 +318,13 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 
 func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 	ctx context.Context,
-	provider *acpv1.AzureAppConfigurationProvider,
-	eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error) {
+	provider *acp.AzureAppConfigurationProvider,
+	eTags map[acp.Sentinel]*azcore.ETag) (bool, map[acp.Sentinel]*azcore.ETag, error) {
 	sentinelChanged := false
 	if provider.Spec.Configuration.Refresh == nil {
 		return sentinelChanged, eTags, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
 	}
-	refreshedETags := make(map[acpv1.Sentinel]*azcore.ETag)
+	refreshedETags := make(map[acp.Sentinel]*azcore.ETag)
 
 	for _, sentinel := range provider.Spec.Configuration.Refresh.Monitoring.Sentinels {
 		if eTag, ok := eTags[sentinel]; ok {
@@ -433,7 +433,7 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 }
 
 func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context.Context) (SecretReferenceResolver, error) {
-	var defaultAuth *acpv1.AzureAppConfigurationProviderAuth = nil
+	var defaultAuth *acp.AzureAppConfigurationProviderAuth = nil
 	if csl.Spec.Secret != nil && csl.Spec.Secret.Auth != nil {
 		defaultAuth = csl.Spec.Secret.Auth.AzureAppConfigurationProviderAuth
 	}
@@ -555,12 +555,12 @@ func GetSecret(ctx context.Context,
 	return secretObject, nil
 }
 
-func getKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
+func getKeyValueFilters(acpSpec acp.AzureAppConfigurationProviderSpec) []acp.Selector {
 	return deduplicateFilters(acpSpec.Configuration.Selectors)
 }
 
-func getFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
-	featureFlagFilters := make([]acpv1.Selector, 0)
+func getFeatureFlagFilters(acpSpec acp.AzureAppConfigurationProviderSpec) []acp.Selector {
+	featureFlagFilters := make([]acp.Selector, 0)
 
 	if acpSpec.FeatureFlag != nil {
 		featureFlagFilters = deduplicateFilters(acpSpec.FeatureFlag.Selectors)
@@ -575,8 +575,8 @@ func getFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []ac
 	return featureFlagFilters
 }
 
-func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
-	var result []acpv1.Selector
+func deduplicateFilters(filters []acp.Selector) []acp.Selector {
+	var result []acp.Selector
 	findDuplicate := false
 
 	if len(filters) > 0 {
@@ -602,7 +602,7 @@ func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
 		reverse(result)
 	} else {
 		wildcard := "*"
-		result = append(result, acpv1.Selector{
+		result = append(result, acp.Selector{
 			KeyFilter:   &wildcard,
 			LabelFilter: nil,
 		})
@@ -621,7 +621,7 @@ func compare(a *string, b *string) bool {
 	return strings.Compare(*a, *b) == 0
 }
 
-func reverse(arr []acpv1.Selector) {
+func reverse(arr []acp.Selector) {
 	for i, j := 0, len(arr)-1; i < j; i, j = i+1, j-1 {
 		arr[i], arr[j] = arr[j], arr[i]
 	}
@@ -629,7 +629,7 @@ func reverse(arr []acpv1.Selector) {
 
 func createSecretClients(
 	ctx context.Context,
-	acp acpv1.AzureAppConfigurationProvider) (*syncmap.Map, error) {
+	acp acp.AzureAppConfigurationProvider) (*syncmap.Map, error) {
 	secretClients := &syncmap.Map{}
 	if acp.Spec.Secret == nil || acp.Spec.Secret.Auth == nil {
 		return secretClients, nil

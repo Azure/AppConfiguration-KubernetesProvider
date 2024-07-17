@@ -4,7 +4,7 @@
 package loader
 
 import (
-	acpv1 "azappconfig/provider/api/v1"
+	acp "azappconfig/provider/api/v2"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -279,27 +279,27 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		It("Should put into Secret settings collection", func() {
 			By("By resolving the settings from Azure Key Vault")
 			managedIdentity := uuid.New().String()
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
-				Secret: &acpv1.SecretReference{
-					Target: acpv1.SecretGenerationParameters{
+				Secret: &acp.SecretReference{
+					Target: acp.SecretGenerationParameters{
 						SecretName: "targetSecret",
 					},
-					Auth: &acpv1.AzureKeyVaultAuth{
-						AzureAppConfigurationProviderAuth: &acpv1.AzureAppConfigurationProviderAuth{
+					Auth: &acp.AzureKeyVaultAuth{
+						AzureAppConfigurationProviderAuth: &acp.AzureAppConfigurationProviderAuth{
 							ManagedIdentityClientId: &managedIdentity,
 						},
 					},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -335,17 +335,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Should throw exception", func() {
 			By("By resolving Key Vault reference to fail")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -369,17 +369,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Should throw unknown content type error", func() {
 			By("By getting unknown cert type from Azure Key Vault")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -422,16 +422,16 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Should throw unknown content type error", func() {
 			By("By getting unknown cert type from Azure Key Vault")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -477,17 +477,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Should throw decode pem block error", func() {
 			By("By getting unexpected secret value of pem cert from Azure Key Vault")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -533,17 +533,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Should throw decode pfx error", func() {
 			By("By getting unexpected secret value of pfx cert from Azure Key Vault")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -589,17 +589,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Succeeded to get tls type secret", func() {
 			By("By getting valid pfx cert from Azure Key Vault")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -648,17 +648,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Succeeded to get target tls type secret", func() {
 			By("By getting valid pem cert from Azure Key Vault")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -707,17 +707,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Succeeded to get tls type secret", func() {
 			By("By getting valid non cert based secret from Azure Key Vault")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -764,17 +764,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Succeeded to get tls type secret", func() {
 			By("By getting valid non cert based pem secret from Azure Key Vault")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -823,14 +823,14 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 	Context("Get settings when autofailover not enabled", func() {
 		It("Succeed to get all configuration settings", func() {
 			By("By not trimming any key prefixes")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -860,19 +860,19 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Succeed to get empty secret setting", func() {
 			By("By fetching no key vault reference from Azure App Configuration")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Secret: &acpv1.SecretReference{
-					Target: acpv1.SecretGenerationParameters{
+				Secret: &acp.SecretReference{
+					Target: acp.SecretGenerationParameters{
 						SecretName: "targetSecret",
 					},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -898,17 +898,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Succeed to get all configuration settings", func() {
 			By("By trimming single key prefix")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -936,17 +936,17 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Succeed to get all configuration settings", func() {
 			By("By trimming multiple key prefixes")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
 					TrimKeyPrefixes: []string{"app:", "test:"},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -975,25 +975,25 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 		It("Succeed to get all configuration settings", func() {
 			By("By loading and deduplicating feature flags")
 			featureFlagKeyFilter := "*"
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
-						Type: acpv1.Json,
+					ConfigMapData: &acp.ConfigMapDataOptions{
+						Type: acp.Json,
 						Key:  "settings.json",
 					},
 				},
-				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-					Selectors: []acpv1.Selector{
+				FeatureFlag: &acp.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acp.Selector{
 						{
 							KeyFilter: &featureFlagKeyFilter,
 						},
 					},
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -1018,14 +1018,14 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 		It("Fail to get all configuration settings", func() {
 			By("By getting error from Azure App Configuration")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: false,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -1051,14 +1051,14 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 	Context("Get settings when autofailover enabled", func() {
 		It("Succeed to get settings when origin endpoint not available", func() {
 			By("By Discovering Fallback Clients")
-			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			testSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                &EndpointName,
 				ReplicaDiscoveryEnabled: true,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
 				},
 			}
-			testProvider := acpv1.AzureAppConfigurationProvider{
+			testProvider := acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "azconfig.io/v1",
 					Kind:       "AppConfigurationProvider",
@@ -1114,17 +1114,17 @@ func TestReverse(t *testing.T) {
 	three := "three"
 	four := "four"
 	wildcard := "*"
-	empty := make([]acpv1.Selector, 0)
+	empty := make([]acp.Selector, 0)
 	reverse(empty)
 	assert.Empty(t, empty)
 	labelString := "test"
 
-	oneElement := []acpv1.Selector{{KeyFilter: &wildcard, LabelFilter: &labelString}}
+	oneElement := []acp.Selector{{KeyFilter: &wildcard, LabelFilter: &labelString}}
 	reverse(oneElement)
 	assert.Len(t, oneElement, 1)
 	assert.Equal(t, "*", *oneElement[0].KeyFilter)
 
-	oddNumber := []acpv1.Selector{
+	oddNumber := []acp.Selector{
 		{KeyFilter: &one, LabelFilter: &labelString},
 		{KeyFilter: &two, LabelFilter: &labelString},
 		{KeyFilter: &three, LabelFilter: &labelString}}
@@ -1134,7 +1134,7 @@ func TestReverse(t *testing.T) {
 	assert.Equal(t, "two", *oddNumber[1].KeyFilter)
 	assert.Equal(t, "one", *oddNumber[2].KeyFilter)
 
-	evenNumber := []acpv1.Selector{
+	evenNumber := []acp.Selector{
 		{KeyFilter: &one, LabelFilter: &labelString},
 		{KeyFilter: &two, LabelFilter: &labelString},
 		{KeyFilter: &three, LabelFilter: &labelString},
@@ -1152,15 +1152,15 @@ func TestGetFilters(t *testing.T) {
 	two := "two"
 	three := "three"
 	labelString := "test"
-	testSpec := acpv1.AzureAppConfigurationProviderSpec{
-		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.Selector{
+	testSpec := acp.AzureAppConfigurationProviderSpec{
+		Configuration: acp.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acp.Selector{
 				{KeyFilter: &one, LabelFilter: &labelString},
 				{KeyFilter: &two, LabelFilter: &labelString},
 				{KeyFilter: &three, LabelFilter: &labelString}},
 		},
-		FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-			Selectors: []acpv1.Selector{
+		FeatureFlag: &acp.AzureAppConfigurationFeatureFlagOptions{
+			Selectors: []acp.Selector{
 				{KeyFilter: &one, LabelFilter: &labelString},
 				{KeyFilter: &two, LabelFilter: &labelString},
 			},
@@ -1177,9 +1177,9 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, ".appconfig.featureflag/one", *featureFlagFilters[0].KeyFilter)
 	assert.Equal(t, ".appconfig.featureflag/two", *featureFlagFilters[1].KeyFilter)
 
-	testSpec2 := acpv1.AzureAppConfigurationProviderSpec{
-		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.Selector{},
+	testSpec2 := acp.AzureAppConfigurationProviderSpec{
+		Configuration: acp.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acp.Selector{},
 		},
 	}
 
@@ -1188,15 +1188,15 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, "*", *keyValueFilters2[0].KeyFilter)
 	assert.Nil(t, keyValueFilters2[0].LabelFilter)
 
-	testSpec3 := acpv1.AzureAppConfigurationProviderSpec{
-		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.Selector{
+	testSpec3 := acp.AzureAppConfigurationProviderSpec{
+		Configuration: acp.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acp.Selector{
 				{KeyFilter: &one, LabelFilter: &labelString},
 				{KeyFilter: &two, LabelFilter: &labelString},
 				{KeyFilter: &one, LabelFilter: &labelString}},
 		},
-		FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-			Selectors: []acpv1.Selector{
+		FeatureFlag: &acp.AzureAppConfigurationFeatureFlagOptions{
+			Selectors: []acp.Selector{
 				{KeyFilter: &one, LabelFilter: &labelString},
 				{KeyFilter: &two, LabelFilter: &labelString},
 				{KeyFilter: &one, LabelFilter: &labelString}},
@@ -1212,9 +1212,9 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, ".appconfig.featureflag/two", *featureFlagFilters3[0].KeyFilter)
 	assert.Equal(t, ".appconfig.featureflag/one", *featureFlagFilters3[1].KeyFilter)
 
-	testSpec4 := acpv1.AzureAppConfigurationProviderSpec{
-		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.Selector{
+	testSpec4 := acp.AzureAppConfigurationProviderSpec{
+		Configuration: acp.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acp.Selector{
 				{KeyFilter: &one},
 				{KeyFilter: &two, LabelFilter: &labelString},
 				{KeyFilter: &one}},
@@ -1230,9 +1230,9 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, `one`, *filters4[1].KeyFilter)
 	assert.Nil(t, filters4[1].LabelFilter)
 
-	testSpec5 := acpv1.AzureAppConfigurationProviderSpec{
-		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.Selector{
+	testSpec5 := acp.AzureAppConfigurationProviderSpec{
+		Configuration: acp.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acp.Selector{
 				{KeyFilter: &one},
 				{KeyFilter: &one, LabelFilter: &labelString},
 			},
@@ -1245,9 +1245,9 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, "one", *filters5[1].KeyFilter)
 	assert.Equal(t, "test", *filters5[1].LabelFilter)
 
-	testSpec6 := acpv1.AzureAppConfigurationProviderSpec{
-		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-			Selectors: []acpv1.Selector{
+	testSpec6 := acp.AzureAppConfigurationProviderSpec{
+		Configuration: acp.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acp.Selector{
 				{KeyFilter: &one, LabelFilter: &labelString},
 				{KeyFilter: &one},
 			},
@@ -1276,7 +1276,7 @@ func TestCompare(t *testing.T) {
 }
 
 func TestCreateSecretClients(t *testing.T) {
-	configProvider := &acpv1.AzureAppConfigurationProvider{
+	configProvider := &acp.AzureAppConfigurationProvider{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "appconfig.kubernetes.config/v1",
 			Kind:       "AzureAppConfigurationProvider",
@@ -1286,13 +1286,13 @@ func TestCreateSecretClients(t *testing.T) {
 			Namespace: ProviderNamespace,
 			Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 		},
-		Spec: acpv1.AzureAppConfigurationProviderSpec{
+		Spec: acp.AzureAppConfigurationProviderSpec{
 			Endpoint: &endpointName,
-			Target: acpv1.ConfigurationGenerationParameters{
+			Target: acp.ConfigurationGenerationParameters{
 				ConfigMapName: "configMap-test",
 			},
-			Secret: &acpv1.SecretReference{
-				Target: acpv1.SecretGenerationParameters{
+			Secret: &acp.SecretReference{
+				Target: acp.SecretGenerationParameters{
 					SecretName: "secret-test",
 				},
 			},
@@ -1308,7 +1308,7 @@ func TestCreateSecretClients(t *testing.T) {
 	assert.Nil(t, err)
 
 	testFakeManagedIdentity := "8766e199-e6df-4416-9f23-ce3a7ece0dca"
-	configProvider2 := &acpv1.AzureAppConfigurationProvider{
+	configProvider2 := &acp.AzureAppConfigurationProvider{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "appconfig.kubernetes.config/v1",
 			Kind:       "AzureAppConfigurationProvider",
@@ -1318,26 +1318,26 @@ func TestCreateSecretClients(t *testing.T) {
 			Namespace: ProviderNamespace,
 			Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 		},
-		Spec: acpv1.AzureAppConfigurationProviderSpec{
+		Spec: acp.AzureAppConfigurationProviderSpec{
 			Endpoint: &endpointName,
-			Target: acpv1.ConfigurationGenerationParameters{
+			Target: acp.ConfigurationGenerationParameters{
 				ConfigMapName: "configMap-test",
 			},
-			Secret: &acpv1.SecretReference{
-				Target: acpv1.SecretGenerationParameters{
+			Secret: &acp.SecretReference{
+				Target: acp.SecretGenerationParameters{
 					SecretName: "secretName",
 				},
-				Auth: &acpv1.AzureKeyVaultAuth{
-					KeyVaults: []acpv1.AzureKeyVaultPerVaultAuth{
+				Auth: &acp.AzureKeyVaultAuth{
+					KeyVaults: []acp.AzureKeyVaultPerVaultAuth{
 						{
 							Uri: "HTTPS://FAKE-VAULT/",
-							AzureAppConfigurationProviderAuth: &acpv1.AzureAppConfigurationProviderAuth{
+							AzureAppConfigurationProviderAuth: &acp.AzureAppConfigurationProviderAuth{
 								ManagedIdentityClientId: &testFakeManagedIdentity,
 							},
 						},
 						{
 							Uri: "https://FAKE-VAULT2",
-							AzureAppConfigurationProviderAuth: &acpv1.AzureAppConfigurationProviderAuth{
+							AzureAppConfigurationProviderAuth: &acp.AzureAppConfigurationProviderAuth{
 								ManagedIdentityClientId: &testFakeManagedIdentity,
 							},
 						},

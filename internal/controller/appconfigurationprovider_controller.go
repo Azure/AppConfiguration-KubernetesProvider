@@ -19,7 +19,7 @@ limitations under the License.
 package controller
 
 import (
-	acpv1 "azappconfig/provider/api/v1"
+	acp "azappconfig/provider/api/v2"
 	"azappconfig/provider/internal/loader"
 	"context"
 	"errors"
@@ -51,7 +51,7 @@ type AzureAppConfigurationProviderReconciler struct {
 type ReconciliationState struct {
 	Generation                              int64
 	ConfigMapResourceVersion                *string
-	SentinelETags                           map[acpv1.Sentinel]*azcore.ETag
+	SentinelETags                           map[acp.Sentinel]*azcore.ETag
 	ExistingSecretReferences                map[string]*loader.TargetSecretReference
 	NextSentinelBasedRefreshReconcileTime   metav1.Time
 	NextSecretReferenceRefreshReconcileTime metav1.Time
@@ -80,7 +80,7 @@ const (
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	provider := &acpv1.AzureAppConfigurationProvider{}
+	provider := &acp.AzureAppConfigurationProvider{}
 	err := reconciler.Get(ctx, req.NamespacedName, provider)
 	//Get object, if not exists, exit reconcile
 	if err != nil && apierrors.IsNotFound(err) {
@@ -112,15 +112,15 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 
 	/* Status initialization and resource object verification. */
 	if provider.Status.Phase == "" {
-		provider.Status.Phase = acpv1.PhasePending
+		provider.Status.Phase = acp.PhasePending
 	}
 
-	if provider.Status.Phase == acpv1.PhaseRunning {
+	if provider.Status.Phase == acp.PhaseRunning {
 		klog.V(3).Infof("The reconcile for AzureAppConfigurationProvider '%s' is running, just exit.", provider.Name)
 		return reconcile.Result{}, nil
 	}
 
-	provider.Status = newProviderStatus(acpv1.PhaseRunning, acpv1.SyncRunningMessage, provider.Status.LastSyncTime, provider.Status.RefreshStatus)
+	provider.Status = newProviderStatus(acp.PhaseRunning, acp.SyncRunningMessage, provider.Status.LastSyncTime, provider.Status.RefreshStatus)
 	klog.V(3).Infof("Start reconcile AzureAppConfigurationProvider %q in %q namespace ", provider.Name, provider.Namespace)
 
 	err = verifyObject(provider.Spec)
@@ -178,7 +178,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		reconciler.ProvidersReconcileState[req.NamespacedName] = &ReconciliationState{
 			Generation:               -1,
 			ConfigMapResourceVersion: nil,
-			SentinelETags:            make(map[acpv1.Sentinel]*azcore.ETag),
+			SentinelETags:            make(map[acp.Sentinel]*azcore.ETag),
 			ExistingSecretReferences: make(map[string]*loader.TargetSecretReference),
 			ClientManager:            nil,
 		}
@@ -284,13 +284,13 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	}
 
 	/* Finish the reconcile */
-	provider.Status = newProviderStatus(acpv1.PhaseComplete, acpv1.SyncCompleteMessage, metav1.Now(), provider.Status.RefreshStatus)
+	provider.Status = newProviderStatus(acp.PhaseComplete, acp.SyncCompleteMessage, metav1.Now(), provider.Status.RefreshStatus)
 	return processor.Finish()
 }
 
 func (reconciler *AzureAppConfigurationProviderReconciler) verifyTargetObjectExistence(
 	ctx context.Context,
-	provider *acpv1.AzureAppConfigurationProvider,
+	provider *acp.AzureAppConfigurationProvider,
 	obj client.Object) (bool, error) {
 	// Get and verify the existing configMap or secret, if there's existing configMap/secret which is not owned by current provider, throw error
 	var targetName string
@@ -314,7 +314,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) verifyTargetObjectExi
 }
 
 func (reconciler *AzureAppConfigurationProviderReconciler) logAndSetFailStatus(
-	provider *acpv1.AzureAppConfigurationProvider,
+	provider *acp.AzureAppConfigurationProvider,
 	err error) {
 	var showErrorAsWarning bool = false
 	namespacedName := types.NamespacedName{
@@ -335,15 +335,15 @@ func (reconciler *AzureAppConfigurationProviderReconciler) logAndSetFailStatus(
 
 	if showErrorAsWarning {
 		klog.Warningf("Fail to update the target ConfigMap or Secret of AzureAppConfigurationProvider '%s' in '%s' namespace: %s", provider.Name, provider.Namespace, err.Error())
-		provider.Status = newProviderStatus(acpv1.PhaseUpdateFailed, acpv1.UpdateFailMessage, provider.Status.LastSyncTime, provider.Status.RefreshStatus)
+		provider.Status = newProviderStatus(acp.PhaseUpdateFailed, acp.UpdateFailMessage, provider.Status.LastSyncTime, provider.Status.RefreshStatus)
 	} else {
 		klog.Errorf("Fail to create the target ConfigMap or Secret of AzureAppConfigurationProvider '%s' in '%s' namespace: %s", provider.Name, provider.Namespace, err.Error())
-		provider.Status = newProviderStatus(acpv1.PhaseFailed, acpv1.CreateFailMessage, provider.Status.LastSyncTime, provider.Status.RefreshStatus)
+		provider.Status = newProviderStatus(acp.PhaseFailed, acp.CreateFailMessage, provider.Status.LastSyncTime, provider.Status.RefreshStatus)
 	}
 }
 
 func (reconciler *AzureAppConfigurationProviderReconciler) requeueWhenGetSettingsFailed(
-	provider *acpv1.AzureAppConfigurationProvider,
+	provider *acp.AzureAppConfigurationProvider,
 	err error) (ctrl.Result, error) {
 	requeueAfter := RequeueReconcileAfter
 	reconciler.logAndSetFailStatus(provider, err)
@@ -365,7 +365,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) requeueWhenGetSetting
 
 func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigMap(
 	ctx context.Context,
-	provider *acpv1.AzureAppConfigurationProvider,
+	provider *acp.AzureAppConfigurationProvider,
 	settings *loader.TargetKeyValueSettings) (reconcile.Result, error) {
 	configMapObj := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -410,7 +410,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 
 func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets(
 	ctx context.Context,
-	provider *acpv1.AzureAppConfigurationProvider,
+	provider *acp.AzureAppConfigurationProvider,
 	settings *loader.TargetKeyValueSettings) (reconcile.Result, error) {
 	if len(settings.SecretSettings) == 0 {
 		klog.V(3).Info("No secret settings are fetched from Azure AppConfiguration")
@@ -462,7 +462,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 
 func (reconciler *AzureAppConfigurationProviderReconciler) expelRemovedSecrets(
 	ctx context.Context,
-	provider *acpv1.AzureAppConfigurationProvider,
+	provider *acp.AzureAppConfigurationProvider,
 	existingSecrets map[string]corev1.Secret,
 	secretReferences map[string]*loader.TargetSecretReference) (reconcile.Result, error) {
 	for name := range existingSecrets {
@@ -484,11 +484,11 @@ func (reconciler *AzureAppConfigurationProviderReconciler) expelRemovedSecrets(
 }
 
 func newProviderStatus(
-	phase acpv1.AppConfigurationSyncPhase,
+	phase acp.AppConfigurationSyncPhase,
 	message string,
 	syncTime metav1.Time,
-	refreshStatus acpv1.RefreshStatus) acpv1.AzureAppConfigurationProviderStatus {
-	return acpv1.AzureAppConfigurationProviderStatus{
+	refreshStatus acp.RefreshStatus) acp.AzureAppConfigurationProviderStatus {
+	return acp.AzureAppConfigurationProviderStatus{
 		Message:           message,
 		Phase:             phase,
 		LastReconcileTime: metav1.Now(),
@@ -500,7 +500,7 @@ func newProviderStatus(
 // SetupWithManager sets up the controller with the Manager.
 func (r *AzureAppConfigurationProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&acpv1.AzureAppConfigurationProvider{}, builder.WithPredicates(newEventFilter())).
+		For(&acp.AzureAppConfigurationProvider{}, builder.WithPredicates(newEventFilter())).
 		Watches(&corev1.ConfigMap{},
 			&EnqueueRequestsFromWatchedObject{},
 			builder.WithPredicates(WatchedObjectPredicate{})).

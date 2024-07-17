@@ -4,7 +4,7 @@
 package controller
 
 import (
-	acpv1 "azappconfig/provider/api/v1"
+	acp "azappconfig/provider/api/v2"
 	"azappconfig/provider/internal/loader"
 	"fmt"
 	"net/url"
@@ -24,7 +24,7 @@ const (
 	WorkloadIdentityDisableGlobalServiceAccount string        = "WORKLOAD_IDENTITY_DISABLE_GLOBAL_SERVICE_ACCOUNT"
 )
 
-func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
+func verifyObject(spec acp.AzureAppConfigurationProviderSpec) error {
 	var err error
 	if spec.Endpoint == nil && spec.ConnectionStringReference == nil {
 		return loader.NewArgumentError("spec", fmt.Errorf("one of endpoint and connectionStringReference field must be set"))
@@ -39,7 +39,7 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 	}
 
 	if spec.Target.ConfigMapData != nil {
-		if spec.Target.ConfigMapData.Type == acpv1.Default {
+		if spec.Target.ConfigMapData.Type == acp.Default {
 			if spec.Target.ConfigMapData.Key != "" {
 				return loader.NewArgumentError("spec.target.configMapData.key", fmt.Errorf("key field is not allowed when type is default"))
 			}
@@ -50,8 +50,8 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 		}
 
 		if spec.Target.ConfigMapData.Separator != nil &&
-			(spec.Target.ConfigMapData.Type == acpv1.Default ||
-				spec.Target.ConfigMapData.Type == acpv1.Properties) {
+			(spec.Target.ConfigMapData.Type == acp.Default ||
+				spec.Target.ConfigMapData.Type == acp.Properties) {
 			return loader.NewArgumentError("spec.target.configMapData.separator", fmt.Errorf("separator field is not allowed when type is %s", spec.Target.ConfigMapData.Type))
 		}
 	}
@@ -64,7 +64,7 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 	}
 
 	if spec.FeatureFlag != nil {
-		if spec.Target.ConfigMapData == nil || spec.Target.ConfigMapData.Type == acpv1.Default || spec.Target.ConfigMapData.Type == acpv1.Properties {
+		if spec.Target.ConfigMapData == nil || spec.Target.ConfigMapData.Type == acp.Default || spec.Target.ConfigMapData.Type == acp.Properties {
 			return loader.NewArgumentError("spec.target.configMapData", fmt.Errorf("configMap data type must be json or yaml when FeatureFlag is set"))
 		}
 
@@ -120,7 +120,7 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 	}
 
 	if spec.Configuration.Refresh != nil {
-		sentinelMap := make(map[acpv1.Sentinel]bool)
+		sentinelMap := make(map[acp.Sentinel]bool)
 		for _, sentinel := range spec.Configuration.Refresh.Monitoring.Sentinels {
 			if _, ok := sentinelMap[sentinel]; ok {
 				return loader.NewArgumentError("spec.configuration.refresh.monitoring.keyValues", fmt.Errorf("monitoring duplicated key '%s'", sentinel.Key))
@@ -165,7 +165,7 @@ func verifyEndpoint(endpoint string) error {
 	return nil
 }
 
-func verifyAuthObject(auth *acpv1.AzureAppConfigurationProviderAuth) error {
+func verifyAuthObject(auth *acp.AzureAppConfigurationProviderAuth) error {
 	if auth != nil {
 		var authCount int = 0
 
@@ -239,7 +239,7 @@ func verifyRefreshInterval(interval string, allowedMinimalRefreshInterval time.D
 	return nil
 }
 
-func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityParameters) error {
+func verifyWorkloadIdentityParameters(workloadIdentity *acp.WorkloadIdentityParameters) error {
 	if !strings.EqualFold(os.Getenv(WorkloadIdentityEnabled), "true") {
 		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("workloadIdentity is not enabled"))
 	}
@@ -282,7 +282,7 @@ func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityPa
 	return nil
 }
 
-func verifySelectorObject(selector acpv1.Selector) error {
+func verifySelectorObject(selector acp.Selector) error {
 	if selector.KeyFilter == nil && selector.SnapshotName == nil {
 		return fmt.Errorf("a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering")
 	}

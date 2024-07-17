@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	acpv1 "azappconfig/provider/api/v1"
+	acp "azappconfig/provider/api/v2"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
@@ -51,7 +51,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider"
 			configMapName := "configmap-to-be-created"
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AzureAppConfigurationProvider",
@@ -60,10 +60,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Name:      providerName,
 					Namespace: ProviderNamespace,
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint:                &EndpointName,
 					ReplicaDiscoveryEnabled: false,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
 				},
@@ -71,7 +71,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
 
 			providerLookupKey := types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}
-			createdProvider := &acpv1.AzureAppConfigurationProvider{}
+			createdProvider := &acp.AzureAppConfigurationProvider{}
 
 			// We'll need to retry getting this newly created AppConfiguationProvider, given that creation may not immediately happen.
 			Eventually(func() bool {
@@ -92,7 +92,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Name).Should(Equal(configMapName))
 			Expect(configmap.Namespace).Should(Equal(ProviderNamespace))
 			Expect(configmap.Data["testKey"]).Should(Equal("testValue"))
-			Expect(createdProvider.Status.Phase).Should(Equal(acpv1.PhaseComplete))
+			Expect(createdProvider.Status.Phase).Should(Equal(acp.PhaseComplete))
 		})
 
 		It("Should create new configMap", func() {
@@ -111,7 +111,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-2"
 			configMapName := "configmap-to-be-created-2"
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AzureAppConfigurationProvider",
@@ -121,9 +121,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Namespace: ProviderNamespace,
 					Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
 				},
@@ -187,7 +187,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-3"
 			configMapName := "configmap-to-be-created-3"
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AppConfigurationProvider",
@@ -196,13 +196,13 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Name:      providerName,
 					Namespace: ProviderNamespace,
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
-					Secret: &acpv1.SecretReference{
-						Target: acpv1.SecretGenerationParameters{
+					Secret: &acp.SecretReference{
+						Target: acp.SecretGenerationParameters{
 							SecretName: secretName,
 						},
 					},
@@ -277,7 +277,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			providerName := "test-appconfigurationprovider-5"
 			configMapName := "configmap-to-be-created-5"
 
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AppConfigurationProvider",
@@ -286,13 +286,13 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Name:      providerName,
 					Namespace: ProviderNamespace,
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
-					Secret: &acpv1.SecretReference{
-						Target: acpv1.SecretGenerationParameters{
+					Secret: &acp.SecretReference{
+						Target: acp.SecretGenerationParameters{
 							SecretName: secretName,
 						},
 					},
@@ -345,7 +345,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-7"
 			configMapName := "file-style-configmap-to-be-created"
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AzureAppConfigurationProvider",
@@ -355,11 +355,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Namespace: ProviderNamespace,
 					Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
-						ConfigMapData: &acpv1.ConfigMapDataOptions{
+						ConfigMapData: &acp.ConfigMapDataOptions{
 							Type: "json",
 							Key:  "filestyle.json",
 						},
@@ -399,7 +399,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			providerName := "test-appconfigurationprovider-8"
 			configMapName := "file-style-configmap-to-be-created-2"
 			wildcard := "*"
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AzureAppConfigurationProvider",
@@ -408,17 +408,17 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Name:      providerName,
 					Namespace: ProviderNamespace,
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
-						ConfigMapData: &acpv1.ConfigMapDataOptions{
+						ConfigMapData: &acp.ConfigMapDataOptions{
 							Type: "json",
 							Key:  "filestyle.json",
 						},
 					},
-					FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-						Selectors: []acpv1.Selector{
+					FeatureFlag: &acp.AzureAppConfigurationFeatureFlagOptions{
+						Selectors: []acp.Selector{
 							{
 								KeyFilter: &wildcard,
 							},
@@ -458,7 +458,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-1"
 			configMapName := "configmap-to-be-refresh-1"
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AzureAppConfigurationProvider",
@@ -468,9 +468,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Namespace: ProviderNamespace,
 					Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
 				},
@@ -550,7 +550,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-2"
 			configMapName := "configmap-to-be-refresh-2"
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AzureAppConfigurationProvider",
@@ -560,17 +560,17 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Namespace: ProviderNamespace,
 					Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
-					Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-						Refresh: &acpv1.DynamicConfigurationRefreshParameters{
+					Configuration: acp.AzureAppConfigurationKeyValueOptions{
+						Refresh: &acp.DynamicConfigurationRefreshParameters{
 							Interval: "5s",
 							Enabled:  true,
-							Monitoring: &acpv1.RefreshMonitoring{
-								Sentinels: []acpv1.Sentinel{
+							Monitoring: &acp.RefreshMonitoring{
+								Sentinels: []acp.Sentinel{
 									{Key: "testKey", Label: "testLabel"},
 								},
 							},
@@ -644,7 +644,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			providerName := "refresh-appconfigurationprovider-3"
 			configMapName := "configmap-to-be-refreshed-3"
 
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AppConfigurationProvider",
@@ -653,16 +653,16 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Name:      providerName,
 					Namespace: ProviderNamespace,
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
 					},
-					Secret: &acpv1.SecretReference{
-						Target: acpv1.SecretGenerationParameters{
+					Secret: &acp.SecretReference{
+						Target: acp.SecretGenerationParameters{
 							SecretName: secretName,
 						},
-						Refresh: &acpv1.RefreshSettings{
+						Refresh: &acp.RefreshSettings{
 							Interval: "1m",
 							Enabled:  true,
 						},
@@ -764,10 +764,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		It("Should return error if both endpoint and connectionStringReference are set", func() {
 			configMapName := "test-configmap"
 			connectionStringReference := "fakeSecret"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint:                  &EndpointName,
 				ConnectionStringReference: &connectionStringReference,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
 				},
 			}
@@ -777,12 +777,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should return error if configMapData key is set when type is default", func() {
 			configMapName := "test-configmap"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
-						Type: acpv1.Default,
+					ConfigMapData: &acp.ConfigMapDataOptions{
+						Type: acp.Default,
 						Key:  "testKey",
 					},
 				},
@@ -793,12 +793,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should return error if configMapData key is not set when type is not default", func() {
 			configMapName := "test-configmap"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
-						Type: acpv1.Json,
+					ConfigMapData: &acp.ConfigMapDataOptions{
+						Type: acp.Json,
 					},
 				},
 			}
@@ -809,12 +809,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		It("Should return error if configMapData separator is set when type is default", func() {
 			configMapName := "test-configmap"
 			delimiter := "."
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
-						Type:      acpv1.Default,
+					ConfigMapData: &acp.ConfigMapDataOptions{
+						Type:      acp.Default,
 						Separator: &delimiter,
 					},
 				},
@@ -826,12 +826,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		It("Should return error if configMapData separator is set when type is properties", func() {
 			configMapName := "test-configmap"
 			delimiter := "."
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
-						Type:      acpv1.Properties,
+					ConfigMapData: &acp.ConfigMapDataOptions{
+						Type:      acp.Properties,
 						Key:       "testKey",
 						Separator: &delimiter,
 					},
@@ -844,13 +844,13 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		It("Should return error if feature flag is set when data type is default", func() {
 			configMapName := "test-configmap"
 			testKey := "testKey"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
 				},
-				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-					Selectors: []acpv1.Selector{
+				FeatureFlag: &acp.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acp.Selector{
 						{
 							KeyFilter: &testKey,
 						},
@@ -864,17 +864,17 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		It("Should return error if feature flag is set when data type is properties", func() {
 			configMapName := "test-configmap"
 			testKeyFilter := "testKeyFilter"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
-						Type: acpv1.Properties,
+					ConfigMapData: &acp.ConfigMapDataOptions{
+						Type: acp.Properties,
 						Key:  "testKey",
 					},
 				},
-				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-					Selectors: []acpv1.Selector{
+				FeatureFlag: &acp.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acp.Selector{
 						{
 							KeyFilter: &testKeyFilter,
 						},
@@ -887,16 +887,16 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should return error if feature flag selector is not set", func() {
 			configMapName := "test-configmap"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
-						Type: acpv1.Json,
+					ConfigMapData: &acp.ConfigMapDataOptions{
+						Type: acp.Json,
 						Key:  "testKey",
 					},
 				},
-				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{},
+				FeatureFlag: &acp.AzureAppConfigurationFeatureFlagOptions{},
 			}
 
 			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.featureFlag.selectors: featureFlag.selectors must be specified when FeatureFlag is set"))
@@ -904,8 +904,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should return error if both endpoint and connectionStringReference are not set", func() {
 			configMapName := "test-configmap"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
-				Target: acpv1.ConfigurationGenerationParameters{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
 				},
 			}
@@ -917,12 +917,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			configMapName := "test-configmap"
 			connectionStringReference := "fakeSecret"
 			uuid1 := "86c613ca-b977-11ed-afa1-0242ac120002"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
-				Auth: &acpv1.AzureAppConfigurationProviderAuth{
+				Auth: &acp.AzureAppConfigurationProviderAuth{
 					ManagedIdentityClientId: &uuid1,
 				},
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
 				},
 			}
@@ -933,15 +933,15 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		It("Should return error when duplicated sentinel key are set", func() {
 			configMapName := "test-configmap"
 			connectionStringReference := "fakeSecret"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-					Refresh: &acpv1.DynamicConfigurationRefreshParameters{
-						Monitoring: &acpv1.RefreshMonitoring{
-							Sentinels: []acpv1.Sentinel{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
+					Refresh: &acp.DynamicConfigurationRefreshParameters{
+						Monitoring: &acp.RefreshMonitoring{
+							Sentinels: []acp.Sentinel{
 								{
 									Key:   "testKey",
 									Label: "testValue",
@@ -966,15 +966,15 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		It("Should return no error when all sentinel are unique", func() {
 			configMapName := "test-configmap"
 			connectionStringReference := "fakeSecret"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-					Refresh: &acpv1.DynamicConfigurationRefreshParameters{
-						Monitoring: &acpv1.RefreshMonitoring{
-							Sentinels: []acpv1.Sentinel{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
+					Refresh: &acp.DynamicConfigurationRefreshParameters{
+						Monitoring: &acp.RefreshMonitoring{
+							Sentinels: []acp.Sentinel{
 								{
 									Key:   "testKey",
 									Label: "\x00",
@@ -1006,13 +1006,13 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			testKey := "testKey"
 			testSnapshot := "testSnapshot"
 			testLabel := "testLabel"
-			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec := acp.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-					Selectors: []acpv1.Selector{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acp.Selector{
 						{
 							KeyFilter:    &testKey,
 							SnapshotName: &testSnapshot,
@@ -1023,13 +1023,13 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.configuration.selectors: set both 'keyFilter' and 'snapshotName' in one selector causes ambiguity, only one of them should be set"))
 
-			configProviderSpec2 := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec2 := acp.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-					Selectors: []acpv1.Selector{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acp.Selector{
 						{
 							SnapshotName: &testSnapshot,
 							LabelFilter:  &testLabel,
@@ -1040,13 +1040,13 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			Expect(verifyObject(configProviderSpec2).Error()).Should(Equal("spec.configuration.selectors: 'labelFilter' is not allowed when 'snapshotName' is set"))
 
-			configProviderSpec3 := acpv1.AzureAppConfigurationProviderSpec{
+			configProviderSpec3 := acp.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
-				Target: acpv1.ConfigurationGenerationParameters{
+				Target: acp.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
 				},
-				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-					Selectors: []acpv1.Selector{
+				Configuration: acp.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acp.Selector{
 						{
 							LabelFilter: &testLabel,
 						},
@@ -1067,28 +1067,28 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			configMapName := "fakeName2"
 			serviceAccountName := "fakeName3"
 			key := "fakeKey"
-			authObj := &acpv1.AzureAppConfigurationProviderAuth{}
-			authObj2 := &acpv1.AzureAppConfigurationProviderAuth{
+			authObj := &acp.AzureAppConfigurationProviderAuth{}
+			authObj2 := &acp.AzureAppConfigurationProviderAuth{
 				ManagedIdentityClientId: &uuid1,
 			}
-			authObj3 := &acpv1.AzureAppConfigurationProviderAuth{
+			authObj3 := &acp.AzureAppConfigurationProviderAuth{
 				ServicePrincipalReference: &secretName,
 			}
-			authObj4 := &acpv1.AzureAppConfigurationProviderAuth{
-				WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
+			authObj4 := &acp.AzureAppConfigurationProviderAuth{
+				WorkloadIdentity: &acp.WorkloadIdentityParameters{
 					ManagedIdentityClientId: &uuid1,
 				},
 			}
-			authObj5 := &acpv1.AzureAppConfigurationProviderAuth{
-				WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
-					ManagedIdentityClientIdReference: &acpv1.ManagedIdentityReferenceParameters{
+			authObj5 := &acp.AzureAppConfigurationProviderAuth{
+				WorkloadIdentity: &acp.WorkloadIdentityParameters{
+					ManagedIdentityClientIdReference: &acp.ManagedIdentityReferenceParameters{
 						ConfigMap: configMapName,
 						Key:       key,
 					},
 				},
 			}
-			authObj6 := &acpv1.AzureAppConfigurationProviderAuth{
-				WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
+			authObj6 := &acp.AzureAppConfigurationProviderAuth{
+				WorkloadIdentity: &acp.WorkloadIdentityParameters{
 					ServiceAccountName: &serviceAccountName,
 				},
 			}
@@ -1107,29 +1107,29 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			secretName := "fakeName1"
 			configMapName := "fakeName2"
 			key := "fakeKey"
-			authObj := &acpv1.AzureAppConfigurationProviderAuth{
+			authObj := &acp.AzureAppConfigurationProviderAuth{
 				ManagedIdentityClientId: &uuid1,
 			}
-			authObj2 := &acpv1.AzureAppConfigurationProviderAuth{
+			authObj2 := &acp.AzureAppConfigurationProviderAuth{
 				ManagedIdentityClientId:   &uuid2,
 				ServicePrincipalReference: &secretName,
 			}
-			authObj3 := &acpv1.AzureAppConfigurationProviderAuth{
-				WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
+			authObj3 := &acp.AzureAppConfigurationProviderAuth{
+				WorkloadIdentity: &acp.WorkloadIdentityParameters{
 					ManagedIdentityClientId: &uuid2,
-					ManagedIdentityClientIdReference: &acpv1.ManagedIdentityReferenceParameters{
+					ManagedIdentityClientIdReference: &acp.ManagedIdentityReferenceParameters{
 						ConfigMap: configMapName,
 						Key:       key,
 					},
 				},
 			}
-			authObj4 := &acpv1.AzureAppConfigurationProviderAuth{
-				WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
+			authObj4 := &acp.AzureAppConfigurationProviderAuth{
+				WorkloadIdentity: &acp.WorkloadIdentityParameters{
 					ManagedIdentityClientId: &uuid1,
 				},
 			}
-			authObj5 := &acpv1.AzureAppConfigurationProviderAuth{
-				WorkloadIdentity: &acpv1.WorkloadIdentityParameters{},
+			authObj5 := &acp.AzureAppConfigurationProviderAuth{
+				WorkloadIdentity: &acp.WorkloadIdentityParameters{},
 			}
 			Expect(verifyAuthObject(authObj).Error()).Should(Equal("auth: ManagedIdentityClientId \"not-a-uuid\" in auth field is not a valid uuid"))
 			Expect(verifyAuthObject(authObj2).Error()).Should(Equal("auth: more than one authentication methods are specified in 'auth' field"))
@@ -1141,7 +1141,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 	Context("Verify the existing configMap", func() {
 		It("Should return no error if existing configMap is valid", func() {
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AzureAppConfigurationProvider",
@@ -1151,9 +1151,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Namespace: ProviderNamespace,
 					Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: "configMapName",
 					},
 				},
@@ -1185,7 +1185,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		})
 
 		It("Should return error if configMap is not valid", func() {
-			configProvider := &acpv1.AzureAppConfigurationProvider{
+			configProvider := &acp.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
 					Kind:       "AzureAppConfigurationProvider",
@@ -1195,9 +1195,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Namespace: ProviderNamespace,
 					Labels:    map[string]string{"foo": "fooValue", "bar": "barValue"},
 				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
+				Spec: acp.AzureAppConfigurationProviderSpec{
 					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
+					Target: acp.ConfigurationGenerationParameters{
 						ConfigMapName: "configMapName",
 					},
 				},

@@ -37,6 +37,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	configproviderv1 "azappconfig/provider/api/v1"
+	azconfigv2 "azappconfig/provider/api/v2"
 	"azappconfig/provider/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
@@ -50,6 +51,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(configproviderv1.AddToScheme(scheme))
+	utilruntime.Must(azconfigv2.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 

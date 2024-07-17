@@ -4,7 +4,7 @@
 package loader
 
 import (
-	acpv1 "azappconfig/provider/api/v1"
+	acp "azappconfig/provider/api/v2"
 	"context"
 	"errors"
 	"fmt"
@@ -17,11 +17,11 @@ import (
 //go:generate mockgen -destination=mocks/mock_settings_client.go -package mocks . SettingsClient
 
 type SelectorSettingsClient struct {
-	selectors []acpv1.Selector
+	selectors []acp.Selector
 }
 
 type SentinelSettingsClient struct {
-	sentinel        acpv1.Sentinel
+	sentinel        acp.Sentinel
 	etag            *azcore.ETag
 	refreshInterval string
 }

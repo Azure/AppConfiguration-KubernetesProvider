@@ -33,7 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	configproviderv1 "azappconfig/provider/api/v1"
+	configproviderv1 "azappconfig/provider/api/v2"
 	"azappconfig/provider/internal/loader/mocks"
 
 	ctrl "sigs.k8s.io/controller-runtime"

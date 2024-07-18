@@ -12,6 +12,7 @@ import (
 
 	acpv1 "azappconfig/provider/api/v1"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -618,13 +619,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			secretResult := make(map[string][]byte)
 			secretResult["testSecretKey"] = []byte("testSecretValue")
-			secretResult["testSecretKey2"] = []byte("testSecretValue2")
-			secretResult["testSecretKey3"] = []byte("testSecretValue3")
 
 			secretName := "secret-to-be-refreshed-3"
+			var fakeId azsecrets.ID = "fakeSecretId"
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
-			secretMetadata["testSecretKey2"] = loader.KeyVaultSecretMetadata{
-				HostName: "fakeHostName",
+			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
+				SecretId: &fakeId,
 			}
 
 			allSettings := &loader.TargetKeyValueSettings{
@@ -702,14 +702,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			Expect(secret.Namespace).Should(Equal(ProviderNamespace))
 			Expect(string(secret.Data["testSecretKey"])).Should(Equal("testSecretValue"))
-			Expect(string(secret.Data["testSecretKey2"])).Should(Equal("testSecretValue2"))
-			Expect(string(secret.Data["testSecretKey3"])).Should(Equal("testSecretValue3"))
 			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 
 			newSecretResult := make(map[string][]byte)
 			newSecretResult["testSecretKey"] = []byte("newTestSecretValue")
-			newSecretResult["testSecretKey2"] = []byte("newTestSecretValue2")
-			newSecretResult["testSecretKey3"] = []byte("newTestSecretValue3")
 
 			newResolvedSecret := map[string]corev1.Secret{
 				secretName: {
@@ -718,9 +714,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
+			var newFakeId azsecrets.ID = "newFakeSecretId"
 			newSecretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			newSecretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
-				HostName: "fakeHostName",
+				SecretId: &newFakeId,
 			}
 			mockedSecretReference := make(map[string]*loader.TargetSecretReference)
 			mockedSecretReference[secretName] = &loader.TargetSecretReference{
@@ -744,11 +741,15 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			Expect(secret.Namespace).Should(Equal(ProviderNamespace))
 			Expect(string(secret.Data["testSecretKey"])).Should(Equal("newTestSecretValue"))
-			Expect(string(secret.Data["testSecretKey2"])).Should(Equal("newTestSecretValue2"))
-			Expect(string(secret.Data["testSecretKey3"])).Should(Equal("newTestSecretValue3"))
 			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 
-			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings, nil)
+			// Mocked secret refresh scenario when secretMetadata is not changed
+			newTargetSettings2 := &loader.TargetKeyValueSettings{
+				SecretSettings:   make(map[string]corev1.Secret),
+				SecretReferences: mockedSecretReference,
+			}
+
+			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings2, nil)
 			// Refresh interval is 1 minute, wait for 65 seconds to make sure the refresh is triggered
 			time.Sleep(65 * time.Second)
 
@@ -759,11 +760,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			Expect(secret.Namespace).Should(Equal(ProviderNamespace))
 			Expect(string(secret.Data["testSecretKey"])).Should(Equal("newTestSecretValue"))
-			Expect(string(secret.Data["testSecretKey2"])).Should(Equal("newTestSecretValue2"))
-			Expect(string(secret.Data["testSecretKey3"])).Should(Equal("newTestSecretValue3"))
 			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 		})
-
 	})
 
 	Context("Verify exist non escaped value in label", func() {

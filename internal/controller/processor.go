@@ -283,9 +283,11 @@ func (processor *AppConfigurationProviderProcessor) shouldReconcile(
 
 func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error) {
 	processor.ReconciliationState.Generation = processor.Provider.Generation
+
 	if processor.RefreshOptions.SecretSettingPopulated {
 		processor.ReconciliationState.ExistingSecretReferences = processor.Settings.SecretReferences
 	}
+
 	if !processor.RefreshOptions.secretReferenceRefreshEnabled &&
 		!processor.RefreshOptions.sentinelBasedRefreshEnabled &&
 		!processor.RefreshOptions.featureFlagRefreshEnabled {

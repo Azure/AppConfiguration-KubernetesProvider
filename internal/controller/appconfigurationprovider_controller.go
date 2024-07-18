@@ -426,42 +426,43 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 	}
 
 	for secretName, secret := range processor.Settings.SecretSettings {
-		if processor.ShouldReconcile || shouldCreateOrUpdate(reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences, secretName, processor.Settings.SecretReferences[secretName]) {
-			secretObj := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: provider.Namespace,
-				},
-				Type: secret.Type,
-			}
-
-			// Important: set the ownership of secret
-			if err := controllerutil.SetControllerReference(provider, secretObj, reconciler.Scheme); err != nil {
-				reconciler.logAndSetFailStatus(provider, err)
-				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
-			}
-
-			provider.Annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
-			operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, secretObj, func() error {
-				secretObj.Data = secret.Data
-				secretObj.Labels = provider.Labels
-				secretObj.Annotations = provider.Annotations
-
-				return nil
-			})
-			if err != nil {
-				reconciler.logAndSetFailStatus(provider, err)
-				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
-			}
-
-			processor.Settings.SecretReferences[secretName].SecretResourceVersion = secretObj.ResourceVersion
-			klog.V(5).Infof("Secret %q in %q namespace is %s", secretObj.Name, secretObj.Namespace, string(operationResult))
-		} else {
+		if !shouldCreateOrUpdate(reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences, secretName, processor.Settings.SecretReferences[secretName], processor.ShouldReconcile) {
 			if _, ok := reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName]; ok {
 				processor.Settings.SecretReferences[secretName].SecretResourceVersion = reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName].SecretResourceVersion
 			}
-			klog.V(5).Infof("Skip updating the secret %q in %q namespace since its data is up-to-date", secretName, provider.Namespace)
+			klog.V(5).Infof("Skip updating the secret %q in %q namespace since data is not changed", secretName, provider.Namespace)
+			continue
 		}
+
+		secretObj := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: provider.Namespace,
+			},
+			Type: secret.Type,
+		}
+
+		// Important: set the ownership of secret
+		if err := controllerutil.SetControllerReference(provider, secretObj, reconciler.Scheme); err != nil {
+			reconciler.logAndSetFailStatus(provider, err)
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
+		}
+
+		provider.Annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
+		operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, secretObj, func() error {
+			secretObj.Data = secret.Data
+			secretObj.Labels = provider.Labels
+			secretObj.Annotations = provider.Annotations
+
+			return nil
+		})
+		if err != nil {
+			reconciler.logAndSetFailStatus(provider, err)
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
+		}
+
+		processor.Settings.SecretReferences[secretName].SecretResourceVersion = secretObj.ResourceVersion
+		klog.V(5).Infof("Secret %q in %q namespace is %s", secretObj.Name, secretObj.Namespace, string(operationResult))
 	}
 
 	return reconcile.Result{}, nil

@@ -303,7 +303,11 @@ func verifySelectorObject(selector acpv1.Selector) error {
 	return nil
 }
 
-func shouldCreateOrUpdate(existingSecretReferences map[string]*loader.TargetSecretReference, secretName string, secretReference *loader.TargetSecretReference) bool {
+func shouldCreateOrUpdate(existingSecretReferences map[string]*loader.TargetSecretReference, secretName string, secretReference *loader.TargetSecretReference, shouldReconcile bool) bool {
+	if shouldReconcile {
+		return true
+	}
+
 	if _, ok := existingSecretReferences[secretName]; !ok {
 		return true
 	}
@@ -312,12 +316,12 @@ func shouldCreateOrUpdate(existingSecretReferences map[string]*loader.TargetSecr
 		return true
 	}
 
-	for key, uriSegment := range secretReference.SecretMetadata {
+	for key, secretMetadata := range secretReference.SecretMetadata {
 		if _, ok := existingSecretReferences[secretName].SecretMetadata[key]; !ok {
 			return true
 		}
-		if existingSecretReferences[secretName].SecretMetadata[key].SecretId != nil && uriSegment.SecretId != nil &&
-			*(existingSecretReferences[secretName].SecretMetadata[key].SecretId) != *(uriSegment.SecretId) {
+		if existingSecretReferences[secretName].SecretMetadata[key].SecretId != nil && secretMetadata.SecretId != nil &&
+			*(existingSecretReferences[secretName].SecretMetadata[key].SecretId) != *(secretMetadata.SecretId) {
 			return true
 		}
 	}

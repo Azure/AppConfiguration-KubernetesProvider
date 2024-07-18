@@ -77,8 +77,8 @@ spec:
         {{- end }}
         - name: WORKLOAD_IDENTITY_ENABLED
           value: "{{ .Values.workloadIdentity.enabled }}"
-        - name: WORKLOAD_IDENTITY_DISABLE_GLOBAL_SERVICE_ACCOUNT
-          value: "{{ .Values.workloadIdentity.disableGlobalServiceAccount }}"
+        - name: WORKLOAD_IDENTITY_ENABLE_GLOBAL_SERVICE_ACCOUNT
+          value: "{{ .Values.workloadIdentity.enableGlobalServiceAccount }}"
         {{- if and (hasKey .Values "global") 
             (hasKey .Values.global "azure")
             (hasKey .Values.global.azure "extension")

@@ -406,7 +406,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretMetadata{
+					SecretMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -459,7 +459,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretMetadata{
+					SecretMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -515,7 +515,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretMetadata{
+					SecretMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -571,7 +571,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretMetadata{
+					SecretMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -627,7 +627,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretMetadata{
+					SecretMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -686,7 +686,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretMetadata{
+					SecretMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -743,7 +743,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretMetadata{
+					SecretMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -800,7 +800,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretMetadata{
+					SecretMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",

@@ -425,9 +425,8 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 		Namespace: provider.Namespace,
 	}
 
-	secretToUpdate := checkAndUpdateSecretRef(reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences, processor.Settings.SecretReferences, processor.ShouldReconcile)
 	for secretName, secret := range processor.Settings.SecretSettings {
-		if _, ok := secretToUpdate[secretName]; ok {
+		if processor.ShouldReconcile || shouldCreateOrUpdate(reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences, secretName, processor.Settings.SecretReferences[secretName]) {
 			secretObj := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      secretName,
@@ -458,6 +457,9 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 			processor.Settings.SecretReferences[secretName].SecretResourceVersion = secretObj.ResourceVersion
 			klog.V(5).Infof("Secret %q in %q namespace is %s", secretObj.Name, secretObj.Namespace, string(operationResult))
 		} else {
+			if _, ok := reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName]; ok {
+				processor.Settings.SecretReferences[secretName].SecretResourceVersion = reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName].SecretResourceVersion
+			}
 			klog.V(5).Infof("Skip updating the secret %q in %q namespace since its data is up-to-date", secretName, provider.Namespace)
 		}
 	}

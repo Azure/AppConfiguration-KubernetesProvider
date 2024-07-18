@@ -199,26 +199,26 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 
 	// Only resolve the secret references that not specified the secret version
 	secretReferencesToSolve := make(map[string]*loader.TargetSecretReference)
-	cachedSecretReferences := make(map[string]*loader.TargetSecretReference)
+	copiedSecretReferences := make(map[string]*loader.TargetSecretReference)
 	for secretName, reference := range reconcileState.ExistingSecretReferences {
-		for key, uriSegment := range reference.UriSegments {
+		for key, uriSegment := range reference.SecretMetadata {
 			if uriSegment.SecretVersion == "" {
 				if secretReferencesToSolve[secretName] == nil {
 					secretReferencesToSolve[secretName] = &loader.TargetSecretReference{
-						Type:        reference.Type,
-						UriSegments: make(map[string]loader.KeyVaultSecretMetadata),
+						Type:           reference.Type,
+						SecretMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					}
 				}
-				secretReferencesToSolve[secretName].UriSegments[key] = uriSegment
+				secretReferencesToSolve[secretName].SecretMetadata[key] = uriSegment
 			}
 
-			if cachedSecretReferences[secretName] == nil {
-				cachedSecretReferences[secretName] = &loader.TargetSecretReference{
-					Type:        reference.Type,
-					UriSegments: make(map[string]loader.KeyVaultSecretMetadata),
+			if copiedSecretReferences[secretName] == nil {
+				copiedSecretReferences[secretName] = &loader.TargetSecretReference{
+					Type:           reference.Type,
+					SecretMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 				}
 			}
-			cachedSecretReferences[secretName].UriSegments[key] = uriSegment
+			copiedSecretReferences[secretName].SecretMetadata[key] = uriSegment
 		}
 	}
 
@@ -235,11 +235,11 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 	}
 
 	for secretName, reference := range resolvedSecrets.SecretReferences {
-		maps.Copy(cachedSecretReferences[secretName].UriSegments, reference.UriSegments)
+		maps.Copy(copiedSecretReferences[secretName].SecretMetadata, reference.SecretMetadata)
 	}
 
 	processor.Settings.SecretSettings = existingSecrets
-	processor.Settings.SecretReferences = cachedSecretReferences
+	processor.Settings.SecretReferences = copiedSecretReferences
 	processor.RefreshOptions.SecretSettingPopulated = true
 
 	// Update next refresh time only if settings updated successfully

@@ -426,7 +426,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 	}
 
 	for secretName, secret := range processor.Settings.SecretSettings {
-		if !shouldCreateOrUpdate(reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences, secretName, processor.Settings.SecretReferences[secretName], processor.ShouldReconcile) {
+		if !shouldCreateOrUpdate(processor, secretName) {
 			if _, ok := reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName]; ok {
 				processor.Settings.SecretReferences[secretName].SecretResourceVersion = reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName].SecretResourceVersion
 			}

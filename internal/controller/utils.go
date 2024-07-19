@@ -303,15 +303,17 @@ func verifySelectorObject(selector acpv1.Selector) error {
 	return nil
 }
 
-func shouldCreateOrUpdate(existingSecretReferences map[string]*loader.TargetSecretReference, secretName string, secretReference *loader.TargetSecretReference, shouldReconcile bool) bool {
-	if shouldReconcile {
+func shouldCreateOrUpdate(processor *AppConfigurationProviderProcessor, secretName string) bool {
+	if processor.ShouldReconcile {
 		return true
 	}
 
+	existingSecretReferences := processor.ReconciliationState.ExistingSecretReferences
 	if _, ok := existingSecretReferences[secretName]; !ok {
 		return true
 	}
 
+	secretReference := processor.Settings.SecretReferences[secretName]
 	if len(existingSecretReferences[secretName].SecretMetadata) != len(secretReference.SecretMetadata) {
 		return true
 	}

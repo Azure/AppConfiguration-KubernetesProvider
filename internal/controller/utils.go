@@ -322,7 +322,8 @@ func shouldCreateOrUpdate(processor *AppConfigurationProviderProcessor, secretNa
 		if _, ok := existingSecretReferences[secretName].SecretsMetadata[key]; !ok {
 			return true
 		}
-		if existingSecretReferences[secretName].SecretsMetadata[key].SecretId != nil && secretMetadata.SecretId != nil &&
+		if secretMetadata.SecretId != nil &&
+			existingSecretReferences[secretName].SecretsMetadata[key].SecretId != nil &&
 			*(existingSecretReferences[secretName].SecretsMetadata[key].SecretId) != *(secretMetadata.SecretId) {
 			return true
 		}

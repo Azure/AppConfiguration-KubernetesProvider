@@ -201,24 +201,24 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 	secretReferencesToSolve := make(map[string]*loader.TargetSecretReference)
 	copiedSecretReferences := make(map[string]*loader.TargetSecretReference)
 	for secretName, reference := range reconcileState.ExistingSecretReferences {
-		for key, uriSegment := range reference.SecretMetadata {
+		for key, uriSegment := range reference.SecretsMetadata {
 			if uriSegment.SecretVersion == "" {
 				if secretReferencesToSolve[secretName] == nil {
 					secretReferencesToSolve[secretName] = &loader.TargetSecretReference{
-						Type:           reference.Type,
-						SecretMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+						Type:            reference.Type,
+						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					}
 				}
-				secretReferencesToSolve[secretName].SecretMetadata[key] = uriSegment
+				secretReferencesToSolve[secretName].SecretsMetadata[key] = uriSegment
 			}
 
 			if copiedSecretReferences[secretName] == nil {
 				copiedSecretReferences[secretName] = &loader.TargetSecretReference{
-					Type:           reference.Type,
-					SecretMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+					Type:            reference.Type,
+					SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 				}
 			}
-			copiedSecretReferences[secretName].SecretMetadata[key] = uriSegment
+			copiedSecretReferences[secretName].SecretsMetadata[key] = uriSegment
 		}
 	}
 
@@ -235,7 +235,7 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 	}
 
 	for secretName, reference := range resolvedSecrets.SecretReferences {
-		maps.Copy(copiedSecretReferences[secretName].SecretMetadata, reference.SecretMetadata)
+		maps.Copy(copiedSecretReferences[secretName].SecretsMetadata, reference.SecretsMetadata)
 	}
 
 	processor.Settings.SecretSettings = existingSecrets

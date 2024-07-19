@@ -50,7 +50,7 @@ type TargetKeyValueSettings struct {
 
 type TargetSecretReference struct {
 	Type                  corev1.SecretType
-	SecretMetadata        map[string]KeyVaultSecretMetadata
+	SecretsMetadata       map[string]KeyVaultSecretMetadata
 	SecretResourceVersion string
 }
 
@@ -196,8 +196,8 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 	if csl.Spec.Secret != nil {
 		rawSettings.SecretReferences[csl.Spec.Secret.Target.SecretName] = &TargetSecretReference{
-			Type:           corev1.SecretTypeOpaque,
-			SecretMetadata: make(map[string]KeyVaultSecretMetadata),
+			Type:            corev1.SecretTypeOpaque,
+			SecretsMetadata: make(map[string]KeyVaultSecretMetadata),
 		}
 	}
 
@@ -258,11 +258,11 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 			if _, ok := rawSettings.SecretReferences[secretName]; !ok {
 				rawSettings.SecretReferences[secretName] = &TargetSecretReference{
-					Type:           secretType,
-					SecretMetadata: make(map[string]KeyVaultSecretMetadata),
+					Type:            secretType,
+					SecretsMetadata: make(map[string]KeyVaultSecretMetadata),
 				}
 			}
-			rawSettings.SecretReferences[secretName].SecretMetadata[trimmedKey] = *secretMetadata
+			rawSettings.SecretReferences[secretName].SecretsMetadata[trimmedKey] = *secretMetadata
 		default:
 			rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 			rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
@@ -375,9 +375,9 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 
 		var eg errgroup.Group
 		if targetSecretReference.Type == corev1.SecretTypeOpaque {
-			if len(targetSecretReference.SecretMetadata) > 0 {
+			if len(targetSecretReference.SecretsMetadata) > 0 {
 				lock := &sync.Mutex{}
-				for key, kvReference := range targetSecretReference.SecretMetadata {
+				for key, kvReference := range targetSecretReference.SecretsMetadata {
 					currentKey := key
 					currentReference := kvReference
 					eg.Go(func() error {
@@ -388,9 +388,9 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 						lock.Lock()
 						defer lock.Unlock()
 						resolvedSecrets[name].Data[currentKey] = []byte(*resolvedSecret.Value)
-						currentUriSegment := targetSecretReference.SecretMetadata[currentKey]
+						currentUriSegment := targetSecretReference.SecretsMetadata[currentKey]
 						currentUriSegment.SecretId = resolvedSecret.ID
-						secretReferencesToResolve[name].SecretMetadata[currentKey] = currentUriSegment
+						secretReferencesToResolve[name].SecretsMetadata[currentKey] = currentUriSegment
 						return nil
 					})
 				}
@@ -401,10 +401,10 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 			}
 		} else if targetSecretReference.Type == corev1.SecretTypeTLS {
 			eg.Go(func() error {
-				resolvedSecret, err := resolver.Resolve(targetSecretReference.SecretMetadata[name], ctx)
-				currentUriSegment := targetSecretReference.SecretMetadata[name]
+				resolvedSecret, err := resolver.Resolve(targetSecretReference.SecretsMetadata[name], ctx)
+				currentUriSegment := targetSecretReference.SecretsMetadata[name]
 				currentUriSegment.SecretId = resolvedSecret.ID
-				secretReferencesToResolve[name].SecretMetadata[name] = currentUriSegment
+				secretReferencesToResolve[name].SecretsMetadata[name] = currentUriSegment
 				if err != nil {
 					return fmt.Errorf("fail to resolve the Key Vault reference type setting '%s': %s", name, err.Error())
 				}

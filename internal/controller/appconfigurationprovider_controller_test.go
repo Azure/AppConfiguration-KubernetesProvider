@@ -173,12 +173,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 				SecretReferences: map[string]*loader.TargetSecretReference{
 					secretName: {
-						Type:           corev1.SecretTypeTLS,
-						SecretMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+						Type:            corev1.SecretTypeTLS,
+						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 					secretName2: {
-						Type:           corev1.SecretTypeOpaque,
-						SecretMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+						Type:            corev1.SecretTypeOpaque,
+						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 				},
 			}
@@ -266,8 +266,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: configMapResult,
 				SecretReferences: map[string]*loader.TargetSecretReference{
 					secretName: {
-						Type:           corev1.SecretType("Opaque"),
-						SecretMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+						Type:            corev1.SecretType("Opaque"),
+						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 				},
 			}
@@ -637,8 +637,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: configMapResult,
 				SecretReferences: map[string]*loader.TargetSecretReference{
 					secretName: {
-						Type:           corev1.SecretType("Opaque"),
-						SecretMetadata: secretMetadata,
+						Type:            corev1.SecretType("Opaque"),
+						SecretsMetadata: secretMetadata,
 					},
 				},
 			}
@@ -721,8 +721,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 			mockedSecretReference := make(map[string]*loader.TargetSecretReference)
 			mockedSecretReference[secretName] = &loader.TargetSecretReference{
-				Type:           corev1.SecretType("Opaque"),
-				SecretMetadata: newSecretMetadata,
+				Type:            corev1.SecretType("Opaque"),
+				SecretsMetadata: newSecretMetadata,
 			}
 
 			newTargetSettings := &loader.TargetKeyValueSettings{

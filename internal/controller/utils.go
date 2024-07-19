@@ -314,16 +314,16 @@ func shouldCreateOrUpdate(processor *AppConfigurationProviderProcessor, secretNa
 	}
 
 	secretReference := processor.Settings.SecretReferences[secretName]
-	if len(existingSecretReferences[secretName].SecretMetadata) != len(secretReference.SecretMetadata) {
+	if len(existingSecretReferences[secretName].SecretsMetadata) != len(secretReference.SecretsMetadata) {
 		return true
 	}
 
-	for key, secretMetadata := range secretReference.SecretMetadata {
-		if _, ok := existingSecretReferences[secretName].SecretMetadata[key]; !ok {
+	for key, secretMetadata := range secretReference.SecretsMetadata {
+		if _, ok := existingSecretReferences[secretName].SecretsMetadata[key]; !ok {
 			return true
 		}
-		if existingSecretReferences[secretName].SecretMetadata[key].SecretId != nil && secretMetadata.SecretId != nil &&
-			*(existingSecretReferences[secretName].SecretMetadata[key].SecretId) != *(secretMetadata.SecretId) {
+		if existingSecretReferences[secretName].SecretsMetadata[key].SecretId != nil && secretMetadata.SecretId != nil &&
+			*(existingSecretReferences[secretName].SecretsMetadata[key].SecretId) != *(secretMetadata.SecretId) {
 			return true
 		}
 	}

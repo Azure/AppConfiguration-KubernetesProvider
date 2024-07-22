@@ -24,34 +24,35 @@ type SecretReference struct {
 	Uri string `json:"uri,omitempty"`
 }
 
-type KeyVaultSecretUriSegment struct {
+type KeyVaultSecretMetadata struct {
 	HostName      string
 	SecretName    string
 	SecretVersion string
+	SecretId      *azsecrets.ID
 }
 
 type SecretReferenceResolver interface {
-	Resolve(secretUriSegment KeyVaultSecretUriSegment, ctx context.Context) (azsecrets.GetSecretResponse, error)
+	Resolve(secretMetadata KeyVaultSecretMetadata, ctx context.Context) (azsecrets.GetSecretResponse, error)
 }
 
 func (resolver *KeyVaultConnector) Resolve(
-	secretUriSegment KeyVaultSecretUriSegment,
+	secretMetadata KeyVaultSecretMetadata,
 	ctx context.Context) (azsecrets.GetSecretResponse, error) {
 	var secretClient any
 	var ok bool
-	if secretClient, ok = resolver.Clients.Load(secretUriSegment.HostName); !ok {
-		newSecretClient, err := azsecrets.NewClient("https://"+secretUriSegment.HostName, resolver.DefaultTokenCredential, nil)
+	if secretClient, ok = resolver.Clients.Load(secretMetadata.HostName); !ok {
+		newSecretClient, err := azsecrets.NewClient("https://"+secretMetadata.HostName, resolver.DefaultTokenCredential, nil)
 		if err != nil {
 			return azsecrets.GetSecretResponse{}, err
 		}
 		secretClient = newSecretClient
-		resolver.Clients.Store(secretUriSegment.HostName, newSecretClient)
+		resolver.Clients.Store(secretMetadata.HostName, newSecretClient)
 	}
 
-	return secretClient.(*azsecrets.Client).GetSecret(ctx, secretUriSegment.SecretName, secretUriSegment.SecretVersion, nil)
+	return secretClient.(*azsecrets.Client).GetSecret(ctx, secretMetadata.SecretName, secretMetadata.SecretVersion, nil)
 }
 
-func parse(settingValue string) (*KeyVaultSecretUriSegment, error) {
+func parse(settingValue string) (*KeyVaultSecretMetadata, error) {
 	var secretRef SecretReference
 	//
 	// Valid Key Vault Reference setting value to parse
@@ -81,7 +82,7 @@ func parse(settingValue string) (*KeyVaultSecretUriSegment, error) {
 	secretName := segments[1]
 	hostName := strings.ToLower(secretUrl.Host)
 
-	result := &KeyVaultSecretUriSegment{
+	result := &KeyVaultSecretMetadata{
 		HostName:      hostName,
 		SecretName:    secretName,
 		SecretVersion: secretVersion,

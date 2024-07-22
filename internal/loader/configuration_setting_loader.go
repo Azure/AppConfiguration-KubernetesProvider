@@ -70,7 +70,6 @@ type ConfigurationSettingsRetriever interface {
 	CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver, keyValueETags map[acpv1.Selector][]*azcore.ETag, featureFlagETags map[acpv1.Selector][]*azcore.ETag) (*TargetKeyValueSettings, error)
 	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver, keyValueETags map[acpv1.Selector][]*azcore.ETag) (*TargetKeyValueSettings, error)
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string, featureFlagETags map[acpv1.Selector][]*azcore.ETag) (*TargetKeyValueSettings, error)
-	CheckAndRefreshETags(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Selector][]*azcore.ETag) (bool, map[acpv1.Selector][]*azcore.ETag, error)
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (*TargetKeyValueSettings, error)
 }
 

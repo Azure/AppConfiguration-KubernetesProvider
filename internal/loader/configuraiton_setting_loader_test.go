@@ -140,7 +140,7 @@ func (m *MockResolveSecretReference) EXPECT() *MockResolveSecretReferenceMockRec
 }
 
 // Resolve mocks base method.
-func (m *MockResolveSecretReference) Resolve(arg0 KeyVaultSecretUriSegment, arg1 context.Context) (azsecrets.GetSecretResponse, error) {
+func (m *MockResolveSecretReference) Resolve(arg0 KeyVaultSecretMetadata, arg1 context.Context) (azsecrets.GetSecretResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resolve", arg0, arg1)
 	ret0, _ := ret[0].(azsecrets.GetSecretResponse)
@@ -406,7 +406,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretUriSegment{
+					SecretsMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -459,7 +459,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretUriSegment{
+					SecretsMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -515,7 +515,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretUriSegment{
+					SecretsMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -571,7 +571,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretUriSegment{
+					SecretsMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -627,7 +627,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretUriSegment{
+					SecretsMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -641,9 +641,9 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secrets, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
 
 			Expect(err).Should(BeNil())
-			Expect(len(secrets)).Should(Equal(1))
-			Expect(string(secrets[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
-			Expect(string(secrets[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN PRIVATE KEY"))
+			Expect(len(secrets.SecretSettings)).Should(Equal(1))
+			Expect(string(secrets.SecretSettings[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
+			Expect(string(secrets.SecretSettings[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN PRIVATE KEY"))
 		})
 
 		It("Succeeded to get target tls type secret", func() {
@@ -686,7 +686,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretUriSegment{
+					SecretsMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -700,9 +700,9 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secrets, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
 
 			Expect(err).Should(BeNil())
-			Expect(len(secrets)).Should(Equal(1))
-			Expect(string(secrets[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
-			Expect(string(secrets[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN RSA PRIVATE KEY"))
+			Expect(len(secrets.SecretSettings)).Should(Equal(1))
+			Expect(string(secrets.SecretSettings[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
+			Expect(string(secrets.SecretSettings[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN RSA PRIVATE KEY"))
 		})
 
 		It("Succeeded to get tls type secret", func() {
@@ -743,7 +743,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretUriSegment{
+					SecretsMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -757,9 +757,9 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secrets, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
 
 			Expect(err).Should(BeNil())
-			Expect(len(secrets)).Should(Equal(1))
-			Expect(string(secrets[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
-			Expect(string(secrets[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN PRIVATE KEY"))
+			Expect(len(secrets.SecretSettings)).Should(Equal(1))
+			Expect(string(secrets.SecretSettings[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
+			Expect(string(secrets.SecretSettings[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN PRIVATE KEY"))
 		})
 
 		It("Succeeded to get tls type secret", func() {
@@ -800,7 +800,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretReferencesToResolve := map[string]*TargetSecretReference{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					UriSegments: map[string]KeyVaultSecretUriSegment{
+					SecretsMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -814,9 +814,9 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secrets, err := configurationProvider.ResolveSecretReferences(context.Background(), secretReferencesToResolve, mockResolveSecretReference)
 
 			Expect(err).Should(BeNil())
-			Expect(len(secrets)).Should(Equal(1))
-			Expect(string(secrets[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
-			Expect(string(secrets[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN RSA PRIVATE KEY"))
+			Expect(len(secrets.SecretSettings)).Should(Equal(1))
+			Expect(string(secrets.SecretSettings[secretName].Data["tls.crt"])).Should(ContainSubstring("BEGIN CERTIFICATE"))
+			Expect(string(secrets.SecretSettings[secretName].Data["tls.key"])).Should(ContainSubstring("BEGIN RSA PRIVATE KEY"))
 		})
 	})
 

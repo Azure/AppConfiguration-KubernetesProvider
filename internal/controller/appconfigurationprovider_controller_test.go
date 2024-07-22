@@ -12,6 +12,7 @@ import (
 
 	acpv1 "azappconfig/provider/api/v1"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -172,12 +173,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 				SecretReferences: map[string]*loader.TargetSecretReference{
 					secretName: {
-						Type:        corev1.SecretTypeTLS,
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+						Type:            corev1.SecretTypeTLS,
+						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 					secretName2: {
-						Type:        corev1.SecretTypeOpaque,
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+						Type:            corev1.SecretTypeOpaque,
+						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 				},
 			}
@@ -265,8 +266,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: configMapResult,
 				SecretReferences: map[string]*loader.TargetSecretReference{
 					secretName: {
-						Type:        corev1.SecretType("Opaque"),
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+						Type:            corev1.SecretType("Opaque"),
+						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 				},
 			}
@@ -609,7 +610,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			_ = k8sClient.Delete(ctx, configProvider)
 		})
 
-		It("Should refresh secret", func() {
+		It("Should refresh secret when data change", func() {
 			By("By enabling refresh on secret")
 			configMapResult := make(map[string]string)
 			configMapResult["testKey"] = "testValue"
@@ -618,10 +619,14 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			secretResult := make(map[string][]byte)
 			secretResult["testSecretKey"] = []byte("testSecretValue")
-			secretResult["testSecretKey2"] = []byte("testSecretValue2")
-			secretResult["testSecretKey3"] = []byte("testSecretValue3")
 
 			secretName := "secret-to-be-refreshed-3"
+			var fakeId azsecrets.ID = "fakeSecretId"
+			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
+			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
+				SecretId: &fakeId,
+			}
+
 			allSettings := &loader.TargetKeyValueSettings{
 				SecretSettings: map[string]corev1.Secret{
 					secretName: {
@@ -632,8 +637,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: configMapResult,
 				SecretReferences: map[string]*loader.TargetSecretReference{
 					secretName: {
-						Type:        corev1.SecretType("Opaque"),
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+						Type:            corev1.SecretType("Opaque"),
+						SecretsMetadata: secretMetadata,
 					},
 				},
 			}
@@ -697,14 +702,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			Expect(secret.Namespace).Should(Equal(ProviderNamespace))
 			Expect(string(secret.Data["testSecretKey"])).Should(Equal("testSecretValue"))
-			Expect(string(secret.Data["testSecretKey2"])).Should(Equal("testSecretValue2"))
-			Expect(string(secret.Data["testSecretKey3"])).Should(Equal("testSecretValue3"))
 			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 
 			newSecretResult := make(map[string][]byte)
 			newSecretResult["testSecretKey"] = []byte("newTestSecretValue")
-			newSecretResult["testSecretKey2"] = []byte("newTestSecretValue2")
-			newSecretResult["testSecretKey3"] = []byte("newTestSecretValue3")
 
 			newResolvedSecret := map[string]corev1.Secret{
 				secretName: {
@@ -713,7 +714,23 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newResolvedSecret, nil)
+			var newFakeId azsecrets.ID = "newFakeSecretId"
+			newSecretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
+			newSecretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
+				SecretId: &newFakeId,
+			}
+			mockedSecretReference := make(map[string]*loader.TargetSecretReference)
+			mockedSecretReference[secretName] = &loader.TargetSecretReference{
+				Type:            corev1.SecretType("Opaque"),
+				SecretsMetadata: newSecretMetadata,
+			}
+
+			newTargetSettings := &loader.TargetKeyValueSettings{
+				SecretSettings:   newResolvedSecret,
+				SecretReferences: mockedSecretReference,
+			}
+
+			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings, nil)
 			// Refresh interval is 1 minute, wait for 65 seconds to make sure the refresh is triggered
 			time.Sleep(65 * time.Second)
 
@@ -724,8 +741,25 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			Expect(secret.Namespace).Should(Equal(ProviderNamespace))
 			Expect(string(secret.Data["testSecretKey"])).Should(Equal("newTestSecretValue"))
-			Expect(string(secret.Data["testSecretKey2"])).Should(Equal("newTestSecretValue2"))
-			Expect(string(secret.Data["testSecretKey3"])).Should(Equal("newTestSecretValue3"))
+			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
+
+			// Mocked secret refresh scenario when secretMetadata is not changed
+			newTargetSettings2 := &loader.TargetKeyValueSettings{
+				SecretSettings:   make(map[string]corev1.Secret),
+				SecretReferences: mockedSecretReference,
+			}
+
+			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings2, nil)
+			// Refresh interval is 1 minute, wait for 65 seconds to make sure the refresh is triggered
+			time.Sleep(65 * time.Second)
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, secretLookupKey, secret)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(secret.Namespace).Should(Equal(ProviderNamespace))
+			Expect(string(secret.Data["testSecretKey"])).Should(Equal("newTestSecretValue"))
 			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 		})
 	})

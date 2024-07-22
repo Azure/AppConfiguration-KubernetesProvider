@@ -70,7 +70,6 @@ func (processor *AppConfigurationProviderProcessor) processFullReconciliation() 
 		return err
 	}
 	processor.Settings = updatedSettings
-	processor.ReconciliationState.ExistingSecretReferences = updatedSettings.SecretReferences
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
@@ -160,7 +159,6 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 	}
 
 	processor.Settings = keyValueRefreshedSettings
-	reconcileState.ExistingSecretReferences = keyValueRefreshedSettings.SecretReferences
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
@@ -201,17 +199,26 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 
 	// Only resolve the secret references that not specified the secret version
 	secretReferencesToSolve := make(map[string]*loader.TargetSecretReference)
+	copiedSecretReferences := make(map[string]*loader.TargetSecretReference)
 	for secretName, reference := range reconcileState.ExistingSecretReferences {
-		for key, uriSegment := range reference.UriSegments {
-			if uriSegment.SecretVersion == "" {
+		for key, secretMetadata := range reference.SecretsMetadata {
+			if secretMetadata.SecretVersion == "" {
 				if secretReferencesToSolve[secretName] == nil {
 					secretReferencesToSolve[secretName] = &loader.TargetSecretReference{
-						Type:        reference.Type,
-						UriSegments: make(map[string]loader.KeyVaultSecretUriSegment),
+						Type:            reference.Type,
+						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					}
 				}
-				secretReferencesToSolve[secretName].UriSegments[key] = uriSegment
+				secretReferencesToSolve[secretName].SecretsMetadata[key] = secretMetadata
 			}
+
+			if copiedSecretReferences[secretName] == nil {
+				copiedSecretReferences[secretName] = &loader.TargetSecretReference{
+					Type:            reference.Type,
+					SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+				}
+			}
+			copiedSecretReferences[secretName].SecretsMetadata[key] = secretMetadata
 		}
 	}
 
@@ -220,13 +227,19 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 		return err
 	}
 
-	for secretName, resolvedSecret := range resolvedSecrets {
+	for secretName, resolvedSecret := range resolvedSecrets.SecretSettings {
 		existingSecret, ok := existingSecrets[secretName]
 		if ok {
 			maps.Copy(existingSecret.Data, resolvedSecret.Data)
 		}
 	}
+
+	for secretName, reference := range resolvedSecrets.SecretReferences {
+		maps.Copy(copiedSecretReferences[secretName].SecretsMetadata, reference.SecretsMetadata)
+	}
+
 	processor.Settings.SecretSettings = existingSecrets
+	processor.Settings.SecretReferences = copiedSecretReferences
 	processor.RefreshOptions.SecretSettingPopulated = true
 
 	// Update next refresh time only if settings updated successfully
@@ -270,6 +283,11 @@ func (processor *AppConfigurationProviderProcessor) shouldReconcile(
 
 func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error) {
 	processor.ReconciliationState.Generation = processor.Provider.Generation
+
+	if processor.RefreshOptions.SecretSettingPopulated {
+		processor.ReconciliationState.ExistingSecretReferences = processor.Settings.SecretReferences
+	}
+
 	if !processor.RefreshOptions.secretReferenceRefreshEnabled &&
 		!processor.RefreshOptions.sentinelBasedRefreshEnabled &&
 		!processor.RefreshOptions.featureFlagRefreshEnabled {

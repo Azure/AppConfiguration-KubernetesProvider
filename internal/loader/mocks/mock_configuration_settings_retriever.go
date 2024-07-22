@@ -12,7 +12,6 @@ import (
 
 	azcore "github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	gomock "github.com/golang/mock/gomock"
-	v10 "k8s.io/api/core/v1"
 )
 
 // MockConfigurationSettingsRetriever is a mock of ConfigurationSettingsRetriever interface.
@@ -100,10 +99,10 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshKeyValueSetting
 }
 
 // ResolveSecretReferences mocks base method.
-func (m *MockConfigurationSettingsRetriever) ResolveSecretReferences(arg0 context.Context, arg1 map[string]*loader.TargetSecretReference, arg2 loader.SecretReferenceResolver) (map[string]v10.Secret, error) {
+func (m *MockConfigurationSettingsRetriever) ResolveSecretReferences(arg0 context.Context, arg1 map[string]*loader.TargetSecretReference, arg2 loader.SecretReferenceResolver) (*loader.TargetKeyValueSettings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResolveSecretReferences", arg0, arg1, arg2)
-	ret0, _ := ret[0].(map[string]v10.Secret)
+	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

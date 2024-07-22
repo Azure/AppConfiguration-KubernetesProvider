@@ -302,3 +302,32 @@ func verifySelectorObject(selector acpv1.Selector) error {
 
 	return nil
 }
+
+func shouldCreateOrUpdate(processor *AppConfigurationProviderProcessor, secretName string) bool {
+	if processor.ShouldReconcile {
+		return true
+	}
+
+	existingSecretReferences := processor.ReconciliationState.ExistingSecretReferences
+	if _, ok := existingSecretReferences[secretName]; !ok {
+		return true
+	}
+
+	secretReference := processor.Settings.SecretReferences[secretName]
+	if len(existingSecretReferences[secretName].SecretsMetadata) != len(secretReference.SecretsMetadata) {
+		return true
+	}
+
+	for key, secretMetadata := range secretReference.SecretsMetadata {
+		if _, ok := existingSecretReferences[secretName].SecretsMetadata[key]; !ok {
+			return true
+		}
+		if secretMetadata.SecretId != nil &&
+			existingSecretReferences[secretName].SecretsMetadata[key].SecretId != nil &&
+			*(existingSecretReferences[secretName].SecretsMetadata[key].SecretId) != *(secretMetadata.SecretId) {
+			return true
+		}
+	}
+
+	return false
+}

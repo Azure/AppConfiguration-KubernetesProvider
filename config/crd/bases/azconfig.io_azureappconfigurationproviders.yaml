@@ -334,10 +334,10 @@ spec:
                   lastFeatureFlagRefreshTime:
                     format: date-time
                     type: string
-                  lastKeyVaultReferenceRefreshTime:
+                  lastKeyValueRefreshTime:
                     format: date-time
                     type: string
-                  lastSentinelBasedRefreshTime:
+                  lastKeyVaultReferenceRefreshTime:
                     format: date-time
                     type: string
                 type: object

@@ -32,13 +32,15 @@ type AppConfigurationProviderProcessor struct {
 
 type RefreshOptions struct {
 	keyValueRefreshEnabled        bool
-	keyValueRefreshNeeded         bool
 	secretReferenceRefreshEnabled bool
 	secretReferenceRefreshNeeded  bool
 	featureFlagRefreshEnabled     bool
 	featureFlagRefreshNeeded      bool
 	ConfigMapSettingPopulated     bool
 	SecretSettingPopulated        bool
+	sentinelChanged               bool
+	keyValuePageETagsChanged      bool
+	updatedSentinelETags          map[acpv1.Sentinel]*azcore.ETag
 	updatedKeyValueETags          map[acpv1.Selector][]*azcore.ETag
 	updatedFeatureFlagETags       map[acpv1.Selector][]*azcore.ETag
 }
@@ -67,7 +69,7 @@ func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingCon
 
 func (processor *AppConfigurationProviderProcessor) processFullReconciliation() error {
 	processor.ReconciliationState.KeyValueETags, processor.ReconciliationState.FeatureFlagETags = initializeEtags(processor.Provider)
-	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.SecretReferenceResolver, processor.ReconciliationState.KeyValueETags, processor.ReconciliationState.FeatureFlagETags)
+	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}
@@ -107,17 +109,20 @@ func (processor *AppConfigurationProviderProcessor) processFeatureFlagRefresh(ex
 		return nil
 	}
 
-	featureFlagRefreshedSettings, err := (*processor.Retriever).RefreshFeatureFlagSettings(processor.Context, &existingConfigMap.Data, processor.ReconciliationState.FeatureFlagETags)
-	if err != nil {
+	if processor.RefreshOptions.featureFlagRefreshNeeded, err = (*processor.Retriever).CheckPageETags(processor.Context, processor.Provider, reconcileState.FeatureFlagETags); err != nil {
 		return err
 	}
 
-	if len(featureFlagRefreshedSettings.FeatureFlagETags) == 0 {
+	if !processor.RefreshOptions.featureFlagRefreshNeeded {
 		reconcileState.NextFeatureFlagRefreshReconcileTime = nextFeatureFlagRefreshReconcileTime
 		return nil
 	}
 
-	processor.RefreshOptions.featureFlagRefreshNeeded = true
+	featureFlagRefreshedSettings, err := (*processor.Retriever).RefreshFeatureFlagSettings(processor.Context, &existingConfigMap.Data)
+	if err != nil {
+		return err
+	}
+
 	processor.RefreshOptions.updatedFeatureFlagETags = featureFlagRefreshedSettings.FeatureFlagETags
 	processor.Settings = featureFlagRefreshedSettings
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
@@ -156,20 +161,33 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 	if processor.Settings.ConfigMapSettings != nil {
 		existingConfigMapSettings = &processor.Settings.ConfigMapSettings
 	}
-	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.SecretReferenceResolver, processor.ReconciliationState.KeyValueETags)
-	if err != nil {
-		return err
+
+	if provider.Spec.Configuration.Refresh.Monitoring != nil {
+		if processor.RefreshOptions.sentinelChanged, processor.RefreshOptions.updatedSentinelETags, err = (*processor.Retriever).CheckAndRefreshSentinels(processor.Context, processor.Provider, reconcileState.SentinelETags); err != nil {
+			return err
+		}
+	} else {
+		if processor.RefreshOptions.keyValuePageETagsChanged, err = (*processor.Retriever).CheckPageETags(processor.Context, processor.Provider, reconcileState.KeyValueETags); err != nil {
+			return err
+		}
 	}
 
-	if len(keyValueRefreshedSettings.KeyValueETags) == 0 {
+	if !processor.RefreshOptions.sentinelChanged && !processor.RefreshOptions.keyValuePageETagsChanged {
 		reconcileState.NextKeyValueRefreshReconcileTime = nextKeyValueRefreshReconcileTime
 		return nil
 	}
 
-	processor.RefreshOptions.keyValueRefreshNeeded = true
-	processor.RefreshOptions.updatedKeyValueETags = keyValueRefreshedSettings.KeyValueETags
+	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.SecretReferenceResolver)
+	if err != nil {
+		return err
+	}
+
 	processor.Settings = keyValueRefreshedSettings
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
+	if processor.RefreshOptions.keyValuePageETagsChanged {
+		processor.RefreshOptions.updatedKeyValueETags = keyValueRefreshedSettings.KeyValueETags
+
+	}
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
 	}
@@ -314,8 +332,12 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 		return reconcile.Result{}, nil
 	} else {
 		// Update the sentinel ETags and last sentinel refresh time
-		if processor.RefreshOptions.keyValueRefreshNeeded {
-			processor.Provider.Status.RefreshStatus.LastSentinelBasedRefreshTime = processor.CurrentTime
+		if processor.RefreshOptions.sentinelChanged {
+			processor.ReconciliationState.SentinelETags = processor.RefreshOptions.updatedSentinelETags
+			processor.Provider.Status.RefreshStatus.LastKeyValueRefreshTime = processor.CurrentTime
+		}
+		if processor.RefreshOptions.keyValuePageETagsChanged {
+			processor.Provider.Status.RefreshStatus.LastKeyValueRefreshTime = processor.CurrentTime
 		}
 		// Update provider last key vault refresh time
 		if processor.RefreshOptions.secretReferenceRefreshNeeded {
@@ -336,13 +358,15 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 func NewRefreshOptions() *RefreshOptions {
 	return &RefreshOptions{
 		keyValueRefreshEnabled:        false,
-		keyValueRefreshNeeded:         false,
 		secretReferenceRefreshEnabled: false,
 		secretReferenceRefreshNeeded:  false,
 		featureFlagRefreshEnabled:     false,
 		featureFlagRefreshNeeded:      false,
 		ConfigMapSettingPopulated:     false,
 		SecretSettingPopulated:        false,
+		sentinelChanged:               false,
+		keyValuePageETagsChanged:      false,
+		updatedSentinelETags:          make(map[acpv1.Sentinel]*azcore.ETag),
 		updatedKeyValueETags:          make(map[acpv1.Selector][]*azcore.ETag),
 		updatedFeatureFlagETags:       make(map[acpv1.Selector][]*azcore.ETag),
 	}
@@ -371,21 +395,9 @@ func (processor *AppConfigurationProviderProcessor) calculateRequeueAfterInterva
 
 func initializeEtags(provider *acpv1.AzureAppConfigurationProvider) (keyValueETags map[acpv1.Selector][]*azcore.ETag, featureFlagETags map[acpv1.Selector][]*azcore.ETag) {
 	keyValueETags = make(map[acpv1.Selector][]*azcore.ETag)
-	if provider.Spec.Configuration.Refresh != nil {
-		if provider.Spec.Configuration.Refresh.Monitoring != nil {
-			for _, sentinel := range provider.Spec.Configuration.Refresh.Monitoring.Sentinels {
-				filter := acpv1.Selector{
-					KeyFilter:   &sentinel.Key,
-					LabelFilter: &sentinel.Label,
-				}
-				keyValueETags[filter] = []*azcore.ETag{}
-			}
-		} else {
-			keyValueFilters := loader.GetKeyValueFilters(provider.Spec)
-			for _, selector := range keyValueFilters {
-				keyValueETags[selector] = []*azcore.ETag{}
-			}
-		}
+	keyValueFilters := loader.GetKeyValueFilters(provider.Spec)
+	for _, selector := range keyValueFilters {
+		keyValueETags[selector] = []*azcore.ETag{}
 	}
 
 	featureFlagETags = make(map[acpv1.Selector][]*azcore.ETag)

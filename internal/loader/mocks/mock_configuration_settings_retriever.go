@@ -37,49 +37,80 @@ func (m *MockConfigurationSettingsRetriever) EXPECT() *MockConfigurationSettings
 	return m.recorder
 }
 
-// CreateTargetSettings mocks base method.
-func (m *MockConfigurationSettingsRetriever) CreateTargetSettings(arg0 context.Context, arg1 loader.SecretReferenceResolver, arg2, arg3 map[v1.Selector][]*azcore.ETag) (*loader.TargetKeyValueSettings, error) {
+// CheckAndRefreshSentinels mocks base method.
+func (m *MockConfigurationSettingsRetriever) CheckAndRefreshSentinels(arg0 context.Context, arg1 *v1.AzureAppConfigurationProvider, arg2 map[v1.Sentinel]*azcore.ETag) (bool, map[v1.Sentinel]*azcore.ETag, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTargetSettings", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "CheckAndRefreshSentinels", arg0, arg1, arg2)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(map[v1.Sentinel]*azcore.ETag)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// CheckAndRefreshSentinels indicates an expected call of CheckAndRefreshSentinels.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckAndRefreshSentinels(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAndRefreshSentinels", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckAndRefreshSentinels), arg0, arg1, arg2)
+}
+
+// CheckPageETags mocks base method.
+func (m *MockConfigurationSettingsRetriever) CheckPageETags(arg0 context.Context, arg1 *v1.AzureAppConfigurationProvider, arg2 map[v1.Selector][]*azcore.ETag) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckPageETags", arg0, arg1, arg2)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckPageETags indicates an expected call of CheckPageETags.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckPageETags(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPageETags", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckPageETags), arg0, arg1, arg2)
+}
+
+// CreateTargetSettings mocks base method.
+func (m *MockConfigurationSettingsRetriever) CreateTargetSettings(arg0 context.Context, arg1 loader.SecretReferenceResolver) (*loader.TargetKeyValueSettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateTargetSettings", arg0, arg1)
 	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateTargetSettings indicates an expected call of CreateTargetSettings.
-func (mr *MockConfigurationSettingsRetrieverMockRecorder) CreateTargetSettings(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) CreateTargetSettings(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTargetSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CreateTargetSettings), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTargetSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CreateTargetSettings), arg0, arg1)
 }
 
 // RefreshFeatureFlagSettings mocks base method.
-func (m *MockConfigurationSettingsRetriever) RefreshFeatureFlagSettings(arg0 context.Context, arg1 *map[string]string, arg2 map[v1.Selector][]*azcore.ETag) (*loader.TargetKeyValueSettings, error) {
+func (m *MockConfigurationSettingsRetriever) RefreshFeatureFlagSettings(arg0 context.Context, arg1 *map[string]string) (*loader.TargetKeyValueSettings, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshFeatureFlagSettings", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "RefreshFeatureFlagSettings", arg0, arg1)
 	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RefreshFeatureFlagSettings indicates an expected call of RefreshFeatureFlagSettings.
-func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshFeatureFlagSettings(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshFeatureFlagSettings(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshFeatureFlagSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).RefreshFeatureFlagSettings), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshFeatureFlagSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).RefreshFeatureFlagSettings), arg0, arg1)
 }
 
 // RefreshKeyValueSettings mocks base method.
-func (m *MockConfigurationSettingsRetriever) RefreshKeyValueSettings(arg0 context.Context, arg1 *map[string]string, arg2 loader.SecretReferenceResolver, arg3 map[v1.Selector][]*azcore.ETag) (*loader.TargetKeyValueSettings, error) {
+func (m *MockConfigurationSettingsRetriever) RefreshKeyValueSettings(arg0 context.Context, arg1 *map[string]string, arg2 loader.SecretReferenceResolver) (*loader.TargetKeyValueSettings, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshKeyValueSettings", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "RefreshKeyValueSettings", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RefreshKeyValueSettings indicates an expected call of RefreshKeyValueSettings.
-func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshKeyValueSettings(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshKeyValueSettings(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshKeyValueSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).RefreshKeyValueSettings), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshKeyValueSettings", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).RefreshKeyValueSettings), arg0, arg1, arg2)
 }
 
 // ResolveSecretReferences mocks base method.

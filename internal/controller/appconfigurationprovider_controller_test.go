@@ -48,7 +48,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider"
@@ -108,7 +108,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-2"
@@ -184,7 +184,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-3"
@@ -273,7 +273,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-5"
@@ -342,7 +342,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-7"
@@ -395,7 +395,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-8"
@@ -455,7 +455,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-1"
@@ -505,7 +505,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult2,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			_ = k8sClient.Get(ctx, types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}, configProvider)
 			configProvider.Spec.Endpoint = &newEndpoint
@@ -532,15 +532,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			mapResult["testKey2"] = "testValue2"
 			mapResult["testKey3"] = "testValue3"
 
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
-			featureFlagEtags := make(map[acpv1.Selector][]*azcore.ETag)
-			keyFilter := "*"
-			keyValueEtags[acpv1.Selector{KeyFilter: &keyFilter}] = []*azcore.ETag{}
-
 			allSettings := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult,
-				KeyValueETags:     keyValueEtags,
-				FeatureFlagETags:  featureFlagEtags,
 			}
 
 			mapResult2 := make(map[string]string)
@@ -550,12 +543,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			allSettings2 := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult2,
-				KeyValueETags:     keyValueEtags,
-				FeatureFlagETags:  featureFlagEtags,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil, nil)
+			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-2"
@@ -652,7 +644,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-3"
@@ -801,8 +793,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				FeatureFlagETags:  featureFlagEtags,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil)
+			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-4"
@@ -881,8 +874,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				FeatureFlagETags: featureFlagEtags,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil)
+			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-5"

@@ -869,14 +869,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				FeatureFlagETags:  featureFlagEtags,
 			}
 
-			allSettings2 := &loader.TargetKeyValueSettings{
-				KeyValueETags:    keyValueEtags,
-				FeatureFlagETags: featureFlagEtags,
-			}
-
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-5"

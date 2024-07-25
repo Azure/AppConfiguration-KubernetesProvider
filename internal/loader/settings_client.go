@@ -30,6 +30,7 @@ type SentinelSettingsClient struct {
 	etag            *azcore.ETag
 	refreshInterval string
 }
+
 type SelectorSettingsClient struct {
 	selectors []acpv1.Selector
 }
@@ -41,7 +42,8 @@ type SettingsClient interface {
 func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
 	nullString := "\x00"
 	settingsResponse := &SettingsResponse{
-		Etags: make(map[acpv1.Selector][]*azcore.ETag),
+		Etags:    make(map[acpv1.Selector][]*azcore.ETag),
+		Settings: make([]azappconfig.Setting, 0),
 	}
 	for filter, pageEtags := range s.etags {
 		if filter.KeyFilter != nil {
@@ -82,8 +84,9 @@ func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfi
 		}
 	}
 
-	// no change in the settings, return nil
-	return nil, nil
+	// no change in the settings, return nil etags
+	settingsResponse.Etags = nil
+	return settingsResponse, nil
 }
 
 func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
@@ -119,8 +122,8 @@ func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappc
 
 func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
 	nullString := "\x00"
-	settingsToReturn := make([]azappconfig.Setting, 0)
-	refreshedEtags := make(map[acpv1.Selector][]*azcore.ETag)
+	settings := make([]azappconfig.Setting, 0)
+	pageEtags := make(map[acpv1.Selector][]*azcore.ETag)
 
 	for _, filter := range s.selectors {
 		if filter.KeyFilter != nil {
@@ -139,13 +142,13 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 				page, err := pager.NextPage(ctx)
 				if err != nil {
 					return nil, err
-				} else if len(page.Settings) > 0 {
-					settingsToReturn = append(settingsToReturn, page.Settings...)
+				} else if page.Settings != nil {
+					settings = append(settings, page.Settings...)
 					latestEtags = append(latestEtags, page.ETag)
 				}
 			}
 			// update the etags for the filter
-			refreshedEtags[filter] = latestEtags
+			pageEtags[filter] = latestEtags
 		} else {
 			snapshot, err := client.GetSnapshot(ctx, *filter.SnapshotName, nil)
 			if err != nil {
@@ -162,15 +165,15 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 				page, err := pager.NextPage(ctx)
 				if err != nil {
 					return nil, err
-				} else if len(page.Settings) > 0 {
-					settingsToReturn = append(settingsToReturn, page.Settings...)
+				} else if page.Settings != nil {
+					settings = append(settings, page.Settings...)
 				}
 			}
 		}
 	}
 
 	return &SettingsResponse{
-		Settings: settingsToReturn,
-		Etags:    refreshedEtags,
+		Settings: settings,
+		Etags:    pageEtags,
 	}, nil
 }

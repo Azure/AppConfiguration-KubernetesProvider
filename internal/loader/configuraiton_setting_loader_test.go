@@ -5,7 +5,6 @@ package loader
 
 import (
 	acpv1 "azappconfig/provider/api/v1"
-	v1 "azappconfig/provider/api/v1"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -79,16 +78,16 @@ func mockFeatureFlagSettings() []azappconfig.Setting {
 	return settingsToReturn
 }
 
-func newKeyValueSelector(key string, label *string) v1.Selector {
-	return v1.Selector{
+func newKeyValueSelector(key string, label *string) acpv1.Selector {
+	return acpv1.Selector{
 		KeyFilter:   &key,
 		LabelFilter: label,
 	}
 }
 
-func newFeatureFlagSelector(key string, label *string) v1.Selector {
+func newFeatureFlagSelector(key string, label *string) acpv1.Selector {
 	prefixedKey := FeatureFlagKeyPrefix + key
-	return v1.Selector{
+	return acpv1.Selector{
 		KeyFilter:   &prefixedKey,
 		LabelFilter: label,
 	}
@@ -338,7 +337,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettingsWithKV()
-			keyValueEtags := make(map[v1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -381,7 +380,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettingsWithKV()
-			keyValueEtags := make(map[v1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -872,7 +871,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			keyValueEtags := make(map[v1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -920,7 +919,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			keyValueEtags := make(map[v1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -962,7 +961,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			keyValueEtags := make(map[v1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -1006,7 +1005,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			keyValueEtags := make(map[v1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -1059,7 +1058,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			featureFlagsToReturn := mockFeatureFlagSettings()
-			featureFlagEtags := make(map[v1.Selector][]*azcore.ETag)
+			featureFlagEtags := make(map[acpv1.Selector][]*azcore.ETag)
 			featureFlagEtags[newFeatureFlagSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: featureFlagsToReturn,
@@ -1145,7 +1144,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				FailedAttempts: 0,
 			}
 
-			keyValueEtags := make(map[v1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,

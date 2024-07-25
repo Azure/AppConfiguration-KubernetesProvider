@@ -155,12 +155,6 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 		return nil
 	}
 
-	// Get the latest key value settings
-	existingConfigMapSettings := &existingConfigMap.Data
-	if processor.Settings.ConfigMapSettings != nil {
-		existingConfigMapSettings = &processor.Settings.ConfigMapSettings
-	}
-
 	if provider.Spec.Configuration.Refresh.Monitoring != nil {
 		if processor.RefreshOptions.sentinelChanged, processor.RefreshOptions.updatedSentinelETags, err = (*processor.Retriever).CheckAndRefreshSentinels(processor.Context, processor.Provider, reconcileState.SentinelETags); err != nil {
 			return err
@@ -174,6 +168,12 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 	if !processor.RefreshOptions.sentinelChanged && !processor.RefreshOptions.keyValuePageETagsChanged {
 		reconcileState.NextKeyValueRefreshReconcileTime = nextKeyValueRefreshReconcileTime
 		return nil
+	}
+
+	// Get the latest key value settings
+	existingConfigMapSettings := &existingConfigMap.Data
+	if processor.Settings.ConfigMapSettings != nil {
+		existingConfigMapSettings = &processor.Settings.ConfigMapSettings
 	}
 
 	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.SecretReferenceResolver)

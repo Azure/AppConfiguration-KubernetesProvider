@@ -339,13 +339,13 @@ func (csl *ConfigurationSettingLoader) CheckPageETags(ctx context.Context, eTags
 		}
 	}
 
-	response, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+	settingsResponse, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 	if err != nil {
 		return false, err
 	}
 
-	// when the response is nil, it means the page eTags are not changed
-	return response != nil, nil
+	// when the etag is nil, it means the page eTags are not changed
+	return settingsResponse.Etags != nil, nil
 }
 
 func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, map[acpv1.Selector][]*azcore.ETag, error) {

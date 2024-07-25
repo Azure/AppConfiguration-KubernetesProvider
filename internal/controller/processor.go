@@ -68,7 +68,6 @@ func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingCon
 }
 
 func (processor *AppConfigurationProviderProcessor) processFullReconciliation() error {
-	processor.ReconciliationState.KeyValueETags, processor.ReconciliationState.FeatureFlagETags = initializeEtags(processor.Provider)
 	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
@@ -109,7 +108,7 @@ func (processor *AppConfigurationProviderProcessor) processFeatureFlagRefresh(ex
 		return nil
 	}
 
-	if processor.RefreshOptions.featureFlagRefreshNeeded, err = (*processor.Retriever).CheckPageETags(processor.Context, processor.Provider, reconcileState.FeatureFlagETags); err != nil {
+	if processor.RefreshOptions.featureFlagRefreshNeeded, err = (*processor.Retriever).CheckPageETags(processor.Context, reconcileState.FeatureFlagETags); err != nil {
 		return err
 	}
 
@@ -167,7 +166,7 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 			return err
 		}
 	} else {
-		if processor.RefreshOptions.keyValuePageETagsChanged, err = (*processor.Retriever).CheckPageETags(processor.Context, processor.Provider, reconcileState.KeyValueETags); err != nil {
+		if processor.RefreshOptions.keyValuePageETagsChanged, err = (*processor.Retriever).CheckPageETags(processor.Context, reconcileState.KeyValueETags); err != nil {
 			return err
 		}
 	}
@@ -316,11 +315,11 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 		processor.ReconciliationState.ExistingSecretReferences = processor.Settings.SecretReferences
 	}
 
-	if len(processor.RefreshOptions.updatedKeyValueETags) > 0 {
+	if processor.RefreshOptions.updatedKeyValueETags != nil {
 		processor.ReconciliationState.KeyValueETags = processor.RefreshOptions.updatedKeyValueETags
 	}
 
-	if len(processor.RefreshOptions.updatedFeatureFlagETags) > 0 {
+	if processor.RefreshOptions.updatedFeatureFlagETags != nil {
 		processor.ReconciliationState.FeatureFlagETags = processor.RefreshOptions.updatedFeatureFlagETags
 	}
 
@@ -367,8 +366,6 @@ func NewRefreshOptions() *RefreshOptions {
 		sentinelChanged:               false,
 		keyValuePageETagsChanged:      false,
 		updatedSentinelETags:          make(map[acpv1.Sentinel]*azcore.ETag),
-		updatedKeyValueETags:          make(map[acpv1.Selector][]*azcore.ETag),
-		updatedFeatureFlagETags:       make(map[acpv1.Selector][]*azcore.ETag),
 	}
 }
 
@@ -391,22 +388,4 @@ func (processor *AppConfigurationProviderProcessor) calculateRequeueAfterInterva
 	}
 
 	return requeueAfterInterval
-}
-
-func initializeEtags(provider *acpv1.AzureAppConfigurationProvider) (keyValueETags map[acpv1.Selector][]*azcore.ETag, featureFlagETags map[acpv1.Selector][]*azcore.ETag) {
-	keyValueETags = make(map[acpv1.Selector][]*azcore.ETag)
-	keyValueFilters := loader.GetKeyValueFilters(provider.Spec)
-	for _, selector := range keyValueFilters {
-		keyValueETags[selector] = []*azcore.ETag{}
-	}
-
-	featureFlagETags = make(map[acpv1.Selector][]*azcore.ETag)
-	if provider.Spec.FeatureFlag != nil {
-		featureFlagFilters := loader.GetFeatureFlagFilters(provider.Spec)
-		for _, selector := range featureFlagFilters {
-			featureFlagETags[selector] = []*azcore.ETag{}
-		}
-	}
-
-	return keyValueETags, featureFlagETags
 }

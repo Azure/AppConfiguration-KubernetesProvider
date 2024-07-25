@@ -11,14 +11,18 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 //go:generate mockgen -destination=mocks/mock_settings_client.go -package mocks . SettingsClient
 
+type SettingsResponse struct {
+	Settings []azappconfig.Setting
+	Etags    map[acpv1.Selector][]*azcore.ETag
+}
+
 type EtagSettingsClient struct {
-	etags       map[acpv1.Selector][]*azcore.ETag
-	etagChanged bool
+	etags map[acpv1.Selector][]*azcore.ETag
 }
 
 type SentinelSettingsClient struct {
@@ -31,11 +35,14 @@ type SelectorSettingsClient struct {
 }
 
 type SettingsClient interface {
-	GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, map[acpv1.Selector][]*azcore.ETag, error)
+	GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error)
 }
 
-func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, map[acpv1.Selector][]*azcore.ETag, error) {
+func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
 	nullString := "\x00"
+	settingsResponse := &SettingsResponse{
+		Etags: make(map[acpv1.Selector][]*azcore.ETag),
+	}
 	for filter, pageEtags := range s.etags {
 		if filter.KeyFilter != nil {
 			if filter.LabelFilter == nil {
@@ -61,28 +68,25 @@ func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfi
 				pageCount++
 				page, err := pager.NextPage(context.Background())
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
+				// etag changed, return the non nil settings
 				if page.ETag != nil {
-					s.etagChanged = true
-					break
+					return settingsResponse, nil
 				}
 			}
 
-			if !s.etagChanged && pageCount != len(pageEtags) {
-				s.etagChanged = true
-			}
-
-			if s.etagChanged {
-				break
+			if pageCount != len(pageEtags) {
+				return settingsResponse, nil
 			}
 		}
 	}
 
-	return nil, nil, nil
+	// no change in the settings, return nil
+	return nil, nil
 }
 
-func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, map[acpv1.Selector][]*azcore.ETag, error) {
+func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
 	sentinelSetting, err := client.GetSetting(ctx, s.sentinel.Key, &azappconfig.GetSettingOptions{Label: &s.sentinel.Label, OnlyIfChanged: s.etag})
 	if err != nil {
 		var respErr *azcore.ResponseError
@@ -96,20 +100,24 @@ func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappc
 			switch respErr.StatusCode {
 			case 404:
 				klog.Warningf("Sentinel key '%s' with %s label does not exists, revisit the sentinel after %s", s.sentinel.Key, label, s.refreshInterval)
-				return nil, nil, nil
+				return nil, nil
 			case 304:
 				klog.V(3).Infof("There's no change to the sentinel key '%s' with %s label , just exit and revisit the sentinel after %s", s.sentinel.Key, label, s.refreshInterval)
-				return []azappconfig.Setting{sentinelSetting.Setting}, nil, nil
+				return &SettingsResponse{
+					Settings: []azappconfig.Setting{sentinelSetting.Setting},
+				}, nil
 			}
 		}
 
-		return nil, nil, err
+		return nil, err
 	}
 
-	return []azappconfig.Setting{sentinelSetting.Setting}, nil, nil
+	return &SettingsResponse{
+		Settings: []azappconfig.Setting{sentinelSetting.Setting},
+	}, nil
 }
 
-func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) ([]azappconfig.Setting, map[acpv1.Selector][]*azcore.ETag, error) {
+func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
 	nullString := "\x00"
 	settingsToReturn := make([]azappconfig.Setting, 0)
 	refreshedEtags := make(map[acpv1.Selector][]*azcore.ETag)
@@ -130,7 +138,7 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 			for pager.More() {
 				page, err := pager.NextPage(ctx)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				} else if len(page.Settings) > 0 {
 					settingsToReturn = append(settingsToReturn, page.Settings...)
 					latestEtags = append(latestEtags, page.ETag)
@@ -141,11 +149,11 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 		} else {
 			snapshot, err := client.GetSnapshot(ctx, *filter.SnapshotName, nil)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 
 			if *snapshot.CompositionType != azappconfig.CompositionTypeKey {
-				return nil, nil, fmt.Errorf("compositionType for the selected snapshot '%s' must be 'key', found '%s'", *filter.SnapshotName, *snapshot.CompositionType)
+				return nil, fmt.Errorf("compositionType for the selected snapshot '%s' must be 'key', found '%s'", *filter.SnapshotName, *snapshot.CompositionType)
 			}
 
 			pager := client.NewListSettingsForSnapshotPager(*filter.SnapshotName, nil)
@@ -153,7 +161,7 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 			for pager.More() {
 				page, err := pager.NextPage(ctx)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				} else if len(page.Settings) > 0 {
 					settingsToReturn = append(settingsToReturn, page.Settings...)
 				}
@@ -161,5 +169,8 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 		}
 	}
 
-	return settingsToReturn, refreshedEtags, nil
+	return &SettingsResponse{
+		Settings: settingsToReturn,
+		Etags:    refreshedEtags,
+	}, nil
 }

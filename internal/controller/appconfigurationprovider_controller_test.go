@@ -794,7 +794,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil)
+			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
 			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()
@@ -870,7 +870,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil)
+			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-5"

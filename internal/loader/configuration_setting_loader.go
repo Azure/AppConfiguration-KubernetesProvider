@@ -69,7 +69,7 @@ type RawSettings struct {
 type ConfigurationSettingsRetriever interface {
 	CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
-	CheckPageETags(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Selector][]*azcore.ETag) (bool, error)
+	CheckPageETags(ctx context.Context, eTags map[acpv1.Selector][]*azcore.ETag) (bool, error)
 	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (*TargetKeyValueSettings, error)
@@ -192,7 +192,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 			selectors: keyValueFilters,
 		}
 	}
-	settings, etags, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+	settingsResponse, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 		IsJsonContentTypeMap: make(map[string]bool),
 		SecretSettings:       make(map[string]corev1.Secret),
 		SecretReferences:     make(map[string]*TargetSecretReference),
-		KeyValueETags:        etags,
+		KeyValueETags:        settingsResponse.Etags,
 	}
 
 	if csl.Spec.Secret != nil {
@@ -214,7 +214,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 	resolver := secretReferenceResolver
 
-	for _, setting := range settings {
+	for _, setting := range settingsResponse.Settings {
 		trimmedKey := trimPrefix(*setting.Key, csl.Spec.Configuration.TrimKeyPrefixes)
 		if len(trimmedKey) == 0 {
 			klog.Warningf("key of the setting '%s' is trimmed to the empty string, just ignore it", *setting.Key)
@@ -317,34 +317,35 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 				refreshInterval: provider.Spec.Configuration.Refresh.Interval,
 			}
 		}
-		refreshedSentinel, _, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+		response, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 		if err != nil {
 			return false, eTags, err
 		}
 
-		if refreshedSentinel != nil && refreshedSentinel[0].ETag != nil {
+		if response.Settings != nil && response.Settings[0].ETag != nil {
 			sentinelChanged = true
-			refreshedETags[sentinel] = refreshedSentinel[0].ETag
+			refreshedETags[sentinel] = response.Settings[0].ETag
 		}
 	}
 
 	return sentinelChanged, refreshedETags, nil
 }
 
-func (csl *ConfigurationSettingLoader) CheckPageETags(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Selector][]*azcore.ETag) (bool, error) {
+func (csl *ConfigurationSettingLoader) CheckPageETags(ctx context.Context, eTags map[acpv1.Selector][]*azcore.ETag) (bool, error) {
 	settingsClient := csl.SettingsClient
 	if settingsClient == nil {
 		settingsClient = &EtagSettingsClient{
-			etags:       eTags,
-			etagChanged: false,
+			etags: eTags,
 		}
 	}
 
-	if _, _, err := csl.ExecuteFailoverPolicy(ctx, settingsClient); err != nil {
+	response, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+	if err != nil {
 		return false, err
 	}
 
-	return settingsClient.(*EtagSettingsClient).etagChanged, nil
+	// when the response is nil, it means the page eTags are not changed
+	return response != nil, nil
 }
 
 func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, map[acpv1.Selector][]*azcore.ETag, error) {
@@ -355,13 +356,13 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 			selectors: featureFlagFilters,
 		}
 	}
-	featureFlagSettings, featureFlagETags, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+	settingsResponse, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	deduplicateFeatureFlags := make(map[string]azappconfig.Setting, len(featureFlagSettings))
-	for _, setting := range featureFlagSettings {
+	deduplicateFeatureFlags := make(map[string]azappconfig.Setting, len(settingsResponse.Settings))
+	for _, setting := range settingsResponse.Settings {
 		deduplicateFeatureFlags[*setting.Key] = setting
 	}
 
@@ -378,7 +379,7 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 		featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
 	}
 
-	return featureFlagSection, featureFlagETags, nil
+	return featureFlagSection, settingsResponse.Etags, nil
 }
 
 func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
@@ -490,15 +491,15 @@ func (csl *ConfigurationSettingLoader) createSecretReferenceResolver(ctx context
 	return resolver, nil
 }
 
-func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, settingsClient SettingsClient) ([]azappconfig.Setting, map[acpv1.Selector][]*azcore.ETag, error) {
+func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context, settingsClient SettingsClient) (*SettingsResponse, error) {
 	clients, err := csl.ClientManager.GetClients(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if len(clients) == 0 {
 		csl.ClientManager.RefreshClients(ctx)
-		return nil, nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
+		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
 	}
 
 	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
@@ -510,7 +511,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	errors := make([]error, 0)
 	for _, clientWrapper := range clients {
 		successful := true
-		settingsToReturn, refreshedETags, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
+		settingsResponse, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
 		if err != nil {
 			successful = false
 			updateClientBackoffStatus(clientWrapper, successful)
@@ -519,16 +520,16 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 				errors = append(errors, err)
 				continue
 			}
-			return nil, nil, err
+			return nil, err
 		}
 
 		updateClientBackoffStatus(clientWrapper, successful)
-		return settingsToReturn, refreshedETags, nil
+		return settingsResponse, nil
 	}
 
 	// Failed to execute failover policy
 	csl.ClientManager.RefreshClients(ctx)
-	return nil, nil, fmt.Errorf("all app configuration clients failed to get settings: %v", errors)
+	return nil, fmt.Errorf("all app configuration clients failed to get settings: %v", errors)
 }
 
 func updateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {

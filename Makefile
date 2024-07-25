@@ -143,6 +143,14 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+.PHONY: helm-generate
+helm-generate: manifests ## Generate helm files base on the image
+	./scripts/helm.generate.sh ${IMG} ${HELM_OUTPUT} ${HELM_VERSION}
+
+.PHONY: helm-push
+helm-push: ## Push the helm chart to registry
+	./scripts/helm.push.sh ${IMG} ${HELM_OUTPUT} ${HELM_VERSION}
+
 ##@ Dependencies
 
 ## Location to install dependencies to

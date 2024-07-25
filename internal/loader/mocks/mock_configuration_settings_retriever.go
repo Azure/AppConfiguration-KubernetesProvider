@@ -54,18 +54,18 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckAndRefreshSentine
 }
 
 // CheckPageETags mocks base method.
-func (m *MockConfigurationSettingsRetriever) CheckPageETags(arg0 context.Context, arg1 *v1.AzureAppConfigurationProvider, arg2 map[v1.Selector][]*azcore.ETag) (bool, error) {
+func (m *MockConfigurationSettingsRetriever) CheckPageETags(arg0 context.Context, arg1 map[v1.Selector][]*azcore.ETag) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckPageETags", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "CheckPageETags", arg0, arg1)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CheckPageETags indicates an expected call of CheckPageETags.
-func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckPageETags(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckPageETags(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPageETags", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckPageETags), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPageETags", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckPageETags), arg0, arg1)
 }
 
 // CreateTargetSettings mocks base method.

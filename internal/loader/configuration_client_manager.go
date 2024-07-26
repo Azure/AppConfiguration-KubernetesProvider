@@ -37,6 +37,7 @@ import (
 
 type ConfigurationClientManager struct {
 	ReplicaDiscoveryEnabled   bool
+	LoadBalancingEnabled      bool
 	StaticClientWrappers      []*ConfigurationClientWrapper
 	DynamicClientWrappers     []*ConfigurationClientWrapper
 	validDomain               string
@@ -49,10 +50,11 @@ type ConfigurationClientManager struct {
 }
 
 type ConfigurationClientWrapper struct {
-	Endpoint       string
-	Client         *azappconfig.Client
-	BackOffEndTime metav1.Time
-	FailedAttempts int
+	Endpoint          string
+	Client            *azappconfig.Client
+	BackOffEndTime    metav1.Time
+	FailedAttempts    int
+	SucceededAttempts int
 }
 
 type ClientManager interface {
@@ -93,6 +95,7 @@ var (
 func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (ClientManager, error) {
 	manager := &ConfigurationClientManager{
 		ReplicaDiscoveryEnabled: provider.Spec.ReplicaDiscoveryEnabled,
+		LoadBalancingEnabled:    provider.Spec.LoadBalancingEnabled,
 	}
 
 	var err error
@@ -129,10 +132,11 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 
 	manager.validDomain = getValidDomain(manager.endpoint)
 	manager.StaticClientWrappers = []*ConfigurationClientWrapper{{
-		Endpoint:       manager.endpoint,
-		Client:         staticClient,
-		BackOffEndTime: metav1.Time{},
-		FailedAttempts: 0,
+		Endpoint:          manager.endpoint,
+		Client:            staticClient,
+		BackOffEndTime:    metav1.Time{},
+		FailedAttempts:    0,
+		SucceededAttempts: 0,
 	}}
 
 	return manager, nil
@@ -222,10 +226,11 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.C
 					return
 				}
 				newDynamicClients = append(newDynamicClients, &ConfigurationClientWrapper{
-					Endpoint:       targetEndpoint,
-					Client:         client,
-					BackOffEndTime: metav1.Time{},
-					FailedAttempts: 0,
+					Endpoint:          targetEndpoint,
+					Client:            client,
+					BackOffEndTime:    metav1.Time{},
+					FailedAttempts:    0,
+					SucceededAttempts: 0,
 				})
 			}
 		}

@@ -37,8 +37,9 @@ import (
 
 type ConfigurationSettingLoader struct {
 	acpv1.AzureAppConfigurationProvider
-	ClientManager  ClientManager
-	SettingsClient SettingsClient
+	ClientManager          ClientManager
+	SettingsClient         SettingsClient
+	lastSuccessfulEndpoint string
 }
 
 type TargetKeyValueSettings struct {
@@ -104,6 +105,7 @@ func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider,
 		AzureAppConfigurationProvider: provider,
 		ClientManager:                 clientManager,
 		SettingsClient:                settingsClient,
+		lastSuccessfulEndpoint:        "",
 	}, nil
 }
 
@@ -508,6 +510,21 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 		}
 	}
 
+	if csl.AzureAppConfigurationProvider.Spec.LoadBalancingEnabled && csl.lastSuccessfulEndpoint != "" && len(clients) > 1 {
+		nextClientIndex := 0
+		for _, clientWrapper := range clients {
+			nextClientIndex++
+			if clientWrapper.Endpoint == csl.lastSuccessfulEndpoint {
+				break
+			}
+		}
+
+		// If we found the last successful client,we'll rotate the list so that the next client is at the beginning
+		if nextClientIndex < len(clients) {
+			clients = append(clients[nextClientIndex:], clients[:nextClientIndex]...)
+		}
+	}
+
 	errors := make([]error, 0)
 	for _, clientWrapper := range clients {
 		successful := true
@@ -523,6 +540,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 			return nil, err
 		}
 
+		csl.lastSuccessfulEndpoint = clientWrapper.Endpoint
 		updateClientBackoffStatus(clientWrapper, successful)
 		return settingsResponse, nil
 	}
@@ -536,6 +554,7 @@ func updateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, succes
 	if successful {
 		clientWrapper.BackOffEndTime = metav1.Time{}
 		clientWrapper.FailedAttempts = 0
+		clientWrapper.SucceededAttempts++
 	} else {
 		clientWrapper.FailedAttempts++
 		clientWrapper.BackOffEndTime = metav1.Time{Time: metav1.Now().Add(calculateBackoffDuration(clientWrapper.FailedAttempts))}

@@ -41,10 +41,7 @@ type SettingsClient interface {
 
 func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
 	nullString := "\x00"
-	settingsResponse := &SettingsResponse{
-		Etags:    make(map[acpv1.Selector][]*azcore.ETag),
-		Settings: make([]azappconfig.Setting, 0),
-	}
+	settingsResponse := &SettingsResponse{}
 	for filter, pageEtags := range s.etags {
 		if filter.KeyFilter != nil {
 			if filter.LabelFilter == nil {
@@ -72,20 +69,21 @@ func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfi
 				if err != nil {
 					return nil, err
 				}
-				// etag changed, return the non nil settings
+				// If etag changed, return the non nil etags
 				if page.ETag != nil {
+					settingsResponse.Etags = make(map[acpv1.Selector][]*azcore.ETag)
 					return settingsResponse, nil
 				}
 			}
 
 			if pageCount != len(pageEtags) {
+				settingsResponse.Etags = make(map[acpv1.Selector][]*azcore.ETag)
 				return settingsResponse, nil
 			}
 		}
 	}
 
 	// no change in the settings, return nil etags
-	settingsResponse.Etags = nil
 	return settingsResponse, nil
 }
 

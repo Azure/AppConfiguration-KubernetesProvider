@@ -320,6 +320,14 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 		processor.ReconciliationState.SentinelETags = processor.RefreshOptions.updatedSentinelETags
 	}
 
+	if processor.RefreshOptions.updatedKeyValueETags != nil {
+		processor.ReconciliationState.KeyValueETags = processor.RefreshOptions.updatedKeyValueETags
+	}
+
+	if processor.RefreshOptions.updatedFeatureFlagETags != nil {
+		processor.ReconciliationState.FeatureFlagETags = processor.RefreshOptions.updatedFeatureFlagETags
+	}
+
 	if !processor.RefreshOptions.secretReferenceRefreshEnabled &&
 		!processor.RefreshOptions.keyValueRefreshEnabled &&
 		!processor.RefreshOptions.featureFlagRefreshEnabled {

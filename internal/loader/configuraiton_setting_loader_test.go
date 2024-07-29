@@ -1221,8 +1221,12 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			etags := make(map[acpv1.Sentinel]*azcore.ETag)
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil).Times(1)
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+			firstSettingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+			}
+			secondSettingsResponse := &SettingsResponse{}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(firstSettingsResponse, nil).Times(1)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(secondSettingsResponse, nil).Times(1)
 			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&firstClient, &secondClient}, nil).Times(2)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
@@ -1292,8 +1296,12 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			etags := make(map[acpv1.Sentinel]*azcore.ETag)
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil).Times(1)
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+			firstSettingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+			}
+			secondSettingsResponse := &SettingsResponse{}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(firstSettingsResponse, nil).Times(1)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(secondSettingsResponse, nil).Times(1)
 			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&firstClient, &secondClient}, nil).Times(2)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)

@@ -20,7 +20,7 @@ requestTracing:
 
 workloadIdentity:
   enabled: true
-  disableGlobalServiceAccount: false
+  globalServiceAccountEnabled: false
 
 serviceAccount:
   # Specifies whether a service account should be created

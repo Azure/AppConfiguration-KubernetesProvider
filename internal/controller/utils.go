@@ -21,7 +21,7 @@ const (
 	MinimalSecretRefreshInterval                time.Duration = time.Minute
 	MinimalFeatureFlagRefreshInterval           time.Duration = time.Second
 	WorkloadIdentityEnabled                     string        = "WORKLOAD_IDENTITY_ENABLED"
-	WorkloadIdentityDisableGlobalServiceAccount string        = "WORKLOAD_IDENTITY_DISABLE_GLOBAL_SERVICE_ACCOUNT"
+	WorkloadIdentityGlobalServiceAccountEnabled string        = "WORKLOAD_IDENTITY_GLOBAL_SERVICE_ACCOUNT_ENABLED"
 )
 
 func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
@@ -247,15 +247,15 @@ func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityPa
 	var authCount int = 0
 
 	if workloadIdentity.ManagedIdentityClientId != nil {
-		if strings.EqualFold(os.Getenv(WorkloadIdentityDisableGlobalServiceAccount), "true") {
-			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientId", fmt.Errorf("'managedIdentityClientId' is not allowed since global service account is disabled"))
+		if strings.EqualFold(os.Getenv(WorkloadIdentityGlobalServiceAccountEnabled), "false") {
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientId", fmt.Errorf("using a global service account is no longer permitted with workload identity. See https://aka.ms/appconfig/k8sglobalserviceaccount for more information"))
 		}
 		authCount++
 	}
 
 	if workloadIdentity.ManagedIdentityClientIdReference != nil {
-		if strings.EqualFold(os.Getenv(WorkloadIdentityDisableGlobalServiceAccount), "true") {
-			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientIdReference", fmt.Errorf("'managedIdentityClientIdReference' is not allowed since global service account is disabled"))
+		if strings.EqualFold(os.Getenv(WorkloadIdentityGlobalServiceAccountEnabled), "false") {
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientIdReference", fmt.Errorf("using a global service account is no longer permitted with workload identity. See https://aka.ms/appconfig/k8sglobalserviceaccount for more information"))
 		}
 		authCount++
 	}

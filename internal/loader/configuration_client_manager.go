@@ -50,11 +50,10 @@ type ConfigurationClientManager struct {
 }
 
 type ConfigurationClientWrapper struct {
-	Endpoint          string
-	Client            *azappconfig.Client
-	BackOffEndTime    metav1.Time
-	FailedAttempts    int
-	SucceededAttempts int
+	Endpoint       string
+	Client         *azappconfig.Client
+	BackOffEndTime metav1.Time
+	FailedAttempts int
 }
 
 type ClientManager interface {
@@ -132,11 +131,10 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 
 	manager.validDomain = getValidDomain(manager.endpoint)
 	manager.StaticClientWrappers = []*ConfigurationClientWrapper{{
-		Endpoint:          manager.endpoint,
-		Client:            staticClient,
-		BackOffEndTime:    metav1.Time{},
-		FailedAttempts:    0,
-		SucceededAttempts: 0,
+		Endpoint:       manager.endpoint,
+		Client:         staticClient,
+		BackOffEndTime: metav1.Time{},
+		FailedAttempts: 0,
 	}}
 
 	return manager, nil
@@ -226,11 +224,10 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.C
 					return
 				}
 				newDynamicClients = append(newDynamicClients, &ConfigurationClientWrapper{
-					Endpoint:          targetEndpoint,
-					Client:            client,
-					BackOffEndTime:    metav1.Time{},
-					FailedAttempts:    0,
-					SucceededAttempts: 0,
+					Endpoint:       targetEndpoint,
+					Client:         client,
+					BackOffEndTime: metav1.Time{},
+					FailedAttempts: 0,
 				})
 			}
 		}

@@ -553,9 +553,17 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 func updateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {
 	if successful {
 		clientWrapper.BackOffEndTime = metav1.Time{}
-		clientWrapper.FailedAttempts = 0
-		clientWrapper.SucceededAttempts++
+		// Reset FailedAttempts when client succeeded
+		if clientWrapper.FailedAttempts > 0 {
+			clientWrapper.FailedAttempts = 0
+		}
+		// Use negative value to indicate that successful attempt
+		clientWrapper.FailedAttempts--
 	} else {
+		//Reset FailedAttempts when client failed
+		if clientWrapper.FailedAttempts < 0 {
+			clientWrapper.FailedAttempts = 0
+		}
 		clientWrapper.FailedAttempts++
 		clientWrapper.BackOffEndTime = metav1.Time{Time: metav1.Now().Add(calculateBackoffDuration(clientWrapper.FailedAttempts))}
 	}

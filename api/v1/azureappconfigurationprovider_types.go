@@ -53,7 +53,7 @@ type AzureAppConfigurationProviderStatus struct {
 // RefreshStatus defines last refresh time of configmap and secret when dynamic feature is enabled
 type RefreshStatus struct {
 	LastKeyVaultReferenceRefreshTime metav1.Time `json:"lastKeyVaultReferenceRefreshTime,omitempty"`
-	LastSentinelBasedRefreshTime     metav1.Time `json:"lastSentinelBasedRefreshTime,omitempty"`
+	LastKeyValueRefreshTime          metav1.Time `json:"lastKeyValueRefreshTime,omitempty"`
 	LastFeatureFlagRefreshTime       metav1.Time `json:"lastFeatureFlagRefreshTime,omitempty"`
 }
 
@@ -88,7 +88,7 @@ type Selector struct {
 
 // Defines the settings for dynamic configuration.
 type DynamicConfigurationRefreshParameters struct {
-	Monitoring *RefreshMonitoring `json:"monitoring"`
+	Monitoring *RefreshMonitoring `json:"monitoring,omitempty"`
 	// +kubebuilder:validation:Format=duration
 	// +kubebuilder:default="30s"
 	Interval string `json:"interval,omitempty"`

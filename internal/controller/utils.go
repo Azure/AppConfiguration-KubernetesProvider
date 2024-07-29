@@ -120,12 +120,14 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 	}
 
 	if spec.Configuration.Refresh != nil {
-		sentinelMap := make(map[acpv1.Sentinel]bool)
-		for _, sentinel := range spec.Configuration.Refresh.Monitoring.Sentinels {
-			if _, ok := sentinelMap[sentinel]; ok {
-				return loader.NewArgumentError("spec.configuration.refresh.monitoring.keyValues", fmt.Errorf("monitoring duplicated key '%s'", sentinel.Key))
+		if spec.Configuration.Refresh.Monitoring != nil {
+			sentinelMap := make(map[acpv1.Sentinel]bool)
+			for _, sentinel := range spec.Configuration.Refresh.Monitoring.Sentinels {
+				if _, ok := sentinelMap[sentinel]; ok {
+					return loader.NewArgumentError("spec.configuration.refresh.monitoring.keyValues", fmt.Errorf("monitoring duplicated key '%s'", sentinel.Key))
+				}
+				sentinelMap[sentinel] = true
 			}
-			sentinelMap[sentinel] = true
 		}
 
 		if spec.Configuration.Refresh.Interval != "" {

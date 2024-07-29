@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/golang/mock/gomock"
@@ -75,6 +76,21 @@ func mockFeatureFlagSettings() []azappconfig.Setting {
 	settingsToReturn[1] = newFeatureFlagSettings(".appconfig.featureflag/Beta", "label1")
 
 	return settingsToReturn
+}
+
+func newKeyValueSelector(key string, label *string) acpv1.Selector {
+	return acpv1.Selector{
+		KeyFilter:   &key,
+		LabelFilter: label,
+	}
+}
+
+func newFeatureFlagSelector(key string, label *string) acpv1.Selector {
+	prefixedKey := FeatureFlagKeyPrefix + key
+	return acpv1.Selector{
+		KeyFilter:   &prefixedKey,
+		LabelFilter: label,
+	}
 }
 
 func newCommonKeyValueSettings(key string, value string, label string) azappconfig.Setting {
@@ -228,10 +244,10 @@ func (m *MockSettingsClient) EXPECT() *MockSettingsClientMockRecorder {
 }
 
 // GetSettings mocks base method.
-func (m *MockSettingsClient) GetSettings(arg0 context.Context, arg1 *azappconfig.Client) ([]azappconfig.Setting, error) {
+func (m *MockSettingsClient) GetSettings(arg0 context.Context, arg1 *azappconfig.Client) (*SettingsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSettings", arg0, arg1)
-	ret0, _ := ret[0].([]azappconfig.Setting)
+	ret0, _ := ret[0].(*SettingsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -321,7 +337,13 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettingsWithKV()
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
 			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -358,7 +380,13 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettingsWithKV()
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
 			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
@@ -843,7 +871,13 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
 			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
@@ -885,7 +919,13 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
 			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
@@ -921,7 +961,13 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
 			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
@@ -959,7 +1005,13 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil)
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
 			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
@@ -1006,7 +1058,13 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			featureFlagsToReturn := mockFeatureFlagSettings()
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(featureFlagsToReturn, nil).Times(2)
+			featureFlagEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			featureFlagEtags[newFeatureFlagSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: featureFlagsToReturn,
+				Etags:    featureFlagEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(2)
 			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(2)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
@@ -1086,8 +1144,14 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				FailedAttempts: 0,
 			}
 
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
 			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(nil, netErr).Times(1)
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsToReturn, nil).Times(1)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(1)
 			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&failedClient, &succeededClient}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
@@ -1167,8 +1231,8 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	keyValueFilters := getKeyValueFilters(testSpec)
-	featureFlagFilters := getFeatureFlagFilters(testSpec)
+	keyValueFilters := GetKeyValueFilters(testSpec)
+	featureFlagFilters := GetFeatureFlagFilters(testSpec)
 	assert.Len(t, keyValueFilters, 3)
 	assert.Len(t, featureFlagFilters, 2)
 	assert.Equal(t, "one", *keyValueFilters[0].KeyFilter)
@@ -1183,7 +1247,7 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	keyValueFilters2 := getKeyValueFilters(testSpec2)
+	keyValueFilters2 := GetKeyValueFilters(testSpec2)
 	assert.Len(t, keyValueFilters2, 1)
 	assert.Equal(t, "*", *keyValueFilters2[0].KeyFilter)
 	assert.Nil(t, keyValueFilters2[0].LabelFilter)
@@ -1203,8 +1267,8 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	keyValueFilters3 := getKeyValueFilters(testSpec3)
-	featureFlagFilters3 := getFeatureFlagFilters(testSpec3)
+	keyValueFilters3 := GetKeyValueFilters(testSpec3)
+	featureFlagFilters3 := GetFeatureFlagFilters(testSpec3)
 	assert.Len(t, keyValueFilters3, 2)
 	assert.Len(t, featureFlagFilters3, 2)
 	assert.Equal(t, "two", *keyValueFilters3[0].KeyFilter)
@@ -1221,8 +1285,8 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	filters4 := getKeyValueFilters(testSpec4)
-	featureFlagFilters4 := getFeatureFlagFilters(testSpec4)
+	filters4 := GetKeyValueFilters(testSpec4)
+	featureFlagFilters4 := GetFeatureFlagFilters(testSpec4)
 	assert.Len(t, filters4, 2)
 	assert.Len(t, featureFlagFilters4, 0)
 	assert.Equal(t, "two", *filters4[0].KeyFilter)
@@ -1239,7 +1303,7 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	filters5 := getKeyValueFilters(testSpec5)
+	filters5 := GetKeyValueFilters(testSpec5)
 	assert.Len(t, filters5, 2)
 	assert.Equal(t, "one", *filters5[0].KeyFilter)
 	assert.Equal(t, "one", *filters5[1].KeyFilter)
@@ -1254,7 +1318,7 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	filters6 := getKeyValueFilters(testSpec6)
+	filters6 := GetKeyValueFilters(testSpec6)
 	assert.Len(t, filters6, 2)
 	assert.Equal(t, "one", *filters6[0].KeyFilter)
 	assert.Equal(t, "test", *filters6[0].LabelFilter)

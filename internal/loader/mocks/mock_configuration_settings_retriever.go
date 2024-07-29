@@ -53,6 +53,21 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckAndRefreshSentine
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAndRefreshSentinels", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckAndRefreshSentinels), arg0, arg1, arg2)
 }
 
+// CheckPageETags mocks base method.
+func (m *MockConfigurationSettingsRetriever) CheckPageETags(arg0 context.Context, arg1 map[v1.Selector][]*azcore.ETag) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckPageETags", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckPageETags indicates an expected call of CheckPageETags.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckPageETags(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPageETags", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckPageETags), arg0, arg1)
+}
+
 // CreateTargetSettings mocks base method.
 func (m *MockConfigurationSettingsRetriever) CreateTargetSettings(arg0 context.Context, arg1 loader.SecretReferenceResolver) (*loader.TargetKeyValueSettings, error) {
 	m.ctrl.T.Helper()

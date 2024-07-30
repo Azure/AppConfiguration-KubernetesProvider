@@ -248,14 +248,14 @@ func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityPa
 
 	if workloadIdentity.ManagedIdentityClientId != nil {
 		if strings.EqualFold(os.Getenv(WorkloadIdentityGlobalServiceAccountEnabled), "false") {
-			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientId", fmt.Errorf("using a global service account is no longer permitted with workload identity. See https://aka.ms/appconfig/k8sglobalserviceaccount for more information"))
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientId", fmt.Errorf("using a global service account is no longer permitted with workload identity by default. See https://aka.ms/appconfig/k8sglobalserviceaccount for more information"))
 		}
 		authCount++
 	}
 
 	if workloadIdentity.ManagedIdentityClientIdReference != nil {
 		if strings.EqualFold(os.Getenv(WorkloadIdentityGlobalServiceAccountEnabled), "false") {
-			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientIdReference", fmt.Errorf("using a global service account is no longer permitted with workload identity. See https://aka.ms/appconfig/k8sglobalserviceaccount for more information"))
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientIdReference", fmt.Errorf("using a global service account is no longer permitted with workload identity by default. See https://aka.ms/appconfig/k8sglobalserviceaccount for more information"))
 		}
 		authCount++
 	}

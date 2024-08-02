@@ -40,13 +40,6 @@ saveResult() {
 # Ensure that we tell the Sonobuoy worker we are done regardless of results.
 trap saveResult EXIT
 
-# initial environment variables for the plugin
-setEnviornmentVariables() {
-  export JUNIT_OUTPUT_FILEPATH=/tmp/results/
-  export IS_ARC_TEST=true
-  export CI_KIND_CLUSTER=true
-}
-
 # setup kubeconfig for conformance test
 setupKubeConfig() {
   KUBECTL_CONTEXT=azure-arc-appconfig-test
@@ -75,55 +68,70 @@ setupKubeConfig() {
 }
 
 # validate enviorment variables
-if [ -z "${TENANT_ID}" ]; then
-  echo "ERROR: parameter TENANT_ID is required." > "${results_dir}"/error
-  python3 /arc/setup_failure_handler.py
-fi
+validateParameters() {
+  if [ -z "${TENANT_ID}" ]; then
+    echo "ERROR: parameter TENANT_ID is required." > "${results_dir}"/error
+    python3 /arc/setup_failure_handler.py
+  fi
 
-if [ -z "${SUBSCRIPTION_ID}" ]; then
-  echo "ERROR: parameter SUBSCRIPTION_ID is required." > "${results_dir}"/error
-  python3 /arc/setup_failure_handler.py
-fi
+  if [ -z "${SUBSCRIPTION_ID}" ]; then
+    echo "ERROR: parameter SUBSCRIPTION_ID is required." > "${results_dir}"/error
+    python3 /arc/setup_failure_handler.py
+  fi
 
-if [ -z "${AZURE_CLIENT_ID}" ]; then
-  echo "ERROR: parameter AZURE_CLIENT_ID is required." > "${results_dir}"/error
-  python3 /arc/setup_failure_handler.py
-fi
+  if [ -z "${CLUSTER_NAME}" ]; then
+    echo "ERROR: parameter CLUSTER_NAME is required." > "${results_dir}"/error
+    python3 /arc/setup_failure_handler.py
+  fi
 
-if [ -z "${AZURE_CLIENT_SECRET}" ]; then
-  echo "ERROR: parameter AZURE_CLIENT_SECRET is required." > "${results_dir}"/error
-  python3 /arc/setup_failure_handler.py
-fi
+  if [ -z "${CLUSTER_RG}" ]; then
+    echo "ERROR: parameter CLUSTER_RG is required." > "${results_dir}"/error
+    python3 /arc/setup_failure_handler.py
+  fi
 
-if [ -z "${CLUSTER_NAME}" ]; then
-  echo "ERROR: parameter CLUSTER_NAME is required." > "${results_dir}"/error
-  python3 /arc/setup_failure_handler.py
-fi
+  # OBJECT_ID is an id of the Service Principal created in conformance test subscription.
+  if [ -z "${OBJECT_ID}" ]; then
+    echo "ERROR: parameter OBJECT_ID is required." > "${results_dir}"/error
+    python3 /arc/setup_failure_handler.py
+  fi
 
-if [ -z "${CLUSTER_RG}" ]; then
-  echo "ERROR: parameter CLUSTER_RG is required." > "${results_dir}"/error
-  python3 /arc/setup_failure_handler.py
-fi
+  if [[ -z "${WORKLOAD_CLIENT_ID}" ]]; then
+    if [ -z "${AZURE_CLIENT_ID}" ]; then
+      echo "ERROR: parameter AZURE_CLIENT_ID is required." > "${results_dir}"/error
+      python3 /arc/setup_failure_handler.py
+    fi
 
-# OBJECT_ID is an id of the Service Principal created in conformance test subscription.
-if [ -z "${OBJECT_ID}" ]; then
-  echo "ERROR: parameter OBJECT_ID is required." > "${results_dir}"/error
-  python3 /arc/setup_failure_handler.py
-fi
+    if [ -z "${AZURE_CLIENT_SECRET}" ]; then
+      echo "ERROR: parameter AZURE_CLIENT_SECRET is required." > "${results_dir}"/error
+      python3 /arc/setup_failure_handler.py
+    fi
+   fi
+}
+
+login_to_azure() {
+   if [[ -z $WORKLOAD_CLIENT_ID ]]; then
+      echo "logging in using service principal '${AZURE_CLIENT_ID}'"
+      az login --service-principal \
+         -u ${AZURE_CLIENT_ID} \
+         -p ${AZURE_CLIENT_SECRET} \
+         --tenant ${TENANT_ID} 2> ${results_dir}/error || python3 setup_failure_handler.py
+   else
+      echo "logging in using managed identity '${WORKLOAD_CLIENT_ID}'"
+      az login --identity \
+         -u ${WORKLOAD_CLIENT_ID} 2> ${results_dir}/error || python3 setup_failure_handler.py
+   fi
+
+	echo "setting subscription: ${SUBSCRIPTION_ID} as default subscription"
+	az account set -s $SUBSCRIPTION_ID
+}
+
+validateParameters
 
 # add az cli extensions 
+az extension add --name aks-preview
 az extension add --name k8s-extension
 
-# login with service principal
-az login --service-principal \
-  -u "${AZURE_CLIENT_ID}" \
-  -p "${AZURE_CLIENT_SECRET}" \
-  --tenant "${TENANT_ID}" 2> "${results_dir}"/error || python3 /arc/setup_failure_handler.py
-
-az account set --subscription "${SUBSCRIPTION_ID}" 2> "${results_dir}"/error || python3 /arc/setup_failure_handler.py
-
-# set environment variables
-setEnviornmentVariables
+login_to_azure
 
 # setup Kubeconfig
 setupKubeConfig

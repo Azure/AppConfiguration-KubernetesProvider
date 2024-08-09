@@ -504,12 +504,6 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
 	}
 
-	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
-		if enabled, _ := strconv.ParseBool(value); enabled {
-			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager))
-		}
-	}
-
 	if csl.AzureAppConfigurationProvider.Spec.LoadBalancingEnabled && csl.lastSuccessfulEndpoint != "" && len(clients) > 1 {
 		nextClientIndex := 0
 		for _, clientWrapper := range clients {
@@ -526,20 +520,33 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	}
 
 	errors := make([]error, 0)
+	var tracingEnabled bool
+	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
+		tracingEnabled, _ = strconv.ParseBool(value)
+	}
 	for _, clientWrapper := range clients {
-		successful := true
+		if tracingEnabled {
+			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager))
+		}
 		settingsResponse, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
+		successful := true
 		if err != nil {
 			successful = false
 			updateClientBackoffStatus(clientWrapper, successful)
 			if IsFailoverable(err) {
 				klog.Warningf("current client of '%s' failed to get settings: %s", clientWrapper.Endpoint, err.Error())
 				errors = append(errors, err)
+				if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
+					manager.IsFailoverRequest = true
+				}
 				continue
 			}
 			return nil, err
 		}
 
+		if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
+			manager.IsFailoverRequest = false
+		}
 		csl.lastSuccessfulEndpoint = clientWrapper.Endpoint
 		updateClientBackoffStatus(clientWrapper, successful)
 		return settingsResponse, nil

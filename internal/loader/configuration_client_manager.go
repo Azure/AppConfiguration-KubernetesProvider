@@ -38,6 +38,7 @@ import (
 type ConfigurationClientManager struct {
 	ReplicaDiscoveryEnabled   bool
 	LoadBalancingEnabled      bool
+	IsFailoverRequest         bool
 	StaticClientWrappers      []*ConfigurationClientWrapper
 	DynamicClientWrappers     []*ConfigurationClientWrapper
 	validDomain               string

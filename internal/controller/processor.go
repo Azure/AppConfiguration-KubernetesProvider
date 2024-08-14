@@ -20,7 +20,7 @@ import (
 
 type AppConfigurationProviderProcessor struct {
 	Context                 context.Context
-	Retriever               *loader.ConfigurationSettingsRetriever
+	Retriever               loader.ConfigurationSettingsRetriever
 	Provider                *acpv1.AzureAppConfigurationProvider
 	Settings                *loader.TargetKeyValueSettings
 	ShouldReconcile         bool
@@ -68,7 +68,7 @@ func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingCon
 }
 
 func (processor *AppConfigurationProviderProcessor) processFullReconciliation() error {
-	updatedSettings, err := (*processor.Retriever).CreateTargetSettings(processor.Context, processor.SecretReferenceResolver)
+	updatedSettings, err := (processor.Retriever).CreateTargetSettings(processor.Context, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func (processor *AppConfigurationProviderProcessor) processFeatureFlagRefresh(ex
 		return nil
 	}
 
-	if processor.RefreshOptions.featureFlagRefreshNeeded, err = (*processor.Retriever).CheckPageETags(processor.Context, reconcileState.FeatureFlagETags); err != nil {
+	if processor.RefreshOptions.featureFlagRefreshNeeded, err = (processor.Retriever).CheckPageETags(processor.Context, reconcileState.FeatureFlagETags); err != nil {
 		return err
 	}
 
@@ -117,7 +117,7 @@ func (processor *AppConfigurationProviderProcessor) processFeatureFlagRefresh(ex
 		return nil
 	}
 
-	featureFlagRefreshedSettings, err := (*processor.Retriever).RefreshFeatureFlagSettings(processor.Context, &existingConfigMap.Data)
+	featureFlagRefreshedSettings, err := (processor.Retriever).RefreshFeatureFlagSettings(processor.Context, &existingConfigMap.Data)
 	if err != nil {
 		return err
 	}
@@ -156,11 +156,11 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 	}
 
 	if provider.Spec.Configuration.Refresh.Monitoring != nil {
-		if processor.RefreshOptions.sentinelChanged, processor.RefreshOptions.updatedSentinelETags, err = (*processor.Retriever).CheckAndRefreshSentinels(processor.Context, processor.Provider, reconcileState.SentinelETags); err != nil {
+		if processor.RefreshOptions.sentinelChanged, processor.RefreshOptions.updatedSentinelETags, err = (processor.Retriever).CheckAndRefreshSentinels(processor.Context, processor.Provider, reconcileState.SentinelETags); err != nil {
 			return err
 		}
 	} else {
-		if processor.RefreshOptions.keyValuePageETagsChanged, err = (*processor.Retriever).CheckPageETags(processor.Context, reconcileState.KeyValueETags); err != nil {
+		if processor.RefreshOptions.keyValuePageETagsChanged, err = (processor.Retriever).CheckPageETags(processor.Context, reconcileState.KeyValueETags); err != nil {
 			return err
 		}
 	}
@@ -176,7 +176,7 @@ func (processor *AppConfigurationProviderProcessor) processKeyValueRefresh(exist
 		existingConfigMapSettings = &processor.Settings.ConfigMapSettings
 	}
 
-	keyValueRefreshedSettings, err := (*processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.SecretReferenceResolver)
+	keyValueRefreshedSettings, err := (processor.Retriever).RefreshKeyValueSettings(processor.Context, existingConfigMapSettings, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 		}
 	}
 
-	resolvedSecrets, err := (*processor.Retriever).ResolveSecretReferences(processor.Context, secretReferencesToSolve, processor.SecretReferenceResolver)
+	resolvedSecrets, err := (processor.Retriever).ResolveSecretReferences(processor.Context, secretReferencesToSolve, processor.SecretReferenceResolver)
 	if err != nil {
 		return err
 	}

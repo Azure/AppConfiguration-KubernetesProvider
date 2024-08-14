@@ -235,7 +235,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	processor := &AppConfigurationProviderProcessor{
 		Context:                 ctx,
 		Provider:                provider,
-		Retriever:               &retriever,
+		Retriever:               retriever,
 		CurrentTime:             metav1.Now(),
 		ReconciliationState:     reconciler.ProvidersReconcileState[req.NamespacedName],
 		Settings:                &loader.TargetKeyValueSettings{},

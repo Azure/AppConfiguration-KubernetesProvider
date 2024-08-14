@@ -515,7 +515,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 
 		// If we found the last successful client,we'll rotate the list so that the next client is at the beginning
 		if nextClientIndex < len(clients) {
-			clients = append(clients[nextClientIndex:], clients[:nextClientIndex]...)
+			rotate(clients, nextClientIndex)
 		}
 	}
 
@@ -829,4 +829,27 @@ func MergeSecret(secret map[string]corev1.Secret, newSecret map[string]corev1.Se
 	}
 
 	return nil
+}
+
+//rotates the slice to the left by k positions
+func rotate(clients []*ConfigurationClientWrapper, k int) {
+	n := len(clients)
+	k = k % n
+	if k == 0 {
+		return
+	}
+	// Reverse the entire slice
+	reverseClients(clients, 0, n-1)
+	// Reverse the first part
+	reverseClients(clients, 0, n-k-1)
+	// Reverse the second part
+	reverseClients(clients, n-k, n-1)
+}
+
+func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
+	for start < end {
+		clients[start], clients[end] = clients[end], clients[start]
+		start++
+		end--
+	}
 }

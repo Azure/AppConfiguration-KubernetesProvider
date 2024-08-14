@@ -149,313 +149,6 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
 		})
 
-		It("Should update reconcile state when configuration page Etag updated when configuration refreshed enabled", func() {
-			ctx := context.Background()
-			providerName := "test-appconfigurationprovider-config-etags"
-			configMapName := "configmap-config-etags"
-			testKey := "*"
-
-			configProvider := &acpv1.AzureAppConfigurationProvider{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "appconfig.kubernetes.config/v1",
-					Kind:       "AzureAppConfigurationProvider",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       providerName,
-					Namespace:  ProviderNamespace,
-					Generation: 1,
-				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
-					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
-						ConfigMapName: configMapName,
-						ConfigMapData: &acpv1.ConfigMapDataOptions{
-							Type: "json",
-							Key:  "filestyle.json",
-						},
-					},
-					Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
-						Selectors: []acpv1.Selector{
-							{
-								KeyFilter: &testKey,
-							},
-						},
-						Refresh: &acpv1.DynamicConfigurationRefreshParameters{
-							Enabled:  true,
-							Interval: "5s",
-						},
-					},
-				},
-			}
-
-			fakeEtag := azcore.ETag("fake-etag")
-			fakeResourceVersion := "1"
-
-			processor := AppConfigurationProviderProcessor{
-				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
-				Provider:        configProvider,
-				ShouldReconcile: false,
-				Settings:        &loader.TargetKeyValueSettings{},
-				ReconciliationState: &ReconciliationState{
-					NextKeyValueRefreshReconcileTime: metav1.Now(),
-					KeyValueETags: map[acpv1.Selector][]*azcore.ETag{
-						{
-							KeyFilter: &testKey,
-						}: {
-							&fakeEtag,
-						},
-					},
-					Generation:               1,
-					ConfigMapResourceVersion: &fakeResourceVersion,
-				},
-				CurrentTime:    metav1.Now(),
-				RefreshOptions: &RefreshOptions{},
-			}
-
-			expectedNextKeyValueRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(5 * time.Second))
-			newFakeEtag := azcore.ETag("fake-etag-1")
-			updatedKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
-				{
-					KeyFilter: &testKey,
-				}: {
-					&newFakeEtag,
-				},
-			}
-			mapResult2 := make(map[string]string)
-			mapResult2["filestyle.json"] = "{\"testKey\":\"newValue\"}"
-
-			allSettings2 := &loader.TargetKeyValueSettings{
-				ConfigMapSettings: mapResult2,
-				KeyValueETags:     updatedKeyValueEtags,
-			}
-
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
-
-			_ = processor.PopulateSettings(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
-				ResourceVersion: fakeResourceVersion,
-			}}, make(map[string]corev1.Secret))
-
-			_, _ = processor.Finish()
-
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
-				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
-				KeyFilter: &testKey,
-			}]))
-			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
-		})
-
-		It("Should update reconcile state when featureFlag pageEtag updated when feature flag refresh enabled", func() {
-			ctx := context.Background()
-			providerName := "test-appconfigurationprovider-ff-etags"
-			configMapName := "configmap-ff-etags"
-			wildcard := "*"
-
-			configProvider := &acpv1.AzureAppConfigurationProvider{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "appconfig.kubernetes.config/v1",
-					Kind:       "AzureAppConfigurationProvider",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       providerName,
-					Namespace:  ProviderNamespace,
-					Generation: 1,
-				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
-					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
-						ConfigMapName: configMapName,
-						ConfigMapData: &acpv1.ConfigMapDataOptions{
-							Type: "json",
-							Key:  "filestyle.json",
-						},
-					},
-					FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
-						Selectors: []acpv1.Selector{
-							{
-								KeyFilter: &wildcard,
-							},
-						},
-						Refresh: &acpv1.FeatureFlagRefreshSettings{
-							Interval: "1s",
-							Enabled:  true,
-						},
-					},
-				},
-			}
-
-			fakeEtag := azcore.ETag("fake-etag")
-			fakeResourceVersion := "1"
-
-			processor := AppConfigurationProviderProcessor{
-				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
-				Provider:        configProvider,
-				ShouldReconcile: false,
-				Settings:        &loader.TargetKeyValueSettings{},
-				ReconciliationState: &ReconciliationState{
-					NextFeatureFlagRefreshReconcileTime: metav1.Now(),
-					FeatureFlagETags: map[acpv1.Selector][]*azcore.ETag{
-						{
-							KeyFilter: &wildcard,
-						}: {
-							&fakeEtag,
-						},
-					},
-					Generation:               1,
-					ConfigMapResourceVersion: &fakeResourceVersion,
-				},
-				CurrentTime:    metav1.Now(),
-				RefreshOptions: &RefreshOptions{},
-			}
-
-			expectedNextFeatureFlagRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(1 * time.Second))
-			newFakeEtag := azcore.ETag("fake-etag-1")
-			updatedFeatureFlagEtags := map[acpv1.Selector][]*azcore.ETag{
-				{
-					KeyFilter: &wildcard,
-				}: {
-					&newFakeEtag,
-				},
-			}
-			mapResult := make(map[string]string)
-			mapResult["filestyle.json"] = "{\"testKey\":\"testValue\",\"feature_management\":{\"feature_flags\":[{\"id\": \"testFeatureFlag\",\"enabled\": true,\"conditions\": {\"client_filters\": []}}]}}"
-
-			allSettings := &loader.TargetKeyValueSettings{
-				ConfigMapSettings: mapResult,
-				FeatureFlagETags:  updatedFeatureFlagEtags,
-			}
-
-			//Feature flag Etag is updated
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-
-			_ = processor.PopulateSettings(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
-				ResourceVersion: fakeResourceVersion,
-			}}, make(map[string]corev1.Secret))
-
-			_, _ = processor.Finish()
-
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
-				KeyFilter: &wildcard,
-			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.Selector{
-				KeyFilter: &wildcard,
-			}]))
-			Expect(processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime).Should(Equal(expectedNextFeatureFlagRefreshReconcileTime))
-		})
-
-		It("Should update reconcile state when secret references updated when secret refresh enabled", func() {
-			ctx := context.Background()
-			providerName := "test-appconfigurationprovider-secret"
-			configMapName := "configmap-test"
-			secretName := "secret-test"
-			fakeSecretResourceVersion := "1"
-
-			secretResult := make(map[string][]byte)
-			secretResult["testSecretKey"] = []byte("testSecretValue")
-			existingSecrets := make(map[string]corev1.Secret)
-			existingSecrets[secretName] = corev1.Secret{
-				Data: secretResult,
-				ObjectMeta: metav1.ObjectMeta{
-					ResourceVersion: fakeSecretResourceVersion,
-				},
-			}
-
-			var fakeId azsecrets.ID = "fakeSecretId"
-			var cachedFakeId azsecrets.ID = "cachedFakeSecretId"
-
-			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
-			secretMetadata2 := make(map[string]loader.KeyVaultSecretMetadata)
-			cachedSecretReferences := make(map[string]*loader.TargetSecretReference)
-			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
-				SecretId: &fakeId,
-			}
-			secretMetadata2["testSecretKey"] = loader.KeyVaultSecretMetadata{
-				SecretId: &cachedFakeId,
-			}
-			cachedSecretReferences[secretName] = &loader.TargetSecretReference{
-				Type:                  corev1.SecretType("Opaque"),
-				SecretsMetadata:       secretMetadata2,
-				SecretResourceVersion: fakeSecretResourceVersion,
-			}
-
-			allSettings := &loader.TargetKeyValueSettings{
-				SecretSettings: map[string]corev1.Secret{
-					secretName: {
-						Data: secretResult,
-						Type: corev1.SecretType("Opaque"),
-					},
-				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
-					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
-					},
-				},
-			}
-
-			configProvider := &acpv1.AzureAppConfigurationProvider{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "appconfig.kubernetes.config/v1",
-					Kind:       "AzureAppConfigurationProvider",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       providerName,
-					Namespace:  ProviderNamespace,
-					Generation: 1,
-				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
-					Endpoint: &EndpointName,
-					Target: acpv1.ConfigurationGenerationParameters{
-						ConfigMapName: configMapName,
-						ConfigMapData: &acpv1.ConfigMapDataOptions{
-							Type: "json",
-							Key:  "filestyle.json",
-						},
-					},
-					Secret: &acpv1.SecretReference{
-						Target: acpv1.SecretGenerationParameters{
-							SecretName: secretName,
-						},
-						Refresh: &acpv1.RefreshSettings{
-							Interval: "1m",
-							Enabled:  true,
-						},
-					},
-				},
-			}
-
-			fakeResourceVersion := "1"
-			tmpTime := metav1.Now()
-			processor := AppConfigurationProviderProcessor{
-				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
-				Provider:        configProvider,
-				ShouldReconcile: false,
-				Settings:        &loader.TargetKeyValueSettings{},
-				ReconciliationState: &ReconciliationState{
-					NextSecretReferenceRefreshReconcileTime: tmpTime,
-					ExistingSecretReferences:                cachedSecretReferences,
-					Generation:                              1,
-					ConfigMapResourceVersion:                &fakeResourceVersion,
-				},
-				CurrentTime:    metav1.NewTime(tmpTime.Time.Add(1 * time.Minute)),
-				RefreshOptions: &RefreshOptions{},
-			}
-
-			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
-
-			_ = processor.PopulateSettings(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
-				ResourceVersion: fakeResourceVersion,
-			}}, existingSecrets)
-
-			_, _ = processor.Finish()
-
-			Expect(processor.ReconciliationState.ExistingSecretReferences).Should(Equal(allSettings.SecretReferences))
-		})
-
 		It("Secret refresh can work with multiple version secrets when secret refresh enabled", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-secret-2"
@@ -1553,8 +1246,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime).Should(Equal(expectedNextFeatureFlagRefreshReconcileTime))
 		})
 
-		// when reconcile is triggered by single component refresh
-		// only update the corresponding component reconcile state and next refresh time
+		// Should update the corresponding target's reconcile state, and those that shouldn't be updated should be as is.
 		It("Should update reconcile state when keyValue pageEtag, featureFlag pageEtag and secret references updated when configuration, secret and feature flag refresh enabled", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-secret"
@@ -1710,7 +1402,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 							},
 						},
 						Refresh: &acpv1.FeatureFlagRefreshSettings{
-							Interval: "25s",
+							Interval: "40s",
 							Enabled:  true,
 						},
 					},
@@ -1726,8 +1418,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				ShouldReconcile: false,
 				Settings:        &loader.TargetKeyValueSettings{},
 				ReconciliationState: &ReconciliationState{
-					NextSecretReferenceRefreshReconcileTime: metav1.NewTime(nowTime.Time.Add(1 * time.Minute)),
-					NextKeyValueRefreshReconcileTime:        metav1.NewTime(nowTime.Time.Add(20 * time.Second)),
+					NextSecretReferenceRefreshReconcileTime: metav1.NewTime(nowTime.Time.Add(30 * time.Second)),
+					NextKeyValueRefreshReconcileTime:        metav1.NewTime(nowTime.Time.Add(5 * time.Second)),
 					NextFeatureFlagRefreshReconcileTime:     nowTime,
 					KeyValueETags:                           existingKeyValueEtags,
 					FeatureFlagETags:                        existingFeatureFlagEtags,
@@ -1735,14 +1427,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 					Generation:                              1,
 					ConfigMapResourceVersion:                &fakeResourceVersion,
 				},
-				CurrentTime:    metav1.NewTime(nowTime.Time.Add(2 * time.Second)),
+				CurrentTime:    metav1.NewTime(nowTime.Time.Add(1 * time.Second)),
 				RefreshOptions: &RefreshOptions{},
 			}
 
 			// only feature flag refresh
 			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
 			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettingsReturnedByFeatureFlagRefresh, nil)
-			expectedNextFeatureFlagRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(25 * time.Second))
+			expectedNextFeatureFlagRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(40 * time.Second))
 			cachedNextKeyValueRefreshReconcileTime := processor.ReconciliationState.NextKeyValueRefreshReconcileTime
 			cachedNextSecretReferenceRefreshReconcileTime := processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime
 
@@ -1795,7 +1487,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime).Should(Equal(cachedNextFeatureFlagRefreshReconcileTime))
 
-			processor.CurrentTime = metav1.NewTime(processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime.Time.Add(5 * time.Second))
+			processor.CurrentTime = metav1.NewTime(processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime.Time.Add(2 * time.Second))
 			processor.RefreshOptions = &RefreshOptions{}
 
 			allSettingsReturnedBySecretRefresh := &loader.TargetKeyValueSettings{
@@ -1817,6 +1509,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
 			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettingsReturnedBySecretRefresh, nil)
 			expectedNextSecretReferenceRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(1 * time.Minute))
+			cachedNextKeyValueRefreshReconcileTime = processor.ReconciliationState.NextKeyValueRefreshReconcileTime
+			cachedNextFeatureFlagRefreshReconcileTime = processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime
 
 			_ = processor.PopulateSettings(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				ResourceVersion: fakeResourceVersion,
@@ -1836,6 +1530,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				KeyFilter: &wildcard,
 			}]))
 			Expect(processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime).Should(Equal(expectedNextSecretReferenceRefreshReconcileTime))
+			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(cachedNextKeyValueRefreshReconcileTime))
+			Expect(processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime).Should(Equal(cachedNextFeatureFlagRefreshReconcileTime))
 		})
 	})
 })

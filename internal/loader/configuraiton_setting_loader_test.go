@@ -1159,8 +1159,158 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			Expect(err).Should(BeNil())
 			Expect(failedClient.FailedAttempts).Should(Equal(1))
 			Expect(failedClient.BackOffEndTime.IsZero()).Should(BeFalse())
-			Expect(succeededClient.FailedAttempts).Should(Equal(0))
+			Expect(succeededClient.FailedAttempts).Should(Equal(-1))
 			Expect(succeededClient.BackOffEndTime.IsZero()).Should(BeTrue())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(6))
+			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
+			Expect(allSettings.ConfigMapSettings["app:"]).Should(Equal("value2"))
+			Expect(allSettings.ConfigMapSettings["test:"]).Should(Equal("value3"))
+			Expect(allSettings.ConfigMapSettings["app:someSubKey1:1"]).Should(Equal("value4"))
+			Expect(allSettings.ConfigMapSettings["app:test:some"]).Should(Equal("value5"))
+			Expect(allSettings.ConfigMapSettings["app:test:"]).Should(Equal("value6"))
+		})
+
+		It("Succeed to get settings when load balance enabled", func() {
+			By("By using all clients")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: true,
+				LoadBalancingEnabled:    true,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Refresh: &acpv1.DynamicConfigurationRefreshParameters{
+						Enabled:  true,
+						Interval: "10s",
+						Monitoring: &acpv1.RefreshMonitoring{
+							Sentinels: []acpv1.Sentinel{
+								{
+									Key: "someKey1",
+								},
+							},
+						},
+					},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			settingsToReturn := mockConfigurationSettings()
+			firstClient := ConfigurationClientWrapper{
+				Client:         nil,
+				Endpoint:       endpointName,
+				BackOffEndTime: metav1.Time{},
+				FailedAttempts: 0,
+			}
+
+			secondClient := ConfigurationClientWrapper{
+				Client:         nil,
+				Endpoint:       endpointName,
+				BackOffEndTime: metav1.Time{},
+				FailedAttempts: 0,
+			}
+
+			etags := make(map[acpv1.Sentinel]*azcore.ETag)
+			firstSettingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+			}
+			secondSettingsResponse := &SettingsResponse{}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(firstSettingsResponse, nil).Times(1)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(secondSettingsResponse, nil).Times(1)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&firstClient, &secondClient}, nil).Times(2)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+			sentinelChanged, _, _ := configurationProvider.CheckAndRefreshSentinels(context.Background(), &testProvider, etags)
+
+			Expect(err).Should(BeNil())
+			Expect(firstClient.FailedAttempts).Should(Equal(-1))
+			Expect(secondClient.FailedAttempts).Should(Equal(-1))
+			Expect(sentinelChanged).Should(BeFalse())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(6))
+			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
+			Expect(allSettings.ConfigMapSettings["app:"]).Should(Equal("value2"))
+			Expect(allSettings.ConfigMapSettings["test:"]).Should(Equal("value3"))
+			Expect(allSettings.ConfigMapSettings["app:someSubKey1:1"]).Should(Equal("value4"))
+			Expect(allSettings.ConfigMapSettings["app:test:some"]).Should(Equal("value5"))
+			Expect(allSettings.ConfigMapSettings["app:test:"]).Should(Equal("value6"))
+		})
+
+		It("Succeed to get settings when load balance not enabled", func() {
+			By("By using single client")
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: true,
+				LoadBalancingEnabled:    false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Refresh: &acpv1.DynamicConfigurationRefreshParameters{
+						Enabled:  true,
+						Interval: "10s",
+						Monitoring: &acpv1.RefreshMonitoring{
+							Sentinels: []acpv1.Sentinel{
+								{
+									Key: "someKey1",
+								},
+							},
+						},
+					},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			settingsToReturn := mockConfigurationSettings()
+			firstClient := ConfigurationClientWrapper{
+				Client:         nil,
+				Endpoint:       endpointName,
+				BackOffEndTime: metav1.Time{},
+				FailedAttempts: 0,
+			}
+
+			secondClient := ConfigurationClientWrapper{
+				Client:         nil,
+				Endpoint:       endpointName,
+				BackOffEndTime: metav1.Time{},
+				FailedAttempts: 0,
+			}
+
+			etags := make(map[acpv1.Sentinel]*azcore.ETag)
+			firstSettingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+			}
+			secondSettingsResponse := &SettingsResponse{}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(firstSettingsResponse, nil).Times(1)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(secondSettingsResponse, nil).Times(1)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&firstClient, &secondClient}, nil).Times(2)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+			sentinelChanged, _, _ := configurationProvider.CheckAndRefreshSentinels(context.Background(), &testProvider, etags)
+
+			Expect(err).Should(BeNil())
+			Expect(firstClient.FailedAttempts).Should(Equal(-2))
+			Expect(secondClient.FailedAttempts).Should(Equal(0))
+			Expect(sentinelChanged).Should(BeFalse())
 			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(6))
 			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
 			Expect(allSettings.ConfigMapSettings["app:"]).Should(Equal("value2"))

@@ -58,7 +58,15 @@ func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureApp
 			}
 
 			output = append(output, fmt.Sprintf("ReplicaCount=%d", replicaCount))
+
+			if manager.IsFailoverRequest {
+				output = append(output, "FailoverRequest")
+			}
 		}
+	}
+
+	if provider.Spec.LoadBalancingEnabled {
+		output = append(output, "UsesLoadBalancing")
 	}
 
 	if _, ok := os.LookupEnv(AzureExtensionContext); ok {

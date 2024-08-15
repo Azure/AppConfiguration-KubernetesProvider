@@ -37,6 +37,8 @@ import (
 
 type ConfigurationClientManager struct {
 	ReplicaDiscoveryEnabled   bool
+	LoadBalancingEnabled      bool
+	IsFailoverRequest         bool
 	StaticClientWrappers      []*ConfigurationClientWrapper
 	DynamicClientWrappers     []*ConfigurationClientWrapper
 	validDomain               string
@@ -93,6 +95,7 @@ var (
 func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (ClientManager, error) {
 	manager := &ConfigurationClientManager{
 		ReplicaDiscoveryEnabled: provider.Spec.ReplicaDiscoveryEnabled,
+		LoadBalancingEnabled:    provider.Spec.LoadBalancingEnabled,
 	}
 
 	var err error

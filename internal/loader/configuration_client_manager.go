@@ -48,6 +48,7 @@ type ConfigurationClientManager struct {
 	id                        string
 	lastFallbackClientAttempt metav1.Time
 	lastFallbackClientRefresh metav1.Time
+	lastSuccessfulEndpoint    string
 }
 
 type ConfigurationClientWrapper struct {
@@ -96,6 +97,7 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 	manager := &ConfigurationClientManager{
 		ReplicaDiscoveryEnabled: provider.Spec.ReplicaDiscoveryEnabled,
 		LoadBalancingEnabled:    provider.Spec.LoadBalancingEnabled,
+		lastSuccessfulEndpoint:  "",
 	}
 
 	var err error

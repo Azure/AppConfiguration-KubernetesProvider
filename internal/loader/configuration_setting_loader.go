@@ -37,9 +37,8 @@ import (
 
 type ConfigurationSettingLoader struct {
 	acpv1.AzureAppConfigurationProvider
-	ClientManager          ClientManager
-	SettingsClient         SettingsClient
-	lastSuccessfulEndpoint string
+	ClientManager  ClientManager
+	SettingsClient SettingsClient
 }
 
 type TargetKeyValueSettings struct {
@@ -105,7 +104,6 @@ func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider,
 		AzureAppConfigurationProvider: provider,
 		ClientManager:                 clientManager,
 		SettingsClient:                settingsClient,
-		lastSuccessfulEndpoint:        "",
 	}, nil
 }
 
@@ -504,11 +502,12 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
 	}
 
-	if csl.AzureAppConfigurationProvider.Spec.LoadBalancingEnabled && csl.lastSuccessfulEndpoint != "" && len(clients) > 1 {
+	manager, ok := csl.ClientManager.(*ConfigurationClientManager)
+	if csl.AzureAppConfigurationProvider.Spec.LoadBalancingEnabled && ok && manager.lastSuccessfulEndpoint != "" && len(clients) > 1 {
 		nextClientIndex := 0
 		for _, clientWrapper := range clients {
 			nextClientIndex++
-			if clientWrapper.Endpoint == csl.lastSuccessfulEndpoint {
+			if clientWrapper.Endpoint == manager.lastSuccessfulEndpoint {
 				break
 			}
 		}
@@ -536,7 +535,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 			if IsFailoverable(err) {
 				klog.Warningf("current client of '%s' failed to get settings: %s", clientWrapper.Endpoint, err.Error())
 				errors = append(errors, err)
-				if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
+				if ok {
 					manager.IsFailoverRequest = true
 				}
 				continue
@@ -544,10 +543,10 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 			return nil, err
 		}
 
-		if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
+		if ok {
 			manager.IsFailoverRequest = false
+			manager.lastSuccessfulEndpoint = clientWrapper.Endpoint
 		}
-		csl.lastSuccessfulEndpoint = clientWrapper.Endpoint
 		updateClientBackoffStatus(clientWrapper, successful)
 		return settingsResponse, nil
 	}

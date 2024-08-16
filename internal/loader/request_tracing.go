@@ -66,7 +66,7 @@ func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureApp
 	}
 
 	if provider.Spec.LoadBalancingEnabled {
-		output = append(output, "UsesLoadBalancing")
+		output = append(output, "Features=LB")
 	}
 
 	if _, ok := os.LookupEnv(AzureExtensionContext); ok {

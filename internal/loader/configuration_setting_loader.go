@@ -541,8 +541,6 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 			return nil, err
 		}
 
-		// If the client is successful, we'll reset the failover request flag
-		isFailoverRequest = !successful
 		if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
 			manager.lastSuccessfulEndpoint = clientWrapper.Endpoint
 		}

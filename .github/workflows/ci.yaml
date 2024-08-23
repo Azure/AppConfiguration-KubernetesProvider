@@ -20,6 +20,7 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: 'stable'
+        check-latest: true
     - name: Run Build
       run: go build -o ./out/manager ./cmd/main.go
     - name: Run Test

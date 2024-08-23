@@ -519,13 +519,13 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	}
 
 	errors := make([]error, 0)
-	var tracingEnabled bool
+	var tracingEnabled, isFailoverRequest bool
 	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
 		tracingEnabled, _ = strconv.ParseBool(value)
 	}
 	for _, clientWrapper := range clients {
 		if tracingEnabled {
-			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager))
+			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager, isFailoverRequest))
 		}
 		settingsResponse, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
 		successful := true
@@ -535,16 +535,14 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 			if IsFailoverable(err) {
 				klog.Warningf("current client of '%s' failed to get settings: %s", clientWrapper.Endpoint, err.Error())
 				errors = append(errors, err)
-				if ok {
-					manager.IsFailoverRequest = true
-				}
+				isFailoverRequest = true
 				continue
 			}
 			return nil, err
 		}
 
-		if ok {
-			manager.IsFailoverRequest = false
+		isFailoverRequest = false
+		if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
 			manager.lastSuccessfulEndpoint = clientWrapper.Endpoint
 		}
 		updateClientBackoffStatus(clientWrapper, successful)

@@ -166,6 +166,9 @@ spec:
                       type: object
                     type: array
                 type: object
+              loadBalancingEnabled:
+                default: false
+                type: boolean
               replicaDiscoveryEnabled:
                 default: true
                 type: boolean

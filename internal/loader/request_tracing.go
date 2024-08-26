@@ -23,7 +23,7 @@ const (
 	AzureExtensionContext string     = "AZURE_EXTENSION_CONTEXT"
 )
 
-func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager) http.Header {
+func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, isFailoverRequest bool) http.Header {
 	header := http.Header{}
 	output := make([]string, 0)
 
@@ -59,6 +59,14 @@ func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureApp
 
 			output = append(output, fmt.Sprintf("ReplicaCount=%d", replicaCount))
 		}
+
+		if isFailoverRequest {
+			output = append(output, "FailoverRequest")
+		}
+	}
+
+	if provider.Spec.LoadBalancingEnabled {
+		output = append(output, "Features=LB")
 	}
 
 	if _, ok := os.LookupEnv(AzureExtensionContext); ok {

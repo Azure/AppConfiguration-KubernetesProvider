@@ -21,7 +21,7 @@ type EnqueueRequestsFromWatchedObject struct {
 }
 
 // Update implements EventHandler.
-func (e *EnqueueRequestsFromWatchedObject) Update(ctx context.Context, evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+func (e *EnqueueRequestsFromWatchedObject) Update(ctx context.Context, evt event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	ownerRefs := evt.ObjectNew.GetOwnerReferences()
 	ownedByProvider := false
 	ownerProvider := ""
@@ -50,7 +50,7 @@ func (e *EnqueueRequestsFromWatchedObject) Update(ctx context.Context, evt event
 }
 
 // Delete implements EventHandler.
-func (e *EnqueueRequestsFromWatchedObject) Delete(ctx context.Context, evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+func (e *EnqueueRequestsFromWatchedObject) Delete(ctx context.Context, evt event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	ownerRefs := evt.Object.GetOwnerReferences()
 	ownedByProvider := false
 	ownerProvider := ""
@@ -76,12 +76,12 @@ func (e *EnqueueRequestsFromWatchedObject) Delete(ctx context.Context, evt event
 }
 
 // Create implements EventHandler.
-func (e *EnqueueRequestsFromWatchedObject) Create(ctx context.Context, evt event.CreateEvent, q workqueue.RateLimitingInterface) {
+func (e *EnqueueRequestsFromWatchedObject) Create(ctx context.Context, evt event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	// Do nothing
 }
 
 // Generic implements EventHandler.
-func (e *EnqueueRequestsFromWatchedObject) Generic(ctx context.Context, evt event.GenericEvent, q workqueue.RateLimitingInterface) {
+func (e *EnqueueRequestsFromWatchedObject) Generic(ctx context.Context, evt event.GenericEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	// Do nothing
 }
 

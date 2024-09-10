@@ -1216,6 +1216,7 @@ func TestGetFilters(t *testing.T) {
 	two := "two"
 	three := "three"
 	labelString := "test"
+	emptyLabel := ""
 	testSpec := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
 			Selectors: []acpv1.Selector{
@@ -1324,6 +1325,19 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, "test", *filters6[0].LabelFilter)
 	assert.Equal(t, "one", *filters6[1].KeyFilter)
 	assert.Nil(t, filters6[1].LabelFilter)
+
+	testSpec7 := acpv1.AzureAppConfigurationProviderSpec{
+		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acpv1.Selector{
+				{KeyFilter: &one, LabelFilter: &emptyLabel},
+			},
+		},
+	}
+
+	filters7 := GetKeyValueFilters(testSpec7)
+	assert.Len(t, filters7, 1)
+	assert.Equal(t, "one", *filters7[0].KeyFilter)
+	assert.Nil(t, filters7[0].LabelFilter)
 }
 
 func TestCompare(t *testing.T) {

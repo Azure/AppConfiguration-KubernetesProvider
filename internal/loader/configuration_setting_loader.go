@@ -664,7 +664,15 @@ func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
 				}
 			}
 			if !findDuplicate {
-				result = append(result, filters[i])
+				labelFilter := filters[i].LabelFilter
+				// need to check if labelFilter is empty, if so, set it to nil
+				if labelFilter != nil && len(*labelFilter) == 0 {
+					labelFilter = nil
+				}
+				result = append(result, acpv1.Selector{
+					KeyFilter:   filters[i].KeyFilter,
+					LabelFilter: labelFilter,
+				})
 			}
 		}
 		reverse(result)

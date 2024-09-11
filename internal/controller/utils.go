@@ -8,6 +8,7 @@ import (
 	"azappconfig/provider/internal/loader"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -16,13 +17,15 @@ import (
 )
 
 const (
-	MinimalSentinelBasedRefreshInterval time.Duration = time.Second
-	MinimalSecretRefreshInterval        time.Duration = time.Minute
-	MinimalFeatureFlagRefreshInterval   time.Duration = time.Second
+	MinimalSentinelBasedRefreshInterval         time.Duration = time.Second
+	MinimalSecretRefreshInterval                time.Duration = time.Minute
+	MinimalFeatureFlagRefreshInterval           time.Duration = time.Second
+	WorkloadIdentityEnabled                     string        = "WORKLOAD_IDENTITY_ENABLED"
+	WorkloadIdentityGlobalServiceAccountEnabled string        = "WORKLOAD_IDENTITY_GLOBAL_SERVICE_ACCOUNT_ENABLED"
 )
 
 func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
-	var err error = nil
+	var err error
 	if spec.Endpoint == nil && spec.ConnectionStringReference == nil {
 		return loader.NewArgumentError("spec", fmt.Errorf("one of endpoint and connectionStringReference field must be set"))
 	}
@@ -204,7 +207,7 @@ func verifyExistingTargetObject[T client.Object](targetObj T, targetName string,
 		}
 	}
 
-	return fmt.Errorf("A %s with name '%s' already exists in namespace '%s'", objectKind, targetName, targetObj.GetNamespace())
+	return fmt.Errorf("a %s with name '%s' already exists in namespace '%s'", objectKind, targetName, targetObj.GetNamespace())
 }
 
 func hasNonEscapedValueInLabel(label string) bool {
@@ -237,12 +240,36 @@ func verifyRefreshInterval(interval string, allowedMinimalRefreshInterval time.D
 }
 
 func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityParameters) error {
-	if workloadIdentity.ManagedIdentityClientId == nil && workloadIdentity.ManagedIdentityClientIdReference == nil {
-		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("one of managedIdentityClientId and managedIdentityClientIdReference is required"))
+	if !strings.EqualFold(os.Getenv(WorkloadIdentityEnabled), "true") {
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("workloadIdentity is not enabled"))
 	}
 
-	if workloadIdentity.ManagedIdentityClientId != nil && workloadIdentity.ManagedIdentityClientIdReference != nil {
-		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("only one of managedIdentityClientId and managedIdentityClientIdReference is allowed"))
+	var authCount int = 0
+
+	if workloadIdentity.ManagedIdentityClientId != nil {
+		if strings.EqualFold(os.Getenv(WorkloadIdentityGlobalServiceAccountEnabled), "false") {
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientId", fmt.Errorf("using a global service account is no longer permitted with workload identity. See https://aka.ms/appconfig/k8sglobalserviceaccount for more information"))
+		}
+		authCount++
+	}
+
+	if workloadIdentity.ManagedIdentityClientIdReference != nil {
+		if strings.EqualFold(os.Getenv(WorkloadIdentityGlobalServiceAccountEnabled), "false") {
+			return loader.NewArgumentError("auth.workloadIdentity.managedIdentityClientIdReference", fmt.Errorf("using a global service account is no longer permitted with workload identity. See https://aka.ms/appconfig/k8sglobalserviceaccount for more information"))
+		}
+		authCount++
+	}
+
+	if workloadIdentity.ServiceAccountName != nil {
+		authCount++
+	}
+
+	if authCount == 0 {
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("setting one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is required"))
+	}
+
+	if authCount > 1 {
+		return loader.NewArgumentError("auth.workloadIdentity", fmt.Errorf("setting only one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is allowed"))
 	}
 
 	if workloadIdentity.ManagedIdentityClientId != nil {
@@ -257,15 +284,15 @@ func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityPa
 
 func verifySelectorObject(selector acpv1.Selector) error {
 	if selector.KeyFilter == nil && selector.SnapshotName == nil {
-		return fmt.Errorf("one of keyFilter and snapshotName field must be set")
+		return fmt.Errorf("a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering")
 	}
 
 	if selector.SnapshotName != nil {
 		if selector.KeyFilter != nil {
-			return fmt.Errorf("set both keyFilter and snapshotName in one selector causes ambiguity, only one of them should be set")
+			return fmt.Errorf("set both 'keyFilter' and 'snapshotName' in one selector causes ambiguity, only one of them should be set")
 		}
 		if selector.LabelFilter != nil {
-			return fmt.Errorf("labelFilter is not allowed when snapshotName is set")
+			return fmt.Errorf("'labelFilter' is not allowed when 'snapshotName' is set")
 		}
 	}
 

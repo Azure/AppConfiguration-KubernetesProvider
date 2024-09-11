@@ -20,6 +20,10 @@ Documentation on how to use the Azure App Configuration Kubernetes Provider is a
 + [Use dynamic configuration in Azure Kubernetes Service](https://learn.microsoft.com/azure/azure-app-configuration/enable-dynamic-configuration-azure-kubernetes-service)
 + See [Kubernetes Provider Reference](https://learn.microsoft.com/azure/azure-app-configuration/reference-kubernetes-provider) for a complete list of features.
 
+## Data collection
+
+The software may collect information about you and your use of the software and send it to Microsoft. Microsoft may use this information to provide services and improve our products and services. You may turn off the telemetry by setting the `requestTracing.enabled=false` while installing the Azure App Configuration Kubernetes Provider. There are also some features in the software that may enable you and Microsoft to collect data from users of your applications. If you use these features, you must comply with applicable law, including providing appropriate notices to users of your applications together with a copy of Microsoft’s privacy statement. Our privacy statement is located at https://go.microsoft.com/fwlink/?LinkID=824704. You can learn more about data collection and use in the help documentation and our privacy statement. Your use of the software operates as your consent to these practices.
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

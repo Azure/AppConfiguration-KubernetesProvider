@@ -24,13 +24,37 @@ spec:
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
       {{- end }}
-      {{- if .Values.affinity }}
       affinity:
+      {{- if .Values.affinity }}
         {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else }}
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: kubernetes.azure.com/mode
+                operator: In
+                values:
+                - system
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: NotIn
+                values:
+                - windows
+              - key: type
+                operator: NotIn
+                values:
+                - virtual-kubelet
       {{- end }}
-      {{- if .Values.tolerations }}
       tolerations:
-        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- if .Values.tolerations }}
+        {{- toYaml .Values.tolerations | nindent 6 }}
+      {{- else }}
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
       {{- end }}
       containers:
       - args:
@@ -51,6 +75,19 @@ spec:
         - name: AZURE_TENANT_ID
           value: {{ .Values.env.azureTenantId }}
         {{- end }}
+        - name: WORKLOAD_IDENTITY_ENABLED
+          value: "{{ .Values.workloadIdentity.enabled }}"
+        - name: WORKLOAD_IDENTITY_GLOBAL_SERVICE_ACCOUNT_ENABLED
+          value: "{{ .Values.workloadIdentity.globalServiceAccountEnabled }}"
+        {{- if and (hasKey .Values "global") 
+            (hasKey .Values.global "azure")
+            (hasKey .Values.global.azure "extension")
+            (hasKey .Values.global.azure.extension "name") }}
+        - name: AZURE_EXTENSION_CONTEXT
+          value: UseExtension
+        {{- end }}
+        - name: REQUEST_TRACING_ENABLED
+          value: "{{ .Values.requestTracing.enabled }}"
         livenessProbe:
           httpGet:
             path: /healthz

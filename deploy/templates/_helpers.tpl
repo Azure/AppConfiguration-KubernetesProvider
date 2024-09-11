@@ -49,7 +49,7 @@ Selector labels
 app.kubernetes.io/name: {{ include "az-appconfig-k8s-provider.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 control-plane: controller-manager
-{{- if and (.Values.workloadIdentity.enabled) }}
+{{- if eq .Values.workloadIdentity.enabled true }}
 azure.workload.identity/use: "true"
 {{- end }}
 {{- end }}

@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // AzureAppConfigurationProviderReconciler reconciles a AzureAppConfigurationProvider object
@@ -125,7 +126,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 
 	err = verifyObject(provider.Spec)
 	if err != nil {
-		reconciler.logAndSetFailStatus(provider, err)
+		reconciler.logAndSetFailStatus(ctx, err, provider)
 		return reconcile.Result{Requeue: false}, nil
 	}
 
@@ -133,7 +134,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	isExisting := false
 	_, err = reconciler.verifyTargetObjectExistence(ctx, provider, &existingConfigMap)
 	if err != nil {
-		reconciler.logAndSetFailStatus(provider, err)
+		reconciler.logAndSetFailStatus(ctx, err, provider)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 	}
 
@@ -147,7 +148,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		}
 		isExisting, err = reconciler.verifyTargetObjectExistence(ctx, provider, &existingSecret)
 		if err != nil {
-			reconciler.logAndSetFailStatus(provider, err)
+			reconciler.logAndSetFailStatus(ctx, err, provider)
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 		}
 		if isExisting {
@@ -165,7 +166,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 				}
 				isExisting, err = reconciler.verifyTargetObjectExistence(ctx, provider, &existingSecret)
 				if err != nil {
-					reconciler.logAndSetFailStatus(provider, err)
+					reconciler.logAndSetFailStatus(ctx, err, provider)
 					return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 				}
 				if isExisting {
@@ -203,7 +204,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		reconciler.ProvidersReconcileState[req.NamespacedName].Generation != provider.Generation {
 		clientManager, err := loader.NewConfigurationClientManager(ctx, *provider)
 		if err != nil {
-			reconciler.logAndSetFailStatus(provider, err)
+			reconciler.logAndSetFailStatus(ctx, err, provider)
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 		}
 		reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager = clientManager
@@ -213,7 +214,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	clientManager := reconciler.ProvidersReconcileState[req.NamespacedName].ClientManager
 	configLoader, err := loader.NewConfigurationSettingLoader(*provider, clientManager, nil)
 	if err != nil {
-		reconciler.logAndSetFailStatus(provider, err)
+		reconciler.logAndSetFailStatus(ctx, err, provider)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 	}
 	var retriever loader.ConfigurationSettingsRetriever
@@ -222,10 +223,6 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	} else {
 		retriever = reconciler.Retriever
 	}
-
-	ctx = context.WithValue(ctx, loader.RequestTracingKey, loader.RequestTracing{
-		IsStartUp: reconciler.ProvidersReconcileState[req.NamespacedName].ConfigMapResourceVersion == nil,
-	})
 
 	// Initialize the processor setting in this reconcile
 	processor := &AppConfigurationProviderProcessor{
@@ -240,7 +237,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	}
 
 	if err := processor.PopulateSettings(&existingConfigMap, existingSecrets); err != nil {
-		return reconciler.requeueWhenGetSettingsFailed(provider, err)
+		return reconciler.requeueWhenGetSettingsFailed(ctx, provider, err)
 	}
 
 	/* Create ConfigMap from key-value settings */
@@ -263,7 +260,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 				})
 
 				if err != nil {
-					reconciler.logAndSetFailStatus(provider, err)
+					reconciler.logAndSetFailStatus(ctx, err, provider)
 					return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 				}
 			}
@@ -314,8 +311,9 @@ func (reconciler *AzureAppConfigurationProviderReconciler) verifyTargetObjectExi
 }
 
 func (reconciler *AzureAppConfigurationProviderReconciler) logAndSetFailStatus(
-	provider *acpv1.AzureAppConfigurationProvider,
-	err error) {
+	ctx context.Context,
+	err error,
+	provider *acpv1.AzureAppConfigurationProvider) {
 	var showErrorAsWarning bool = false
 	namespacedName := types.NamespacedName{
 		Name:      provider.Name,
@@ -343,10 +341,11 @@ func (reconciler *AzureAppConfigurationProviderReconciler) logAndSetFailStatus(
 }
 
 func (reconciler *AzureAppConfigurationProviderReconciler) requeueWhenGetSettingsFailed(
+	ctx context.Context,
 	provider *acpv1.AzureAppConfigurationProvider,
 	err error) (ctrl.Result, error) {
 	requeueAfter := RequeueReconcileAfter
-	reconciler.logAndSetFailStatus(provider, err)
+	reconciler.logAndSetFailStatus(ctx, err, provider)
 	if errors.Is(err, &loader.ArgumentError{}) {
 		return reconcile.Result{Requeue: false}, nil
 	}
@@ -355,7 +354,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) requeueWhenGetSetting
 		retryAfter, err := strconv.Atoi(respErr.RawResponse.Header.Get(HeaderRetryAfter))
 		if err == nil {
 			requeueAfter = time.Duration(retryAfter) * time.Second
-			klog.Errorf("Too many requests to the Azure App Configuration endpoint %s, retry the reconciliation after %d seconds", *provider.Spec.Endpoint, retryAfter)
+			klog.Error("Too many requests to the Azure App Configuration endpoint %q, retry the reconciliation after %d seconds", provider.Spec.Endpoint, retryAfter)
 		} else {
 			klog.ErrorS(err, "Fail to parse the response header 'Retry-After'")
 		}
@@ -375,7 +374,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 	}
 	// Important: set the ownership of configMap
 	if err := controllerutil.SetControllerReference(provider, configMapObj, reconciler.Scheme); err != nil {
-		reconciler.logAndSetFailStatus(provider, err)
+		reconciler.logAndSetFailStatus(ctx, err, provider)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 	}
 
@@ -394,7 +393,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 		return nil
 	})
 	if err != nil {
-		reconciler.logAndSetFailStatus(provider, err)
+		reconciler.logAndSetFailStatus(ctx, err, provider)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 	}
 
@@ -436,7 +435,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 
 		// Important: set the ownership of secret
 		if err := controllerutil.SetControllerReference(provider, secretObj, reconciler.Scheme); err != nil {
-			reconciler.logAndSetFailStatus(provider, err)
+			reconciler.logAndSetFailStatus(ctx, err, provider)
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 		}
 
@@ -449,7 +448,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 			return nil
 		})
 		if err != nil {
-			reconciler.logAndSetFailStatus(provider, err)
+			reconciler.logAndSetFailStatus(ctx, err, provider)
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 		}
 
@@ -474,7 +473,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) expelRemovedSecrets(
 				},
 			})
 			if err != nil {
-				reconciler.logAndSetFailStatus(provider, err)
+				reconciler.logAndSetFailStatus(ctx, err, provider)
 				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 			}
 		}
@@ -501,10 +500,10 @@ func newProviderStatus(
 func (r *AzureAppConfigurationProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&acpv1.AzureAppConfigurationProvider{}, builder.WithPredicates(newEventFilter())).
-		Watches(&corev1.ConfigMap{},
+		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&EnqueueRequestsFromWatchedObject{},
 			builder.WithPredicates(WatchedObjectPredicate{})).
-		Watches(&corev1.Secret{},
+		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&EnqueueRequestsFromWatchedObject{},
 			builder.WithPredicates(WatchedObjectPredicate{})).
 		Complete(r)

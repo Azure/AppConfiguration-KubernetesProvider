@@ -32,10 +32,12 @@ func (t *Tree) insert(parts []string, value interface{}) {
 				for k, v := range obj {
 					tree.insert([]string{k}, v)
 				}
+				break
 			case []interface{}:
 				for k, v := range obj {
 					tree.insert([]string{strconv.Itoa(k)}, v)
 				}
+				break
 			default:
 				tree.value = value
 			}

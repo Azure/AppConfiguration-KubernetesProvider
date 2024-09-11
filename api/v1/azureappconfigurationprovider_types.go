@@ -134,7 +134,6 @@ type AzureAppConfigurationProviderAuth struct {
 type WorkloadIdentityParameters struct {
 	ManagedIdentityClientId          *string                             `json:"managedIdentityClientId,omitempty"`
 	ManagedIdentityClientIdReference *ManagedIdentityReferenceParameters `json:"managedIdentityClientIdReference,omitempty"`
-	ServiceAccountName               *string                             `json:"serviceAccountName,omitempty"`
 }
 
 // ManagedIdentityReferenceParameters defines the parameters for configmap reference

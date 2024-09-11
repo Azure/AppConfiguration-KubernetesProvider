@@ -7,7 +7,6 @@ import (
 	"azappconfig/provider/internal/loader"
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	acpv1 "azappconfig/provider/api/v1"
@@ -505,7 +504,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
-			_ = k8sClient.Get(ctx, types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}, configProvider)
+			k8sClient.Get(ctx, types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}, configProvider)
 			configProvider.Spec.Endpoint = &newEndpoint
 
 			Expect(k8sClient.Update(ctx, configProvider)).Should(Succeed())
@@ -606,7 +605,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["testKey2"]).Should(Equal("newtestValue2"))
 			Expect(configmap.Data["testKey3"]).Should(Equal("newtestValue3"))
 
-			_ = k8sClient.Delete(ctx, configProvider)
+			k8sClient.Delete(ctx, configProvider)
 		})
 
 		It("Should refresh secret", func() {
@@ -1021,7 +1020,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.configuration.selectors: set both 'keyFilter' and 'snapshotName' in one selector causes ambiguity, only one of them should be set"))
+			Expect(verifyObject(configProviderSpec).Error()).Should(Equal("spec.configuration.selectors: set both keyFilter and snapshotName in one selector causes ambiguity, only one of them should be set"))
 
 			configProviderSpec2 := acpv1.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
@@ -1038,7 +1037,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec2).Error()).Should(Equal("spec.configuration.selectors: 'labelFilter' is not allowed when 'snapshotName' is set"))
+			Expect(verifyObject(configProviderSpec2).Error()).Should(Equal("spec.configuration.selectors: labelFilter is not allowed when snapshotName is set"))
 
 			configProviderSpec3 := acpv1.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
@@ -1054,18 +1053,15 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			Expect(verifyObject(configProviderSpec3).Error()).Should(Equal("spec.configuration.selectors: a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering"))
+			Expect(verifyObject(configProviderSpec3).Error()).Should(Equal("spec.configuration.selectors: one of keyFilter and snapshotName field must be set"))
 		})
 	})
 
 	Context("Verify auth object", func() {
 		It("Should return no error if auth object is valid", func() {
-			os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true")
-
 			uuid1 := "86c613ca-b977-11ed-afa1-0242ac120002"
 			secretName := "fakeName1"
 			configMapName := "fakeName2"
-			serviceAccountName := "fakeName3"
 			key := "fakeKey"
 			authObj := &acpv1.AzureAppConfigurationProviderAuth{}
 			authObj2 := &acpv1.AzureAppConfigurationProviderAuth{
@@ -1074,7 +1070,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			authObj3 := &acpv1.AzureAppConfigurationProviderAuth{
 				ServicePrincipalReference: &secretName,
 			}
-			authObj4 := &acpv1.AzureAppConfigurationProviderAuth{
+			autoObj4 := &acpv1.AzureAppConfigurationProviderAuth{
 				WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
 					ManagedIdentityClientId: &uuid1,
 				},
@@ -1087,18 +1083,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
-			authObj6 := &acpv1.AzureAppConfigurationProviderAuth{
-				WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
-					ServiceAccountName: &serviceAccountName,
-				},
-			}
 			Expect(verifyAuthObject(nil)).Should(BeNil())
 			Expect(verifyAuthObject(authObj)).Should(BeNil())
 			Expect(verifyAuthObject(authObj2)).Should(BeNil())
 			Expect(verifyAuthObject(authObj3)).Should(BeNil())
-			Expect(verifyAuthObject(authObj4)).Should(BeNil())
+			Expect(verifyAuthObject(autoObj4)).Should(BeNil())
 			Expect(verifyAuthObject(authObj5)).Should(BeNil())
-			Expect(verifyAuthObject(authObj6)).Should(BeNil())
 		})
 
 		It("Should return error if auth object is not valid", func() {
@@ -1133,9 +1123,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 			Expect(verifyAuthObject(authObj).Error()).Should(Equal("auth: ManagedIdentityClientId \"not-a-uuid\" in auth field is not a valid uuid"))
 			Expect(verifyAuthObject(authObj2).Error()).Should(Equal("auth: more than one authentication methods are specified in 'auth' field"))
-			Expect(verifyAuthObject(authObj3).Error()).Should(Equal("auth.workloadIdentity: setting only one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is allowed"))
+			Expect(verifyAuthObject(authObj3).Error()).Should(Equal("auth.workloadIdentity: only one of managedIdentityClientId and managedIdentityClientIdReference is allowed"))
 			Expect(verifyAuthObject(authObj4).Error()).Should(Equal("auth.workloadIdentity.managedIdentityClientId: managedIdentityClientId \"not-a-uuid\" in auth.workloadIdentity is not a valid uuid"))
-			Expect(verifyAuthObject(authObj5).Error()).Should(Equal("auth.workloadIdentity: setting one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is required"))
+			Expect(verifyAuthObject(authObj5).Error()).Should(Equal("auth.workloadIdentity: one of managedIdentityClientId and managedIdentityClientIdReference is required"))
 		})
 	})
 
@@ -1224,8 +1214,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
-			Expect(verifyExistingTargetObject(configMap1, configProvider.Spec.Target.ConfigMapName, configProvider.Name)).Should(MatchError("a ConfigMap with name 'configMapName' already exists in namespace 'default'"))
-			Expect(verifyExistingTargetObject(configMap2, configProvider.Spec.Target.ConfigMapName, configProvider.Name)).Should(MatchError("a ConfigMap with name 'configMapName' already exists in namespace 'default'"))
+			Expect(verifyExistingTargetObject(configMap1, configProvider.Spec.Target.ConfigMapName, configProvider.Name)).Should(MatchError("A ConfigMap with name 'configMapName' already exists in namespace 'default'"))
+			Expect(verifyExistingTargetObject(configMap2, configProvider.Spec.Target.ConfigMapName, configProvider.Name)).Should(MatchError("A ConfigMap with name 'configMapName' already exists in namespace 'default'"))
 		})
 	})
 })

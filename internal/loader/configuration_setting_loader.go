@@ -12,15 +12,12 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/url"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
-	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
+	"github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets"
 	"golang.org/x/crypto/pkcs12"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
@@ -91,7 +88,6 @@ const (
 	CertTypePfx                           string = "application/x-pkcs12"
 	TlsKey                                string = "tls.key"
 	TlsCrt                                string = "tls.crt"
-	RequestTracingEnabled                 string = "REQUEST_TRACING_ENABLED"
 )
 
 func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
@@ -295,16 +291,11 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 		return nil, err
 	}
 
-	deduplicateFeatureFlags := make(map[string]azappconfig.Setting, len(featureFlagSettings))
-	for _, setting := range featureFlagSettings {
-		deduplicateFeatureFlags[*setting.Key] = setting
-	}
-
 	// featureFlagSection = {"featureFlags": [{...}, {...}]}
 	var featureFlagSection = map[string]interface{}{
 		FeatureFlagSectionName: make([]interface{}, 0),
 	}
-	for _, setting := range deduplicateFeatureFlags {
+	for _, setting := range featureFlagSettings {
 		var out interface{}
 		err := json.Unmarshal([]byte(*setting.Value), &out)
 		if err != nil {
@@ -464,12 +455,6 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
 	}
 
-	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
-		if enabled, _ := strconv.ParseBool(value); enabled {
-			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager))
-		}
-	}
-
 	errors := make([]error, 0)
 	for _, clientWrapper := range clients {
 		successful := true
@@ -478,7 +463,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 			successful = false
 			updateClientBackoffStatus(clientWrapper, successful)
 			if IsFailoverable(err) {
-				klog.Warningf("current client of '%s' failed to get settings: %s", clientWrapper.Endpoint, err.Error())
+				klog.V(3).Info("current client of '%s' failed to get settings: %s", clientWrapper.Endpoint, err.Error())
 				errors = append(errors, err)
 				continue
 			}

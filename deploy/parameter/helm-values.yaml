@@ -15,12 +15,8 @@ imagePullSecrets: []
 nameOverride: "appconfig-provider"
 fullnameOverride: "az-appconfig-k8s-provider"
 
-requestTracing:
-  enabled: true
-
 workloadIdentity:
   enabled: true
-  globalServiceAccountEnabled: false
 
 serviceAccount:
   # Specifies whether a service account should be created

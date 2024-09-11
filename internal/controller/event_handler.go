@@ -4,7 +4,6 @@
 package controller
 
 import (
-	"context"
 	"reflect"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -21,7 +20,7 @@ type EnqueueRequestsFromWatchedObject struct {
 }
 
 // Update implements EventHandler.
-func (e *EnqueueRequestsFromWatchedObject) Update(ctx context.Context, evt event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *EnqueueRequestsFromWatchedObject) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
 	ownerRefs := evt.ObjectNew.GetOwnerReferences()
 	ownedByProvider := false
 	ownerProvider := ""
@@ -50,7 +49,7 @@ func (e *EnqueueRequestsFromWatchedObject) Update(ctx context.Context, evt event
 }
 
 // Delete implements EventHandler.
-func (e *EnqueueRequestsFromWatchedObject) Delete(ctx context.Context, evt event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *EnqueueRequestsFromWatchedObject) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
 	ownerRefs := evt.Object.GetOwnerReferences()
 	ownedByProvider := false
 	ownerProvider := ""
@@ -76,12 +75,12 @@ func (e *EnqueueRequestsFromWatchedObject) Delete(ctx context.Context, evt event
 }
 
 // Create implements EventHandler.
-func (e *EnqueueRequestsFromWatchedObject) Create(ctx context.Context, evt event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *EnqueueRequestsFromWatchedObject) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
 	// Do nothing
 }
 
 // Generic implements EventHandler.
-func (e *EnqueueRequestsFromWatchedObject) Generic(ctx context.Context, evt event.GenericEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *EnqueueRequestsFromWatchedObject) Generic(evt event.GenericEvent, q workqueue.RateLimitingInterface) {
 	// Do nothing
 }
 

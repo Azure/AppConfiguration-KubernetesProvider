@@ -67,6 +67,8 @@ spec:
                         - configMap
                         - key
                         type: object
+                      serviceAccountName:
+                        type: string
                     type: object
                 type: object
               configuration:
@@ -208,6 +210,8 @@ spec:
                                   - configMap
                                   - key
                                   type: object
+                                serviceAccountName:
+                                  type: string
                               type: object
                           required:
                           - uri
@@ -239,6 +243,8 @@ spec:
                             - configMap
                             - key
                             type: object
+                          serviceAccountName:
+                            type: string
                         type: object
                     type: object
                   refresh:

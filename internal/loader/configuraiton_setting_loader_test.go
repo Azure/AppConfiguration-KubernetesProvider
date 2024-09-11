@@ -17,11 +17,12 @@ import (
 	"math/big"
 	"net"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
-	"github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -68,6 +69,14 @@ func mockConfigurationSettingsWithKV() []azappconfig.Setting {
 	return settingsToReturn
 }
 
+func mockFeatureFlagSettings() []azappconfig.Setting {
+	settingsToReturn := make([]azappconfig.Setting, 2)
+	settingsToReturn[0] = newFeatureFlagSettings(".appconfig.featureflag/Beta", "label1")
+	settingsToReturn[1] = newFeatureFlagSettings(".appconfig.featureflag/Beta", "label1")
+
+	return settingsToReturn
+}
+
 func newCommonKeyValueSettings(key string, value string, label string) azappconfig.Setting {
 	return azappconfig.Setting{
 		Key:   &key,
@@ -85,6 +94,26 @@ func newKeyVaultSettings(key string, label string) azappconfig.Setting {
 		Value:       &vault,
 		Label:       &label,
 		ContentType: &keyVaultContentType,
+	}
+}
+
+func newFeatureFlagSettings(key string, label string) azappconfig.Setting {
+	featureFlagContentType := FeatureFlagContentType
+	featureFlagId := strings.TrimPrefix(key, ".appconfig.featureflag/")
+	featureFlagValue := fmt.Sprintf(`{
+		"id": "%s",
+		"description": "",
+		"enabled": false,
+		"conditions": {
+			"client_filters": []
+		}
+	}`, featureFlagId)
+
+	return azappconfig.Setting{
+		Key:         &key,
+		Value:       &featureFlagValue,
+		Label:       &label,
+		ContentType: &featureFlagContentType,
 	}
 }
 
@@ -164,11 +193,9 @@ func (mr *MockClientManagerMockRecorder) GetClients(arg0 interface{}) *gomock.Ca
 }
 
 // RefreshClients mocks base method.
-func (m *MockClientManager) RefreshClients(arg0 context.Context) error {
+func (m *MockClientManager) RefreshClients(arg0 context.Context) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshClients", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "RefreshClients", arg0)
 }
 
 // RefreshClients indicates an expected call of RefreshClients.
@@ -288,7 +315,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue := "fakeSecretValue"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value: &secretValue,
 				},
 			}
@@ -368,11 +395,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := "fake-content-type"
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -420,11 +447,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := "fake-content-type"
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -476,11 +503,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := CertTypePem
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -532,11 +559,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue := "fakeSecretValue"
 			secretName := "targetSecret"
 			contentType := CertTypePfx
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -588,11 +615,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue, _ := createFakePfx()
 			secretName := "targetSecret"
 			contentType := CertTypePfx
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -647,11 +674,11 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretValue, _ := createFakePem()
 			secretName := "targetSecret"
 			contentType := CertTypePem
-			kidStr := "fakeKid"
+			var kidStr azsecrets.ID = "fakeKid"
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
-					Kid:         &kidStr,
+					KID:         &kidStr,
 					ContentType: &contentType,
 				},
 			}
@@ -707,7 +734,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretName := "targetSecret"
 			ct := CertTypePfx
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
 					ContentType: &ct,
 				},
@@ -764,7 +791,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			secretName := "targetSecret"
 			ct := CertTypePem
 			secret1 := azsecrets.GetSecretResponse{
-				SecretBundle: azsecrets.SecretBundle{
+				Secret: azsecrets.Secret{
 					Value:       &secretValue,
 					ContentType: &ct,
 				},
@@ -943,6 +970,50 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			Expect(allSettings.ConfigMapSettings["someSubKey1:1"]).Should(Equal("value4"))
 			Expect(allSettings.ConfigMapSettings["test:some"]).Should(Equal("value5"))
 			Expect(allSettings.ConfigMapSettings["test:"]).Should(Equal("value6"))
+		})
+
+		It("Succeed to get all configuration settings", func() {
+			By("By loading and deduplicating feature flags")
+			featureFlagKeyFilter := "*"
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+					ConfigMapData: &acpv1.ConfigMapDataOptions{
+						Type: acpv1.Json,
+						Key:  "settings.json",
+					},
+				},
+				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter: &featureFlagKeyFilter,
+						},
+					},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			featureFlagsToReturn := mockFeatureFlagSettings()
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(featureFlagsToReturn, nil).Times(2)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(2)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(1))
+			Expect(allSettings.ConfigMapSettings["settings.json"]).Should(Equal("{\"feature_management\":{\"feature_flags\":[{\"conditions\":{\"client_filters\":[]},\"description\":\"\",\"enabled\":false,\"id\":\"Beta\"}]}}"))
 		})
 
 		It("Fail to get all configuration settings", func() {

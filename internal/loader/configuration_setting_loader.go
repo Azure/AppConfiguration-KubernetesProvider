@@ -502,27 +502,48 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 		return nil, fmt.Errorf("no client is available to connect to the target App Configuration store")
 	}
 
-	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
-		if enabled, _ := strconv.ParseBool(value); enabled {
-			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager))
+	manager, ok := csl.ClientManager.(*ConfigurationClientManager)
+	if csl.AzureAppConfigurationProvider.Spec.LoadBalancingEnabled && ok && manager.lastSuccessfulEndpoint != "" && len(clients) > 1 {
+		nextClientIndex := 0
+		for _, clientWrapper := range clients {
+			nextClientIndex++
+			if clientWrapper.Endpoint == manager.lastSuccessfulEndpoint {
+				break
+			}
+		}
+
+		// If we found the last successful client,we'll rotate the list so that the next client is at the beginning
+		if nextClientIndex < len(clients) {
+			rotate(clients, nextClientIndex)
 		}
 	}
 
 	errors := make([]error, 0)
+	var tracingEnabled, isFailoverRequest bool
+	if value, ok := os.LookupEnv(RequestTracingEnabled); ok {
+		tracingEnabled, _ = strconv.ParseBool(value)
+	}
 	for _, clientWrapper := range clients {
-		successful := true
+		if tracingEnabled {
+			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager, isFailoverRequest))
+		}
 		settingsResponse, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
+		successful := true
 		if err != nil {
 			successful = false
 			updateClientBackoffStatus(clientWrapper, successful)
 			if IsFailoverable(err) {
 				klog.Warningf("current client of '%s' failed to get settings: %s", clientWrapper.Endpoint, err.Error())
 				errors = append(errors, err)
+				isFailoverRequest = true
 				continue
 			}
 			return nil, err
 		}
 
+		if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
+			manager.lastSuccessfulEndpoint = clientWrapper.Endpoint
+		}
 		updateClientBackoffStatus(clientWrapper, successful)
 		return settingsResponse, nil
 	}
@@ -535,8 +556,17 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 func updateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {
 	if successful {
 		clientWrapper.BackOffEndTime = metav1.Time{}
-		clientWrapper.FailedAttempts = 0
+		// Reset FailedAttempts when client succeeded
+		if clientWrapper.FailedAttempts > 0 {
+			clientWrapper.FailedAttempts = 0
+		}
+		// Use negative value to indicate that successful attempt
+		clientWrapper.FailedAttempts--
 	} else {
+		//Reset FailedAttempts when client failed
+		if clientWrapper.FailedAttempts < 0 {
+			clientWrapper.FailedAttempts = 0
+		}
 		clientWrapper.FailedAttempts++
 		clientWrapper.BackOffEndTime = metav1.Time{Time: metav1.Now().Add(calculateBackoffDuration(clientWrapper.FailedAttempts))}
 	}
@@ -795,4 +825,27 @@ func MergeSecret(secret map[string]corev1.Secret, newSecret map[string]corev1.Se
 	}
 
 	return nil
+}
+
+// rotates the slice to the left by k positions
+func rotate(clients []*ConfigurationClientWrapper, k int) {
+	n := len(clients)
+	k = k % n
+	if k == 0 {
+		return
+	}
+	// Reverse the entire slice
+	reverseClients(clients, 0, n-1)
+	// Reverse the first part
+	reverseClients(clients, 0, n-k-1)
+	// Reverse the second part
+	reverseClients(clients, n-k, n-1)
+}
+
+func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
+	for start < end {
+		clients[start], clients[end] = clients[end], clients[start]
+		start++
+		end--
+	}
 }

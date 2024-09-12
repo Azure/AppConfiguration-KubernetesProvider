@@ -1159,7 +1159,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			Expect(err).Should(BeNil())
 			Expect(failedClient.FailedAttempts).Should(Equal(1))
 			Expect(failedClient.BackOffEndTime.IsZero()).Should(BeFalse())
-			Expect(succeededClient.FailedAttempts).Should(Equal(0))
+			Expect(succeededClient.FailedAttempts).Should(Equal(-1))
 			Expect(succeededClient.BackOffEndTime.IsZero()).Should(BeTrue())
 			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(6))
 			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))

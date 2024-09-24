@@ -88,22 +88,22 @@ func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfi
 }
 
 func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
-	sentinelSetting, err := client.GetSetting(ctx, s.sentinel.Key, &azappconfig.GetSettingOptions{Label: &s.sentinel.Label, OnlyIfChanged: s.etag})
+	sentinelSetting, err := client.GetSetting(ctx, *s.sentinel.Key, &azappconfig.GetSettingOptions{Label: s.sentinel.Label, OnlyIfChanged: s.etag})
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) {
 			var label string
-			if s.sentinel.Label == "\x00" { // NUL is escaped to \x00 in golang
+			if s.sentinel.Label == nil { // NUL is escaped to \x00 in golang
 				label = "no"
 			} else {
-				label = fmt.Sprintf("'%s'", s.sentinel.Label)
+				label = fmt.Sprintf("'%s'", *s.sentinel.Label)
 			}
 			switch respErr.StatusCode {
 			case 404:
-				klog.Warningf("Sentinel key '%s' with %s label does not exists, revisit the sentinel after %s", s.sentinel.Key, label, s.refreshInterval)
+				klog.Warningf("Sentinel key '%s' with %s label does not exists, revisit the sentinel after %s", *s.sentinel.Key, label, s.refreshInterval)
 				return nil, nil
 			case 304:
-				klog.V(3).Infof("There's no change to the sentinel key '%s' with %s label , just exit and revisit the sentinel after %s", s.sentinel.Key, label, s.refreshInterval)
+				klog.V(3).Infof("There's no change to the sentinel key '%s' with %s label , just exit and revisit the sentinel after %s", *s.sentinel.Key, label, s.refreshInterval)
 				return &SettingsResponse{
 					Settings: []azappconfig.Setting{sentinelSetting.Setting},
 				}, nil

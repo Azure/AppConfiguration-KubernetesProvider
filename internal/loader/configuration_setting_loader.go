@@ -303,8 +303,9 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 		return sentinelChanged, eTags, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
 	}
 	refreshedETags := make(map[acpv1.Sentinel]*azcore.ETag)
+	sentinels := getSentinels(provider.Spec.Configuration.Refresh.Monitoring.Sentinels)
 
-	for _, sentinel := range provider.Spec.Configuration.Refresh.Monitoring.Sentinels {
+	for _, sentinel := range sentinels {
 		if eTag, ok := eTags[sentinel]; ok {
 			// Initialize the updatedETags with the current eTags
 			refreshedETags[sentinel] = eTag
@@ -624,14 +625,14 @@ func GetSecret(ctx context.Context,
 }
 
 func GetKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
-	return deduplicateFilters(acpSpec.Configuration.Selectors)
+	return deduplicateFilters(processEmptyLabelFilter(acpSpec.Configuration.Selectors))
 }
 
 func GetFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
 	featureFlagFilters := make([]acpv1.Selector, 0)
 
 	if acpSpec.FeatureFlag != nil {
-		featureFlagFilters = deduplicateFilters(acpSpec.FeatureFlag.Selectors)
+		featureFlagFilters = deduplicateFilters(processEmptyLabelFilter(acpSpec.FeatureFlag.Selectors))
 		for i := 0; i < len(featureFlagFilters); i++ {
 			if featureFlagFilters[i].KeyFilter != nil {
 				prefixedFeatureFlagFilter := FeatureFlagKeyPrefix + *featureFlagFilters[i].KeyFilter
@@ -641,6 +642,40 @@ func GetFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []ac
 	}
 
 	return featureFlagFilters
+}
+
+func getSentinels(sentinels []acpv1.Sentinel) []acpv1.Sentinel {
+	results := make([]acpv1.Sentinel, 0)
+	for _, sentinel := range sentinels {
+		label := sentinel.Label
+		if sentinel.Label != nil && len(*sentinel.Label) == 0 {
+			label = nil
+		}
+
+		results = append(results, acpv1.Sentinel{
+			Key:   sentinel.Key,
+			Label: label,
+		})
+
+	}
+	return sentinels
+}
+
+func processEmptyLabelFilter(filters []acpv1.Selector) []acpv1.Selector {
+	var result []acpv1.Selector
+	for i := 0; i < len(filters); i++ {
+		labelFilter := filters[i].LabelFilter
+		if filters[i].LabelFilter != nil && len(*filters[i].LabelFilter) == 0 {
+			labelFilter = nil
+		}
+
+		result = append(result, acpv1.Selector{
+			KeyFilter:   filters[i].KeyFilter,
+			LabelFilter: labelFilter,
+		})
+	}
+
+	return result
 }
 
 func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
@@ -664,15 +699,7 @@ func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
 				}
 			}
 			if !findDuplicate {
-				labelFilter := filters[i].LabelFilter
-				// need to check if labelFilter is empty, if so, set it to nil
-				if labelFilter != nil && len(*labelFilter) == 0 {
-					labelFilter = nil
-				}
-				result = append(result, acpv1.Selector{
-					KeyFilter:   filters[i].KeyFilter,
-					LabelFilter: labelFilter,
-				})
+				result = append(result, filters[i])
 			}
 		}
 		reverse(result)

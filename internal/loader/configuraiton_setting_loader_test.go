@@ -1338,6 +1338,32 @@ func TestGetFilters(t *testing.T) {
 	assert.Len(t, filters7, 1)
 	assert.Equal(t, "one", *filters7[0].KeyFilter)
 	assert.Nil(t, filters7[0].LabelFilter)
+
+	testSpec8 := acpv1.AzureAppConfigurationProviderSpec{
+		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+			Refresh: &acpv1.DynamicConfigurationRefreshParameters{
+				Monitoring: &acpv1.RefreshMonitoring{
+					Sentinels: []acpv1.Sentinel{
+						{
+							Key:   &one,
+							Label: nil,
+						},
+						{
+							Key:   &two,
+							Label: &emptyLabel,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	sentinels := getSentinels(testSpec8.Configuration.Refresh.Monitoring.Sentinels)
+	assert.Len(t, sentinels, 2)
+	assert.Equal(t, "one", *sentinels[0].Key)
+	assert.Nil(t, sentinels[0].Label)
+	assert.Equal(t, "two", *sentinels[1].Key)
+	assert.Nil(t, sentinels[1].Label)
 }
 
 func TestCompare(t *testing.T) {

@@ -106,6 +106,7 @@ type RefreshMonitoring struct {
 
 // Defines the keyValues to be watched.
 type Sentinel struct {
+	// +kubebuilder:validation:MinLength=1
 	Key *string `json:"key"`
 	// +kubebuilder:default="\x00"
 	Label *string `json:"label,omitempty"`

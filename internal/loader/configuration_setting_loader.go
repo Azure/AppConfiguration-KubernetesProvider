@@ -645,7 +645,7 @@ func GetFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []ac
 }
 
 func getSentinels(sentinels []acpv1.Sentinel) []acpv1.Sentinel {
-	results := make([]acpv1.Sentinel, 0)
+	var results []acpv1.Sentinel
 	for _, sentinel := range sentinels {
 		label := sentinel.Label
 		if sentinel.Label != nil && len(*sentinel.Label) == 0 {
@@ -658,7 +658,7 @@ func getSentinels(sentinels []acpv1.Sentinel) []acpv1.Sentinel {
 		})
 
 	}
-	return sentinels
+	return results
 }
 
 func processEmptyLabelFilter(filters []acpv1.Selector) []acpv1.Selector {

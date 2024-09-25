@@ -2304,6 +2304,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			connectionStringReference := "fakeSecret"
 			testKey := "testKey"
 			testKey2 := "testKey2"
+			testKey3 := "testKey3"
+			testKey4 := "testKey4"
 			testLabel := "testValue"
 			emptyLabel := ""
 			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
@@ -2320,15 +2322,15 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 									Label: nil,
 								},
 								{
-									Key:   &testKey,
+									Key:   &testKey2,
 									Label: &testLabel,
 								},
 								{
-									Key:   &testKey,
+									Key:   &testKey3,
 									Label: nil,
 								},
 								{
-									Key:   &testKey2,
+									Key:   &testKey4,
 									Label: &emptyLabel,
 								},
 							},

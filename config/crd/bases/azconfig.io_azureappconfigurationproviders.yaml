@@ -97,7 +97,6 @@ spec:
                               description: Defines the keyValues to be watched.
                               properties:
                                 key:
-                                  minLength: 1
                                   type: string
                                 label:
                                   default: "\0"

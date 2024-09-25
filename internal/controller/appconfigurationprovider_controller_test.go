@@ -653,7 +653,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 							Enabled:  true,
 							Monitoring: &acpv1.RefreshMonitoring{
 								Sentinels: []acpv1.Sentinel{
-									{Key: &testKey, Label: &testLabel},
+									{Key: testKey, Label: &testLabel},
 								},
 							},
 						},
@@ -810,7 +810,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 							Enabled:  true,
 							Monitoring: &acpv1.RefreshMonitoring{
 								Sentinels: []acpv1.Sentinel{
-									{Key: &testNewKey, Label: &testNewLabel},
+									{Key: testNewKey, Label: &testNewLabel},
 								},
 							},
 						},
@@ -886,7 +886,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 							Enabled:  false,
 							Monitoring: &acpv1.RefreshMonitoring{
 								Sentinels: []acpv1.Sentinel{
-									{Key: &testNewKey, Label: &testNewLabel},
+									{Key: testNewKey, Label: &testNewLabel},
 								},
 							},
 						},
@@ -975,8 +975,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 							Enabled:  true,
 							Monitoring: &acpv1.RefreshMonitoring{
 								Sentinels: []acpv1.Sentinel{
-									{Key: &testKeyOne, Label: &testLabelOne},
-									{Key: &testKeyTwo, Label: &testLabelTwo},
+									{Key: testKeyOne, Label: &testLabelOne},
+									{Key: testKeyTwo, Label: &testLabelTwo},
 								},
 							},
 						},
@@ -2279,15 +2279,15 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 						Monitoring: &acpv1.RefreshMonitoring{
 							Sentinels: []acpv1.Sentinel{
 								{
-									Key:   &testKey,
+									Key:   testKey,
 									Label: &testLabelOne,
 								},
 								{
-									Key:   &testKey,
+									Key:   testKey,
 									Label: &testLabelTwo,
 								},
 								{
-									Key:   &testKey,
+									Key:   testKey,
 									Label: &testLabelOne,
 								},
 							},
@@ -2318,19 +2318,19 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 						Monitoring: &acpv1.RefreshMonitoring{
 							Sentinels: []acpv1.Sentinel{
 								{
-									Key:   &testKey,
+									Key:   testKey,
 									Label: nil,
 								},
 								{
-									Key:   &testKey2,
+									Key:   testKey2,
 									Label: &testLabel,
 								},
 								{
-									Key:   &testKey3,
+									Key:   testKey3,
 									Label: nil,
 								},
 								{
-									Key:   &testKey4,
+									Key:   testKey4,
 									Label: &emptyLabel,
 								},
 							},
@@ -2414,7 +2414,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 						Enabled:  true,
 						Monitoring: &acpv1.RefreshMonitoring{
 							Sentinels: []acpv1.Sentinel{
-								{Key: &testKey, Label: &testLabel},
+								{Key: testKey, Label: &testLabel},
 							},
 						},
 					},

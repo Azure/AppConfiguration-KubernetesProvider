@@ -1345,11 +1345,11 @@ func TestGetFilters(t *testing.T) {
 				Monitoring: &acpv1.RefreshMonitoring{
 					Sentinels: []acpv1.Sentinel{
 						{
-							Key:   &one,
+							Key:   one,
 							Label: nil,
 						},
 						{
-							Key:   &two,
+							Key:   two,
 							Label: &emptyLabel,
 						},
 					},
@@ -1360,9 +1360,9 @@ func TestGetFilters(t *testing.T) {
 
 	sentinels := getSentinels(testSpec8.Configuration.Refresh.Monitoring.Sentinels)
 	assert.Len(t, sentinels, 2)
-	assert.Equal(t, "one", *sentinels[0].Key)
+	assert.Equal(t, "one", sentinels[0].Key)
 	assert.Nil(t, sentinels[0].Label)
-	assert.Equal(t, "two", *sentinels[1].Key)
+	assert.Equal(t, "two", sentinels[1].Key)
 	assert.Nil(t, sentinels[1].Label)
 }
 

@@ -79,10 +79,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 							Monitoring: &acpv1.RefreshMonitoring{
 								Sentinels: []acpv1.Sentinel{
 									{
-										Key: &sentinelKey1,
+										Key: sentinelKey1,
 									},
 									{
-										Key: &sentinelKey2,
+										Key: sentinelKey2,
 									},
 								},
 							},
@@ -104,7 +104,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 					NextKeyValueRefreshReconcileTime: metav1.Now(),
 					SentinelETags: map[acpv1.Sentinel]*azcore.ETag{
 						{
-							Key: &sentinelKey1,
+							Key: sentinelKey1,
 						}: &fakeEtag,
 					},
 					Generation:               1,
@@ -123,10 +123,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				true,
 				map[acpv1.Sentinel]*azcore.ETag{
 					{
-						Key: &sentinelKey1,
+						Key: sentinelKey1,
 					}: &newFakeEtag1,
 					{
-						Key: &sentinelKey2,
+						Key: sentinelKey2,
 					}: &newFakeEtag2,
 				},
 				nil,
@@ -141,10 +141,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			_, _ = processor.Finish()
 
 			Expect(processor.ReconciliationState.SentinelETags[acpv1.Sentinel{
-				Key: &sentinelKey1,
+				Key: sentinelKey1,
 			}]).Should(Equal(&newFakeEtag1))
 			Expect(processor.ReconciliationState.SentinelETags[acpv1.Sentinel{
-				Key: &sentinelKey2,
+				Key: sentinelKey2,
 			}]).Should(Equal(&newFakeEtag2))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
 		})

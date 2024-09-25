@@ -124,7 +124,7 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 			sentinelMap := make(map[acpv1.Sentinel]bool)
 			for _, sentinel := range spec.Configuration.Refresh.Monitoring.Sentinels {
 				if _, ok := sentinelMap[sentinel]; ok {
-					return loader.NewArgumentError("spec.configuration.refresh.monitoring.keyValues", fmt.Errorf("monitoring duplicated key '%s'", *sentinel.Key))
+					return loader.NewArgumentError("spec.configuration.refresh.monitoring.keyValues", fmt.Errorf("monitoring duplicated key '%s'", sentinel.Key))
 				}
 				sentinelMap[sentinel] = true
 			}

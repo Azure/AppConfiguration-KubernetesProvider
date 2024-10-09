@@ -119,15 +119,11 @@ func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappc
 }
 
 func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
-	nullString := "\x00"
 	settings := make([]azappconfig.Setting, 0)
 	pageEtags := make(map[acpv1.Selector][]*azcore.ETag)
 
 	for _, filter := range s.selectors {
 		if filter.KeyFilter != nil {
-			if filter.LabelFilter == nil {
-				filter.LabelFilter = &nullString // NUL is escaped to \x00 in golang
-			}
 			selector := azappconfig.SettingSelector{
 				KeyFilter:   filter.KeyFilter,
 				LabelFilter: filter.LabelFilter,

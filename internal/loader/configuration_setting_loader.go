@@ -303,7 +303,7 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 		return sentinelChanged, eTags, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
 	}
 	refreshedETags := make(map[acpv1.Sentinel]*azcore.ETag)
-	sentinels := getSentinels(provider.Spec.Configuration.Refresh.Monitoring.Sentinels)
+	sentinels := normalizeSentinels(provider.Spec.Configuration.Refresh.Monitoring.Sentinels)
 
 	for _, sentinel := range sentinels {
 		if eTag, ok := eTags[sentinel]; ok {
@@ -625,14 +625,14 @@ func GetSecret(ctx context.Context,
 }
 
 func GetKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
-	return deduplicateFilters(processEmptyLabelFilter(acpSpec.Configuration.Selectors))
+	return deduplicateFilters(normalizeLabelFilter(acpSpec.Configuration.Selectors))
 }
 
 func GetFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
 	featureFlagFilters := make([]acpv1.Selector, 0)
 
 	if acpSpec.FeatureFlag != nil {
-		featureFlagFilters = deduplicateFilters(processEmptyLabelFilter(acpSpec.FeatureFlag.Selectors))
+		featureFlagFilters = deduplicateFilters(normalizeLabelFilter(acpSpec.FeatureFlag.Selectors))
 		for i := 0; i < len(featureFlagFilters); i++ {
 			if featureFlagFilters[i].KeyFilter != nil {
 				prefixedFeatureFlagFilter := FeatureFlagKeyPrefix + *featureFlagFilters[i].KeyFilter
@@ -644,12 +644,13 @@ func GetFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []ac
 	return featureFlagFilters
 }
 
-func getSentinels(sentinels []acpv1.Sentinel) []acpv1.Sentinel {
+func normalizeSentinels(sentinels []acpv1.Sentinel) []acpv1.Sentinel {
 	var results []acpv1.Sentinel
+	nullString := "\x00"
 	for _, sentinel := range sentinels {
 		label := sentinel.Label
-		if sentinel.Label != nil && len(*sentinel.Label) == 0 {
-			label = nil
+		if sentinel.Label == nil || len(*sentinel.Label) == 0 {
+			label = &nullString
 		}
 
 		results = append(results, acpv1.Sentinel{
@@ -661,12 +662,13 @@ func getSentinels(sentinels []acpv1.Sentinel) []acpv1.Sentinel {
 	return results
 }
 
-func processEmptyLabelFilter(filters []acpv1.Selector) []acpv1.Selector {
+func normalizeLabelFilter(filters []acpv1.Selector) []acpv1.Selector {
 	var result []acpv1.Selector
+	nullString := "\x00"
 	for i := 0; i < len(filters); i++ {
 		labelFilter := filters[i].LabelFilter
-		if filters[i].LabelFilter != nil && len(*filters[i].LabelFilter) == 0 {
-			labelFilter = nil
+		if filters[i].LabelFilter == nil || len(*filters[i].LabelFilter) == 0 {
+			labelFilter = &nullString
 		}
 
 		result = append(result, acpv1.Selector{

@@ -1292,8 +1292,8 @@ func TestGetFilters(t *testing.T) {
 	assert.Len(t, featureFlagFilters4, 0)
 	assert.Equal(t, "two", *filters4[0].KeyFilter)
 	assert.Equal(t, "test", *filters4[0].LabelFilter)
-	assert.Equal(t, `one`, *filters4[1].KeyFilter)
-	assert.Nil(t, filters4[1].LabelFilter)
+	assert.Equal(t, "one", *filters4[1].KeyFilter)
+	assert.Equal(t, "\x00", *filters4[1].LabelFilter)
 
 	testSpec5 := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
@@ -1324,7 +1324,7 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, "one", *filters6[0].KeyFilter)
 	assert.Equal(t, "test", *filters6[0].LabelFilter)
 	assert.Equal(t, "one", *filters6[1].KeyFilter)
-	assert.Nil(t, filters6[1].LabelFilter)
+	assert.Equal(t, "\x00", *filters6[1].LabelFilter)
 
 	testSpec7 := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
@@ -1337,7 +1337,7 @@ func TestGetFilters(t *testing.T) {
 	filters7 := GetKeyValueFilters(testSpec7)
 	assert.Len(t, filters7, 1)
 	assert.Equal(t, "one", *filters7[0].KeyFilter)
-	assert.Nil(t, filters7[0].LabelFilter)
+	assert.Equal(t, "\x00", *filters7[0].LabelFilter)
 
 	testSpec8 := acpv1.AzureAppConfigurationProviderSpec{
 		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
@@ -1358,12 +1358,12 @@ func TestGetFilters(t *testing.T) {
 		},
 	}
 
-	sentinels := getSentinels(testSpec8.Configuration.Refresh.Monitoring.Sentinels)
+	sentinels := normalizeSentinels(testSpec8.Configuration.Refresh.Monitoring.Sentinels)
 	assert.Len(t, sentinels, 2)
 	assert.Equal(t, "one", sentinels[0].Key)
-	assert.Nil(t, sentinels[0].Label)
+	assert.Equal(t, "\x00", *sentinels[0].Label)
 	assert.Equal(t, "two", sentinels[1].Key)
-	assert.Nil(t, sentinels[1].Label)
+	assert.Equal(t, "\x00", *sentinels[1].Label)
 }
 
 func TestCompare(t *testing.T) {

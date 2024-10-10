@@ -93,7 +93,7 @@ func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappc
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) {
 			var label string
-			if s.sentinel.Label == nil { // NUL is escaped to \x00 in golang
+			if s.sentinel.Label == nil || *s.sentinel.Label == "\x00" { // NUL is escaped to \x00 in golang
 				label = "no"
 			} else {
 				label = fmt.Sprintf("'%s'", *s.sentinel.Label)

@@ -628,6 +628,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()
+			testKey := "testKey"
+			testLabel := "testLabel"
 			providerName := "refresh-appconfigurationprovider-2"
 			configMapName := "configmap-to-be-refresh-2"
 			configProvider := &acpv1.AzureAppConfigurationProvider{
@@ -651,7 +653,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 							Enabled:  true,
 							Monitoring: &acpv1.RefreshMonitoring{
 								Sentinels: []acpv1.Sentinel{
-									{Key: "testKey", Label: "testLabel"},
+									{Key: testKey, Label: &testLabel},
 								},
 							},
 						},
@@ -783,6 +785,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			mockConfigurationSettings.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil, nil)
 
 			ctx := context.Background()
+			testNewKey := "testNewKey"
+			testNewLabel := "testNewLabel"
 			providerName := "refresh-appconfigurationprovider-2a"
 			configMapName := "configmap-to-be-refresh-2a"
 			configProvider := &acpv1.AzureAppConfigurationProvider{
@@ -806,7 +810,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 							Enabled:  true,
 							Monitoring: &acpv1.RefreshMonitoring{
 								Sentinels: []acpv1.Sentinel{
-									{Key: "testNewKey", Label: "testNewLabel"},
+									{Key: testNewKey, Label: &testNewLabel},
 								},
 							},
 						},
@@ -857,6 +861,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
+			testNewKey := "testNewKey"
+			testNewLabel := "testNewLabel"
 			providerName := "refresh-appconfigurationprovider-2b"
 			configMapName := "configmap-to-be-refresh-2b"
 			configProvider := &acpv1.AzureAppConfigurationProvider{
@@ -880,7 +886,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 							Enabled:  false,
 							Monitoring: &acpv1.RefreshMonitoring{
 								Sentinels: []acpv1.Sentinel{
-									{Key: "testNewKey", Label: "testNewLabel"},
+									{Key: testNewKey, Label: &testNewLabel},
 								},
 							},
 						},
@@ -942,6 +948,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()
+			testKeyOne := "testKeyOne"
+			testLabelOne := "testNewLabel"
+			testKeyTwo := "testKeyTwo"
+			testLabelTwo := "testLabel"
 			providerName := "refresh-appconfigurationprovider-2c"
 			configMapName := "configmap-to-be-refresh-2c"
 			configProvider := &acpv1.AzureAppConfigurationProvider{
@@ -965,8 +975,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 							Enabled:  true,
 							Monitoring: &acpv1.RefreshMonitoring{
 								Sentinels: []acpv1.Sentinel{
-									{Key: "testKeyOne", Label: "testNewLabel"},
-									{Key: "testKeyTwo", Label: "testLabel"},
+									{Key: testKeyOne, Label: &testLabelOne},
+									{Key: testKeyTwo, Label: &testLabelTwo},
 								},
 							},
 						},
@@ -2256,6 +2266,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		It("Should return error when duplicated sentinel key are set", func() {
 			configMapName := "test-configmap"
 			connectionStringReference := "fakeSecret"
+			testKey := "testKey"
+			testLabelOne := "testValue"
+			testLabelTwo := "testValue1"
 			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
 				Target: acpv1.ConfigurationGenerationParameters{
@@ -2266,16 +2279,16 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 						Monitoring: &acpv1.RefreshMonitoring{
 							Sentinels: []acpv1.Sentinel{
 								{
-									Key:   "testKey",
-									Label: "testValue",
+									Key:   testKey,
+									Label: &testLabelOne,
 								},
 								{
-									Key:   "testKey",
-									Label: "testValue1",
+									Key:   testKey,
+									Label: &testLabelTwo,
 								},
 								{
-									Key:   "testKey",
-									Label: "testValue",
+									Key:   testKey,
+									Label: &testLabelOne,
 								},
 							},
 						},
@@ -2289,6 +2302,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		It("Should return no error when all sentinel are unique", func() {
 			configMapName := "test-configmap"
 			connectionStringReference := "fakeSecret"
+			testKey := "testKey"
+			testKey2 := "testKey2"
+			testKey3 := "testKey3"
+			testKey4 := "testKey4"
+			testLabel := "testValue"
+			emptyLabel := ""
 			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
 				ConnectionStringReference: &connectionStringReference,
 				Target: acpv1.ConfigurationGenerationParameters{
@@ -2299,20 +2318,20 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 						Monitoring: &acpv1.RefreshMonitoring{
 							Sentinels: []acpv1.Sentinel{
 								{
-									Key:   "testKey",
-									Label: "\x00",
+									Key:   testKey,
+									Label: nil,
 								},
 								{
-									Key:   "testKey",
-									Label: "testValue1",
+									Key:   testKey2,
+									Label: &testLabel,
 								},
 								{
-									Key:   "testKey2",
-									Label: "\x00",
+									Key:   testKey3,
+									Label: nil,
 								},
 								{
-									Key:   "testKey2",
-									Label: "",
+									Key:   testKey4,
+									Label: &emptyLabel,
 								},
 							},
 						},
@@ -2382,6 +2401,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 		It("Should return error when configuration.refresh.interval is less than 1 second", func() {
 			configMapName := "test-configmap"
+			testKey := "testKey"
+			testLabel := "testLabel"
 			configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
@@ -2393,7 +2414,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 						Enabled:  true,
 						Monitoring: &acpv1.RefreshMonitoring{
 							Sentinels: []acpv1.Sentinel{
-								{Key: "testKey", Label: "testLabel"},
+								{Key: testKey, Label: &testLabel},
 							},
 						},
 					},

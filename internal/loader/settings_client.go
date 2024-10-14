@@ -88,15 +88,15 @@ func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfi
 }
 
 func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
-	sentinelSetting, err := client.GetSetting(ctx, s.sentinel.Key, &azappconfig.GetSettingOptions{Label: &s.sentinel.Label, OnlyIfChanged: s.etag})
+	sentinelSetting, err := client.GetSetting(ctx, s.sentinel.Key, &azappconfig.GetSettingOptions{Label: s.sentinel.Label, OnlyIfChanged: s.etag})
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) {
 			var label string
-			if s.sentinel.Label == "\x00" { // NUL is escaped to \x00 in golang
+			if s.sentinel.Label == nil || *s.sentinel.Label == "\x00" { // NUL is escaped to \x00 in golang
 				label = "no"
 			} else {
-				label = fmt.Sprintf("'%s'", s.sentinel.Label)
+				label = fmt.Sprintf("'%s'", *s.sentinel.Label)
 			}
 			switch respErr.StatusCode {
 			case 404:
@@ -119,15 +119,11 @@ func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappc
 }
 
 func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
-	nullString := "\x00"
 	settings := make([]azappconfig.Setting, 0)
 	pageEtags := make(map[acpv1.Selector][]*azcore.ETag)
 
 	for _, filter := range s.selectors {
 		if filter.KeyFilter != nil {
-			if filter.LabelFilter == nil {
-				filter.LabelFilter = &nullString // NUL is escaped to \x00 in golang
-			}
 			selector := azappconfig.SettingSelector{
 				KeyFilter:   filter.KeyFilter,
 				LabelFilter: filter.LabelFilter,

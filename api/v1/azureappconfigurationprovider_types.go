@@ -108,7 +108,7 @@ type RefreshMonitoring struct {
 type Sentinel struct {
 	Key string `json:"key"`
 	// +kubebuilder:default="\x00"
-	Label string `json:"label,omitempty"`
+	Label *string `json:"label,omitempty"`
 }
 
 // ConfigMapDataOptions defines the options of generating ConfigMap data

@@ -1480,6 +1480,16 @@ func TestCompare(t *testing.T) {
 	assert.False(t, compare(&stringA, &stringB))
 }
 
+func TestFeatureFlagId(t *testing.T) {
+	telemetrySetting1 := newFeatureFlagVariant(".appconfig.featureflag/Telemetry_1", "", true)
+	calculatedId1 := calculateFeatureFlagId(telemetrySetting1)
+	assert.Equal(t, "krkOsu9dVV9huwbQDPR6gkV_2T0buWxOCS-nNsj5-6g", calculatedId1)
+
+	telemetrySetting2 := newFeatureFlagVariant(".appconfig.featureflag/Telemetry_2", "Test", true)
+	calculatedId2 := calculateFeatureFlagId(telemetrySetting2)
+	assert.Equal(t, "Rc8Am7HIGDT7HC5Ovs3wKN_aGaaK_Uz1mH2e11gaK0o", calculatedId2)
+}
+
 func TestCreateSecretClients(t *testing.T) {
 	configProvider := &acpv1.AzureAppConfigurationProvider{
 		TypeMeta: metav1.TypeMeta{

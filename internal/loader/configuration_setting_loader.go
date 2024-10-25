@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -99,6 +100,17 @@ const (
 	FeatureFlagETagKey                    string = "ETag"
 	FeatureFlagIdKey                      string = "FeatureFlagId"
 	FeatureFlagReferenceKey               string = "FeatureFlagReference"
+	NameKey                               string = "name"
+	AllocationKey                         string = "allocation"
+	AllocationIdKey                       string = "AllocationId"
+	DefaultWhenEnabledKey                 string = "default_when_enabled"
+	PercentileKey                         string = "percentile"
+	FromKey                               string = "from"
+	ToKey                                 string = "to"
+	SeedKey                               string = "seed"
+	VariantKey                            string = "variant"
+	VariantsKey                           string = "variants"
+	ConfigurationValueKey                 string = "configuration_value"
 	PreservedSecretTypeTag                string = ".kubernetes.secret.type"
 	CertTypePem                           string = "application/x-pem-file"
 	CertTypePfx                           string = "application/x-pkcs12"
@@ -948,6 +960,98 @@ func createFeatureFlagReference(setting azappconfig.Setting, endpoint string) st
 	return featureFlagReference
 }
 
+func generateAllocationId(featureFlag map[string]interface{}) string {
+	var rawAllocationId strings.Builder
+	var variantsForExperimentation []string
+
+	allocationSection, ok := featureFlag[AllocationKey].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	// Seed
+	seedValue := ""
+	if allocationSection[SeedKey] != nil {
+		seedValue = allocationSection[SeedKey].(string)
+	}
+	rawAllocationId.WriteString(fmt.Sprintf("seed=%v\ndefault_when_enabled=", seedValue))
+
+	// Default variant when enabled
+	if defaultVariant, exists := allocationSection[DefaultWhenEnabledKey]; exists {
+		variantsForExperimentation = append(variantsForExperimentation, defaultVariant.(string))
+		rawAllocationId.WriteString(fmt.Sprintf("%v", defaultVariant.(string)))
+	}
+
+	// Percentiles
+	rawAllocationId.WriteString("\npercentiles=")
+	if percentiles, exists := allocationSection[PercentileKey].([]interface{}); exists {
+		var sortedPercentiles []map[string]interface{}
+
+		// Filter and sort percentiles
+		for _, p := range percentiles {
+			pMap := p.(map[string]interface{})
+			from, fromExist := pMap[FromKey]
+			to, toExist := pMap[ToKey]
+			_, variantExist := pMap[VariantKey]
+			if fromExist && toExist && variantExist && from != to {
+				sortedPercentiles = append(sortedPercentiles, pMap)
+			}
+		}
+
+		sort.Slice(sortedPercentiles, func(i, j int) bool {
+			return sortedPercentiles[i][FromKey].(float64) < sortedPercentiles[j][FromKey].(float64)
+		})
+
+		for i, percentile := range sortedPercentiles {
+			variantsForExperimentation = append(variantsForExperimentation, percentile[VariantKey].(string))
+			rawAllocationId.WriteString(fmt.Sprintf("%v,%s,%v", percentile[FromKey].(float64), base64.StdEncoding.EncodeToString([]byte(percentile[VariantKey].(string))), percentile[ToKey].(float64)))
+			if i != len(sortedPercentiles)-1 {
+				rawAllocationId.WriteString(";")
+			}
+		}
+	}
+
+	// Short-circuit if no valid data
+	if len(variantsForExperimentation) == 0 && allocationSection[SeedKey] == nil {
+		return ""
+	}
+
+	rawAllocationId.WriteString("\nvariants=")
+	if len(variantsForExperimentation) != 0 {
+		variants, variantsExist := featureFlag[VariantsKey].([]interface{})
+		sortedVariants := make([]map[string]interface{}, 0)
+		if variantsExist {
+			for _, v := range variants {
+				if contains(variantsForExperimentation, v.(map[string]interface{})[NameKey].(string)) {
+					sortedVariants = append(sortedVariants, v.(map[string]interface{}))
+				}
+			}
+		}
+
+		sort.Slice(sortedVariants, func(i, j int) bool {
+			return sortedVariants[i][NameKey].(string) < sortedVariants[j][NameKey].(string)
+		})
+
+		for i, variant := range sortedVariants {
+			configurationValue := []byte("")
+			if _, exist := variant[ConfigurationValueKey]; exist {
+				configurationValue, _ = json.Marshal(jsonSorter(variant[ConfigurationValueKey]))
+			}
+			rawAllocationId.WriteString(fmt.Sprintf("%s,%s", base64.StdEncoding.EncodeToString([]byte(variant[NameKey].(string))), string(configurationValue)))
+			if i != len(sortedVariants)-1 {
+				rawAllocationId.WriteString(";")
+			}
+		}
+	}
+	// Hash the raw allocation ID
+	hash := sha256.Sum256([]byte(rawAllocationId.String()))
+	first15Bytes := hash[:15]
+
+	// Convert to base64 URL-safe string
+	allocationId := base64.RawURLEncoding.EncodeToString(first15Bytes)
+	return allocationId
+}
+
 func updateFeatureFlagTelemetry(featureFlag map[string]interface{}, setting azappconfig.Setting, endpoint string) {
 	if telemetry, ok := featureFlag[FeatureFlagTelemetryKey].(map[string]interface{}); ok {
 		if enabled, ok := telemetry[FeatureFlagEnabledKey].(bool); ok && enabled {
@@ -960,7 +1064,43 @@ func updateFeatureFlagTelemetry(featureFlag map[string]interface{}, setting azap
 			metadata[FeatureFlagETagKey] = *setting.ETag
 			metadata[FeatureFlagIdKey] = calculateFeatureFlagId(setting)
 			metadata[FeatureFlagReferenceKey] = createFeatureFlagReference(setting, endpoint)
+			if allocationId := generateAllocationId(featureFlag); allocationId != "" {
+				metadata[AllocationIdKey] = allocationId
+			}
 			telemetry[FeatureFlagMetadataKey] = metadata
 		}
+	}
+}
+
+func contains(arr []string, target string) bool {
+	for _, a := range arr {
+		if a == target {
+			return true
+		}
+	}
+	return false
+}
+
+func jsonSorter(v interface{}) interface{} {
+	switch value := v.(type) {
+	case nil:
+		return nil
+	case []interface{}:
+		return value // Return arrays as-is
+	case map[string]interface{}:
+		sortedMap := make(map[string]interface{})
+		// Get keys and sort them
+		keys := make([]string, 0, len(value))
+		for k := range value {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		// Populate the sorted map
+		for _, k := range keys {
+			sortedMap[k] = jsonSorter(value[k]) // Recursively sort values
+		}
+		return sortedMap
+	default:
+		return v // Return other types (strings, numbers, etc.) as-is
 	}
 }

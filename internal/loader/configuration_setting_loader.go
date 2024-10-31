@@ -48,6 +48,7 @@ type TargetKeyValueSettings struct {
 	SecretReferences map[string]*TargetSecretReference
 	KeyValueETags    map[acpv1.Selector][]*azcore.ETag
 	FeatureFlagETags map[acpv1.Selector][]*azcore.ETag
+	SentinelETags    map[acpv1.Sentinel]*azcore.ETag
 }
 
 type TargetSecretReference struct {
@@ -113,6 +114,20 @@ func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context,
 		return nil, err
 	}
 
+	var initializedSentinelETags map[acpv1.Sentinel]*azcore.ETag
+	if csl.Spec.Configuration.Refresh != nil &&
+		csl.Spec.Configuration.Refresh.Enabled &&
+		csl.Spec.Configuration.Refresh.Monitoring != nil {
+		sentinels := normalizeSentinels(csl.Spec.Configuration.Refresh.Monitoring.Sentinels)
+		eTags := make(map[acpv1.Sentinel]*azcore.ETag)
+		for _, sentinel := range sentinels {
+			eTags[sentinel] = nil
+		}
+		if _, initializedSentinelETags, err = csl.CheckAndRefreshSentinels(ctx, &csl.AzureAppConfigurationProvider, eTags); err != nil {
+			return nil, err
+		}
+	}
+
 	if csl.Spec.FeatureFlag != nil {
 		if rawSettings.FeatureFlagSettings, rawSettings.FeatureFlagETags, err = csl.getFeatureFlagSettings(ctx); err != nil {
 			return nil, err
@@ -130,6 +145,7 @@ func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context,
 		SecretReferences:  rawSettings.SecretReferences,
 		KeyValueETags:     rawSettings.KeyValueETags,
 		FeatureFlagETags:  rawSettings.FeatureFlagETags,
+		SentinelETags:     initializedSentinelETags,
 	}, nil
 }
 
@@ -299,14 +315,8 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 	provider *acpv1.AzureAppConfigurationProvider,
 	eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error) {
 	sentinelChanged := false
-	if provider.Spec.Configuration.Refresh == nil {
-		return sentinelChanged, eTags, NewArgumentError("spec.configuration.refresh", fmt.Errorf("refresh is not specified"))
-	}
 	refreshedETags := make(map[acpv1.Sentinel]*azcore.ETag)
-	sentinels := normalizeSentinels(provider.Spec.Configuration.Refresh.Monitoring.Sentinels)
-
-	for _, sentinel := range sentinels {
-		currentETag := getSentinelETag(eTags, sentinel)
+	for sentinel, currentETag := range eTags {
 		refreshedETags[sentinel] = currentETag
 		settingsClient := csl.SettingsClient
 		if settingsClient == nil {
@@ -883,15 +893,4 @@ func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
 		start++
 		end--
 	}
-}
-
-func getSentinelETag(eTags map[acpv1.Sentinel]*azcore.ETag, sentinel acpv1.Sentinel) *azcore.ETag {
-	for s, eTag := range eTags {
-		// No nil label since sentinel are normalized
-		if s.Key == sentinel.Key && *s.Label == *sentinel.Label {
-			return eTag
-		}
-	}
-
-	return nil
 }

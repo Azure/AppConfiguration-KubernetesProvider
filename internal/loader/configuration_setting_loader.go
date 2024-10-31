@@ -306,15 +306,13 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 	sentinels := normalizeSentinels(provider.Spec.Configuration.Refresh.Monitoring.Sentinels)
 
 	for _, sentinel := range sentinels {
-		if eTag, ok := eTags[sentinel]; ok {
-			// Initialize the updatedETags with the current eTags
-			refreshedETags[sentinel] = eTag
-		}
+		currentETag := getSentinelETag(eTags, sentinel)
+		refreshedETags[sentinel] = currentETag
 		settingsClient := csl.SettingsClient
 		if settingsClient == nil {
 			settingsClient = &SentinelSettingsClient{
 				sentinel:        sentinel,
-				etag:            eTags[sentinel],
+				etag:            currentETag,
 				refreshInterval: provider.Spec.Configuration.Refresh.Interval,
 			}
 		}
@@ -323,7 +321,7 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 			return false, eTags, err
 		}
 
-		if response.Settings != nil && response.Settings[0].ETag != nil {
+		if response != nil && response.Settings != nil && response.Settings[0].ETag != nil {
 			sentinelChanged = true
 			refreshedETags[sentinel] = response.Settings[0].ETag
 		}
@@ -885,4 +883,15 @@ func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
 		start++
 		end--
 	}
+}
+
+func getSentinelETag(eTags map[acpv1.Sentinel]*azcore.ETag, sentinel acpv1.Sentinel) *azcore.ETag {
+	for s, eTag := range eTags {
+		// No nil label since sentinel are normalized
+		if s.Key == sentinel.Key && *s.Label == *sentinel.Label {
+			return eTag
+		}
+	}
+
+	return nil
 }

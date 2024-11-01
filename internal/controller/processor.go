@@ -76,6 +76,7 @@ func (processor *AppConfigurationProviderProcessor) processFullReconciliation() 
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	processor.RefreshOptions.updatedKeyValueETags = updatedSettings.KeyValueETags
 	processor.RefreshOptions.updatedFeatureFlagETags = updatedSettings.FeatureFlagETags
+	processor.RefreshOptions.updatedSentinelETags = updatedSettings.SentinelETags
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
 	}
@@ -321,6 +322,10 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 
 	if processor.RefreshOptions.updatedFeatureFlagETags != nil {
 		processor.ReconciliationState.FeatureFlagETags = processor.RefreshOptions.updatedFeatureFlagETags
+	}
+
+	if processor.ShouldReconcile {
+		processor.ReconciliationState.SentinelETags = processor.RefreshOptions.updatedSentinelETags
 	}
 
 	if !processor.RefreshOptions.secretReferenceRefreshEnabled &&

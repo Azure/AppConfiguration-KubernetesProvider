@@ -114,7 +114,7 @@ func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context,
 		return nil, err
 	}
 
-	var initializedSentinelETags map[acpv1.Sentinel]*azcore.ETag
+	initializedSentinelETags := make(map[acpv1.Sentinel]*azcore.ETag)
 	if csl.Spec.Configuration.Refresh != nil &&
 		csl.Spec.Configuration.Refresh.Enabled &&
 		csl.Spec.Configuration.Refresh.Monitoring != nil {

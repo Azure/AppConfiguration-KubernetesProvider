@@ -229,6 +229,10 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 	secretReferencesToSolve := make(map[string]*loader.TargetSecretReference)
 	copiedSecretReferences := make(map[string]*loader.TargetSecretReference)
 	for secretName, reference := range reconcileState.ExistingSecretReferences {
+		copiedSecretReferences[secretName] = &loader.TargetSecretReference{
+			Type:            reference.Type,
+			SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+		}
 		for key, secretMetadata := range reference.SecretsMetadata {
 			if secretMetadata.SecretVersion == "" {
 				if secretReferencesToSolve[secretName] == nil {
@@ -238,13 +242,6 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 					}
 				}
 				secretReferencesToSolve[secretName].SecretsMetadata[key] = secretMetadata
-			}
-
-			if copiedSecretReferences[secretName] == nil {
-				copiedSecretReferences[secretName] = &loader.TargetSecretReference{
-					Type:            reference.Type,
-					SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
-				}
 			}
 			copiedSecretReferences[secretName].SecretsMetadata[key] = secretMetadata
 		}

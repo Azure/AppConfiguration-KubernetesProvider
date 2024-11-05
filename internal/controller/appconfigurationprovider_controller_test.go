@@ -176,14 +176,14 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 						Type: corev1.SecretTypeOpaque,
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretTypeTLS,
-						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+						Type:                    corev1.SecretTypeTLS,
+						SecretsKeyVaultMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 					secretName2: {
-						Type:            corev1.SecretTypeOpaque,
-						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+						Type:                    corev1.SecretTypeOpaque,
+						SecretsKeyVaultMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 				},
 			}
@@ -262,10 +262,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 						Type: corev1.SecretTypeOpaque,
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretTypeOpaque,
-						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+						Type:                    corev1.SecretTypeOpaque,
+						SecretsKeyVaultMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 				},
 			}
@@ -336,10 +336,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 				ConfigMapSettings: configMapResult,
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					},
 				},
 			}
@@ -1121,10 +1121,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 				ConfigMapSettings: configMapResult,
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -1244,10 +1244,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 				ConfigMapSettings: configMapResult,
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -1370,10 +1370,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 				ConfigMapSettings: configMapResult,
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -1454,15 +1454,15 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			newSecretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &newFakeId,
 			}
-			mockedSecretReference := make(map[string]*loader.TargetSecretReference)
-			mockedSecretReference[secretName] = &loader.TargetSecretReference{
-				Type:            corev1.SecretType("Opaque"),
-				SecretsMetadata: newSecretMetadata,
+			mockedSecretReference := make(map[string]*loader.TargetK8sSecretMetadata)
+			mockedSecretReference[secretName] = &loader.TargetK8sSecretMetadata{
+				Type:                    corev1.SecretType("Opaque"),
+				SecretsKeyVaultMetadata: newSecretMetadata,
 			}
 
 			newTargetSettings := &loader.TargetKeyValueSettings{
-				SecretSettings:   newResolvedSecret,
-				SecretReferences: mockedSecretReference,
+				SecretSettings: newResolvedSecret,
+				K8sSecrets:     mockedSecretReference,
 			}
 
 			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings, nil)
@@ -1480,8 +1480,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			// Mocked secret refresh scenario when secretMetadata is not changed
 			newTargetSettings2 := &loader.TargetKeyValueSettings{
-				SecretSettings:   make(map[string]corev1.Secret),
-				SecretReferences: mockedSecretReference,
+				SecretSettings: make(map[string]corev1.Secret),
+				K8sSecrets:     mockedSecretReference,
 			}
 
 			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings2, nil)
@@ -1810,10 +1810,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 				ConfigMapSettings: mapResult,
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -1939,15 +1939,15 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			newSecretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &newFakeId,
 			}
-			mockedSecretReference := make(map[string]*loader.TargetSecretReference)
-			mockedSecretReference[secretName] = &loader.TargetSecretReference{
-				Type:            corev1.SecretType("Opaque"),
-				SecretsMetadata: newSecretMetadata,
+			mockedSecretReference := make(map[string]*loader.TargetK8sSecretMetadata)
+			mockedSecretReference[secretName] = &loader.TargetK8sSecretMetadata{
+				Type:                    corev1.SecretType("Opaque"),
+				SecretsKeyVaultMetadata: newSecretMetadata,
 			}
 
 			newTargetSettings := &loader.TargetKeyValueSettings{
-				SecretSettings:   newResolvedSecret,
-				SecretReferences: mockedSecretReference,
+				SecretSettings: newResolvedSecret,
+				K8sSecrets:     mockedSecretReference,
 			}
 
 			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings, nil)

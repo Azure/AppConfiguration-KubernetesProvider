@@ -54,7 +54,7 @@ type ReconciliationState struct {
 	SentinelETags                           map[acpv1.Sentinel]*azcore.ETag
 	KeyValueETags                           map[acpv1.Selector][]*azcore.ETag
 	FeatureFlagETags                        map[acpv1.Selector][]*azcore.ETag
-	ExistingSecretReferences                map[string]*loader.TargetSecretReference
+	ExistingK8sSecrets                      map[string]*loader.TargetK8sSecretMetadata
 	NextKeyValueRefreshReconcileTime        metav1.Time
 	NextSecretReferenceRefreshReconcileTime metav1.Time
 	NextFeatureFlagRefreshReconcileTime     metav1.Time
@@ -158,7 +158,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	}
 
 	if reconciler.ProvidersReconcileState[req.NamespacedName] != nil {
-		for name := range reconciler.ProvidersReconcileState[req.NamespacedName].ExistingSecretReferences {
+		for name := range reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets {
 			if _, ok := existingSecrets[name]; !ok {
 				existingSecret = corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
@@ -183,7 +183,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 			SentinelETags:            make(map[acpv1.Sentinel]*azcore.ETag),
 			KeyValueETags:            make(map[acpv1.Selector][]*azcore.ETag),
 			FeatureFlagETags:         make(map[acpv1.Selector][]*azcore.ETag),
-			ExistingSecretReferences: make(map[string]*loader.TargetSecretReference),
+			ExistingK8sSecrets:       make(map[string]*loader.TargetK8sSecretMetadata),
 			ClientManager:            nil,
 		}
 	}
@@ -194,11 +194,11 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	}
 
 	if provider.Spec.Secret == nil {
-		reconciler.ProvidersReconcileState[req.NamespacedName].ExistingSecretReferences = make(map[string]*loader.TargetSecretReference)
+		reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets = make(map[string]*loader.TargetK8sSecretMetadata)
 	} else {
-		for name := range reconciler.ProvidersReconcileState[req.NamespacedName].ExistingSecretReferences {
+		for name := range reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets {
 			if _, ok := existingSecrets[name]; !ok {
-				reconciler.ProvidersReconcileState[req.NamespacedName].ExistingSecretReferences[name].SecretResourceVersion = ""
+				reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets[name].SecretResourceVersion = ""
 			}
 		}
 	}
@@ -281,7 +281,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 
 	// Expel the secrets which are no longer selected by the provider.
 	if provider.Spec.Secret == nil || processor.RefreshOptions.SecretSettingPopulated {
-		result, err := reconciler.expelRemovedSecrets(ctx, provider, existingSecrets, processor.Settings.SecretReferences)
+		result, err := reconciler.expelRemovedSecrets(ctx, provider, existingSecrets, processor.Settings.K8sSecrets)
 		if err != nil {
 			return result, nil
 		}
@@ -332,7 +332,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) logAndSetFailStatus(
 	} else if reconcileState != nil &&
 		reconcileState.ConfigMapResourceVersion != nil &&
 		(provider.Spec.Secret == nil ||
-			len(reconcileState.ExistingSecretReferences) == 0) {
+			len(reconcileState.ExistingK8sSecrets) == 0) {
 		// If the target ConfigMap or Secret does exists, just show error as warning.
 		showErrorAsWarning = true
 	}
@@ -431,8 +431,8 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 
 	for secretName, secret := range processor.Settings.SecretSettings {
 		if !shouldCreateOrUpdate(processor, secretName) {
-			if _, ok := reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName]; ok {
-				processor.Settings.SecretReferences[secretName].SecretResourceVersion = reconciler.ProvidersReconcileState[namespacedName].ExistingSecretReferences[secretName].SecretResourceVersion
+			if _, ok := reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName]; ok {
+				processor.Settings.K8sSecrets[secretName].SecretResourceVersion = reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName].SecretResourceVersion
 			}
 			klog.V(5).Infof("Skip updating the secret %q in %q namespace since data is not changed", secretName, provider.Namespace)
 			continue
@@ -465,7 +465,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 		}
 
-		processor.Settings.SecretReferences[secretName].SecretResourceVersion = secretObj.ResourceVersion
+		processor.Settings.K8sSecrets[secretName].SecretResourceVersion = secretObj.ResourceVersion
 		klog.V(5).Infof("Secret %q in %q namespace is %s", secretObj.Name, secretObj.Namespace, string(operationResult))
 	}
 
@@ -476,7 +476,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) expelRemovedSecrets(
 	ctx context.Context,
 	provider *acpv1.AzureAppConfigurationProvider,
 	existingSecrets map[string]corev1.Secret,
-	secretReferences map[string]*loader.TargetSecretReference) (reconcile.Result, error) {
+	secretReferences map[string]*loader.TargetK8sSecretMetadata) (reconcile.Result, error) {
 	for name := range existingSecrets {
 		if _, ok := secretReferences[name]; !ok {
 			err := reconciler.Client.Delete(ctx, &corev1.Secret{

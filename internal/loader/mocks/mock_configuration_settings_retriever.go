@@ -114,7 +114,7 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshKeyValueSetting
 }
 
 // ResolveSecretReferences mocks base method.
-func (m *MockConfigurationSettingsRetriever) ResolveSecretReferences(arg0 context.Context, arg1 map[string]*loader.TargetSecretReference, arg2 loader.SecretReferenceResolver) (*loader.TargetKeyValueSettings, error) {
+func (m *MockConfigurationSettingsRetriever) ResolveSecretReferences(arg0 context.Context, arg1 map[string]*loader.TargetK8sSecretMetadata, arg2 loader.SecretReferenceResolver) (*loader.TargetKeyValueSettings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResolveSecretReferences", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)

@@ -226,27 +226,25 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 	}
 
 	// Only resolve the secret references that not specified the secret version
-	secretReferencesToSolve := make(map[string]*loader.TargetSecretReference)
-	copiedSecretReferences := make(map[string]*loader.TargetSecretReference)
-	for secretName, reference := range reconcileState.ExistingSecretReferences {
-		for key, secretMetadata := range reference.SecretsMetadata {
+	secretReferencesToSolve := make(map[string]*loader.TargetK8sSecretMetadata)
+	copiedSecretReferences := make(map[string]*loader.TargetK8sSecretMetadata)
+	for secretName, k8sSecret := range reconcileState.ExistingK8sSecrets {
+		copiedSecretReferences[secretName] = &loader.TargetK8sSecretMetadata{
+			Type:                    k8sSecret.Type,
+			SecretsKeyVaultMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+		}
+
+		for key, secretMetadata := range k8sSecret.SecretsKeyVaultMetadata {
 			if secretMetadata.SecretVersion == "" {
 				if secretReferencesToSolve[secretName] == nil {
-					secretReferencesToSolve[secretName] = &loader.TargetSecretReference{
-						Type:            reference.Type,
-						SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+					secretReferencesToSolve[secretName] = &loader.TargetK8sSecretMetadata{
+						Type:                    k8sSecret.Type,
+						SecretsKeyVaultMetadata: make(map[string]loader.KeyVaultSecretMetadata),
 					}
 				}
-				secretReferencesToSolve[secretName].SecretsMetadata[key] = secretMetadata
+				secretReferencesToSolve[secretName].SecretsKeyVaultMetadata[key] = secretMetadata
 			}
-
-			if copiedSecretReferences[secretName] == nil {
-				copiedSecretReferences[secretName] = &loader.TargetSecretReference{
-					Type:            reference.Type,
-					SecretsMetadata: make(map[string]loader.KeyVaultSecretMetadata),
-				}
-			}
-			copiedSecretReferences[secretName].SecretsMetadata[key] = secretMetadata
+			copiedSecretReferences[secretName].SecretsKeyVaultMetadata[key] = secretMetadata
 		}
 	}
 
@@ -262,12 +260,12 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 		}
 	}
 
-	for secretName, reference := range resolvedSecrets.SecretReferences {
-		maps.Copy(copiedSecretReferences[secretName].SecretsMetadata, reference.SecretsMetadata)
+	for secretName, k8sSecret := range resolvedSecrets.K8sSecrets {
+		maps.Copy(copiedSecretReferences[secretName].SecretsKeyVaultMetadata, k8sSecret.SecretsKeyVaultMetadata)
 	}
 
 	processor.Settings.SecretSettings = existingSecrets
-	processor.Settings.SecretReferences = copiedSecretReferences
+	processor.Settings.K8sSecrets = copiedSecretReferences
 	processor.RefreshOptions.SecretSettingPopulated = true
 
 	// Update next refresh time only if settings updated successfully
@@ -295,13 +293,13 @@ func (processor *AppConfigurationProviderProcessor) shouldReconcile(
 		return false
 	}
 
-	if len(processor.ReconciliationState.ExistingSecretReferences) == 0 ||
-		len(processor.ReconciliationState.ExistingSecretReferences) != len(existingSecrets) {
+	if len(processor.ReconciliationState.ExistingK8sSecrets) == 0 ||
+		len(processor.ReconciliationState.ExistingK8sSecrets) != len(existingSecrets) {
 		return true
 	}
 
 	for name, secret := range existingSecrets {
-		if processor.ReconciliationState.ExistingSecretReferences[name].SecretResourceVersion != secret.ResourceVersion {
+		if processor.ReconciliationState.ExistingK8sSecrets[name].SecretResourceVersion != secret.ResourceVersion {
 			return true
 		}
 	}
@@ -313,7 +311,7 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 	processor.ReconciliationState.Generation = processor.Provider.Generation
 
 	if processor.RefreshOptions.SecretSettingPopulated {
-		processor.ReconciliationState.ExistingSecretReferences = processor.Settings.SecretReferences
+		processor.ReconciliationState.ExistingK8sSecrets = processor.Settings.K8sSecrets
 	}
 
 	if processor.RefreshOptions.updatedKeyValueETags != nil {

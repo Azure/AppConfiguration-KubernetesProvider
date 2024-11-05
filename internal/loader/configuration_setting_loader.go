@@ -6,6 +6,7 @@ package loader
 import (
 	acpv1 "azappconfig/provider/api/v1"
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -92,6 +94,23 @@ const (
 	FeatureFlagKeyPrefix                  string = ".appconfig.featureflag/"
 	FeatureFlagSectionName                string = "feature_flags"
 	FeatureManagementSectionName          string = "feature_management"
+	FeatureFlagTelemetryKey               string = "telemetry"
+	FeatureFlagEnabledKey                 string = "enabled"
+	FeatureFlagMetadataKey                string = "metadata"
+	FeatureFlagETagKey                    string = "ETag"
+	FeatureFlagIdKey                      string = "FeatureFlagId"
+	FeatureFlagReferenceKey               string = "FeatureFlagReference"
+	NameKey                               string = "name"
+	AllocationKey                         string = "allocation"
+	AllocationIdKey                       string = "AllocationId"
+	DefaultWhenEnabledKey                 string = "default_when_enabled"
+	PercentileKey                         string = "percentile"
+	FromKey                               string = "from"
+	ToKey                                 string = "to"
+	SeedKey                               string = "seed"
+	VariantKey                            string = "variant"
+	VariantsKey                           string = "variants"
+	ConfigurationValueKey                 string = "configuration_value"
 	PreservedSecretTypeTag                string = ".kubernetes.secret.type"
 	CertTypePem                           string = "application/x-pem-file"
 	CertTypePfx                           string = "application/x-pkcs12"
@@ -379,13 +398,18 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 	var featureFlagSection = map[string]interface{}{
 		FeatureFlagSectionName: make([]interface{}, 0),
 	}
+	clientEndpoint := ""
+	if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
+		clientEndpoint = manager.lastSuccessfulEndpoint
+	}
 	for _, setting := range deduplicateFeatureFlags {
-		var out interface{}
-		err := json.Unmarshal([]byte(*setting.Value), &out)
+		var featureFlag map[string]interface{}
+		err := json.Unmarshal([]byte(*setting.Value), &featureFlag)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
-		featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
+		updateFeatureFlagTelemetry(featureFlag, setting, clientEndpoint)
+		featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), featureFlag)
 	}
 
 	return featureFlagSection, settingsResponse.Etags, nil
@@ -892,5 +916,186 @@ func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
 		clients[start], clients[end] = clients[end], clients[start]
 		start++
 		end--
+	}
+}
+
+func calculateFeatureFlagId(setting azappconfig.Setting) string {
+	// Create the basic value string
+	featureFlagValue := *setting.Key + "\n"
+	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
+		featureFlagValue += *setting.Label
+	}
+
+	// Generate SHA-256 hash, and encode it to Base64
+	hash := sha256.Sum256([]byte(featureFlagValue))
+	encodedFeatureFlag := base64.StdEncoding.EncodeToString(hash[:])
+
+	// Replace '+' with '-' and '/' with '_'
+	encodedFeatureFlag = strings.ReplaceAll(encodedFeatureFlag, "+", "-")
+	encodedFeatureFlag = strings.ReplaceAll(encodedFeatureFlag, "/", "_")
+
+	// Remove all instances of "=" at the end of the string that were added as padding
+	if idx := strings.Index(encodedFeatureFlag, "="); idx != -1 {
+		encodedFeatureFlag = encodedFeatureFlag[:idx]
+	}
+
+	return encodedFeatureFlag
+}
+
+func createFeatureFlagReference(setting azappconfig.Setting, endpoint string) string {
+	featureFlagReference := fmt.Sprintf("%s/kv/%s", endpoint, *setting.Key)
+
+	// Check if the label is present and not empty
+	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
+		// Encode the label to ensure it is safe for URLs
+		encodedLabel := url.QueryEscape(*setting.Label)
+		featureFlagReference += fmt.Sprintf("?label=%s", encodedLabel)
+	}
+
+	return featureFlagReference
+}
+
+func generateAllocationId(featureFlag map[string]interface{}) string {
+	var rawAllocationId strings.Builder
+	var variantsForExperimentation []string
+
+	allocationSection, ok := featureFlag[AllocationKey].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	// Seed
+	seedValue := ""
+	if allocationSection[SeedKey] != nil {
+		seedValue = allocationSection[SeedKey].(string)
+	}
+	rawAllocationId.WriteString(fmt.Sprintf("seed=%v\ndefault_when_enabled=", seedValue))
+
+	// Default variant when enabled
+	if defaultVariant, exists := allocationSection[DefaultWhenEnabledKey]; exists {
+		variantsForExperimentation = append(variantsForExperimentation, defaultVariant.(string))
+		rawAllocationId.WriteString(fmt.Sprintf("%v", defaultVariant.(string)))
+	}
+
+	// Percentiles
+	rawAllocationId.WriteString("\npercentiles=")
+	if percentiles, exists := allocationSection[PercentileKey].([]interface{}); exists {
+		var sortedPercentiles []map[string]interface{}
+
+		// Filter and sort percentiles
+		for _, p := range percentiles {
+			pMap := p.(map[string]interface{})
+			from, fromExist := pMap[FromKey]
+			to, toExist := pMap[ToKey]
+			_, variantExist := pMap[VariantKey]
+			if fromExist && toExist && variantExist && from != to {
+				sortedPercentiles = append(sortedPercentiles, pMap)
+			}
+		}
+
+		sort.Slice(sortedPercentiles, func(i, j int) bool {
+			return sortedPercentiles[i][FromKey].(float64) < sortedPercentiles[j][FromKey].(float64)
+		})
+
+		for i, percentile := range sortedPercentiles {
+			variantsForExperimentation = append(variantsForExperimentation, percentile[VariantKey].(string))
+			rawAllocationId.WriteString(fmt.Sprintf("%v,%s,%v", percentile[FromKey].(float64), base64.StdEncoding.EncodeToString([]byte(percentile[VariantKey].(string))), percentile[ToKey].(float64)))
+			if i != len(sortedPercentiles)-1 {
+				rawAllocationId.WriteString(";")
+			}
+		}
+	}
+
+	// Short-circuit if no valid data
+	if len(variantsForExperimentation) == 0 && allocationSection[SeedKey] == nil {
+		return ""
+	}
+
+	rawAllocationId.WriteString("\nvariants=")
+	if len(variantsForExperimentation) != 0 {
+		variants, variantsExist := featureFlag[VariantsKey].([]interface{})
+		sortedVariants := make([]map[string]interface{}, 0)
+		if variantsExist {
+			for _, v := range variants {
+				if contains(variantsForExperimentation, v.(map[string]interface{})[NameKey].(string)) {
+					sortedVariants = append(sortedVariants, v.(map[string]interface{}))
+				}
+			}
+		}
+
+		sort.Slice(sortedVariants, func(i, j int) bool {
+			return sortedVariants[i][NameKey].(string) < sortedVariants[j][NameKey].(string)
+		})
+
+		for i, variant := range sortedVariants {
+			configurationValue := []byte("")
+			if _, exist := variant[ConfigurationValueKey]; exist {
+				configurationValue, _ = json.Marshal(jsonSorter(variant[ConfigurationValueKey]))
+			}
+			rawAllocationId.WriteString(fmt.Sprintf("%s,%s", base64.StdEncoding.EncodeToString([]byte(variant[NameKey].(string))), string(configurationValue)))
+			if i != len(sortedVariants)-1 {
+				rawAllocationId.WriteString(";")
+			}
+		}
+	}
+	// Hash the raw allocation ID
+	hash := sha256.Sum256([]byte(rawAllocationId.String()))
+	first15Bytes := hash[:15]
+
+	// Convert to base64 URL-safe string
+	allocationId := base64.RawURLEncoding.EncodeToString(first15Bytes)
+	return allocationId
+}
+
+func updateFeatureFlagTelemetry(featureFlag map[string]interface{}, setting azappconfig.Setting, endpoint string) {
+	if telemetry, ok := featureFlag[FeatureFlagTelemetryKey].(map[string]interface{}); ok {
+		if enabled, ok := telemetry[FeatureFlagEnabledKey].(bool); ok && enabled {
+			metadata, _ := telemetry[FeatureFlagMetadataKey].(map[string]interface{})
+			if metadata == nil {
+				metadata = make(map[string]interface{})
+			}
+
+			// Set the new metadata
+			metadata[FeatureFlagETagKey] = *setting.ETag
+			metadata[FeatureFlagIdKey] = calculateFeatureFlagId(setting)
+			metadata[FeatureFlagReferenceKey] = createFeatureFlagReference(setting, endpoint)
+			if allocationId := generateAllocationId(featureFlag); allocationId != "" {
+				metadata[AllocationIdKey] = allocationId
+			}
+			telemetry[FeatureFlagMetadataKey] = metadata
+		}
+	}
+}
+
+func contains(arr []string, target string) bool {
+	for _, a := range arr {
+		if a == target {
+			return true
+		}
+	}
+	return false
+}
+
+func jsonSorter(v interface{}) interface{} {
+	switch value := v.(type) {
+	case nil:
+		return nil
+	case []interface{}:
+		return value // Return arrays as-is
+	case map[string]interface{}:
+		sortedMap := make(map[string]interface{})
+		// Get keys and sort them
+		keys := make([]string, 0, len(value))
+		for k := range value {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		// Populate the sorted map
+		for _, k := range keys {
+			sortedMap[k] = jsonSorter(value[k]) // Recursively sort values
+		}
+		return sortedMap
+	default:
+		return v // Return other types (strings, numbers, etc.) as-is
 	}
 }

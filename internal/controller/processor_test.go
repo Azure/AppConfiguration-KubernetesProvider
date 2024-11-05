@@ -172,7 +172,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			secretMetadata2 := make(map[string]loader.KeyVaultSecretMetadata)
-			cachedSecretReferences := make(map[string]*loader.TargetSecretReference)
+			cachedK8sSecrets := make(map[string]*loader.TargetK8sSecretMetadata)
 			// multiple version secrets
 			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId:      &fakeId,
@@ -186,10 +186,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				SecretId:      &cachedFakeId,
 				SecretVersion: "fakeVersion",
 			}
-			cachedSecretReferences[secretName] = &loader.TargetSecretReference{
-				Type:                  corev1.SecretType("Opaque"),
-				SecretsMetadata:       secretMetadata2,
-				SecretResourceVersion: fakeSecretResourceVersion,
+			cachedK8sSecrets[secretName] = &loader.TargetK8sSecretMetadata{
+				Type:                    corev1.SecretType("Opaque"),
+				SecretsKeyVaultMetadata: secretMetadata2,
+				SecretResourceVersion:   fakeSecretResourceVersion,
 			}
 
 			allSettings := &loader.TargetKeyValueSettings{
@@ -199,10 +199,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						Type: corev1.SecretType("Opaque"),
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -248,7 +248,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				Settings:        &loader.TargetKeyValueSettings{},
 				ReconciliationState: &ReconciliationState{
 					NextSecretReferenceRefreshReconcileTime: tmpTime,
-					ExistingSecretReferences:                cachedSecretReferences,
+					ExistingK8sSecrets:                      cachedK8sSecrets,
 					Generation:                              1,
 					ConfigMapResourceVersion:                &fakeResourceVersion,
 				},
@@ -265,8 +265,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			_, _ = processor.Finish()
 
-			Expect(processor.ReconciliationState.ExistingSecretReferences[secretName].SecretsMetadata["testSecretKey"]).Should(Equal(allSettings.SecretReferences[secretName].SecretsMetadata["testSecretKey"]))
-			Expect(processor.ReconciliationState.ExistingSecretReferences[secretName].SecretsMetadata["testSecretKey2"]).Should(Equal(cachedSecretReferences[secretName].SecretsMetadata["testSecretKey2"]))
+			Expect(processor.ReconciliationState.ExistingK8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey"]).Should(Equal(allSettings.K8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey"]))
+			Expect(processor.ReconciliationState.ExistingK8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey2"]).Should(Equal(cachedK8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey2"]))
 		})
 	})
 
@@ -537,17 +537,17 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			secretMetadata2 := make(map[string]loader.KeyVaultSecretMetadata)
-			cachedSecretReferences := make(map[string]*loader.TargetSecretReference)
+			cachedK8sSecrets := make(map[string]*loader.TargetK8sSecretMetadata)
 			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &fakeId,
 			}
 			secretMetadata2["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &cachedFakeId,
 			}
-			cachedSecretReferences[secretName] = &loader.TargetSecretReference{
-				Type:                  corev1.SecretType("Opaque"),
-				SecretsMetadata:       secretMetadata2,
-				SecretResourceVersion: fakeSecretResourceVersion,
+			cachedK8sSecrets[secretName] = &loader.TargetK8sSecretMetadata{
+				Type:                    corev1.SecretType("Opaque"),
+				SecretsKeyVaultMetadata: secretMetadata2,
+				SecretResourceVersion:   fakeSecretResourceVersion,
 			}
 
 			newFakeEtag := azcore.ETag("fake-etag-1")
@@ -568,10 +568,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						Type: corev1.SecretType("Opaque"),
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -637,7 +637,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 							&fakeEtag,
 						},
 					},
-					ExistingSecretReferences: cachedSecretReferences,
+					ExistingK8sSecrets:       cachedK8sSecrets,
 					Generation:               1,
 					ConfigMapResourceVersion: &fakeResourceVersion,
 				},
@@ -656,7 +656,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			_, _ = processor.Finish()
 
-			Expect(processor.ReconciliationState.ExistingSecretReferences).Should(Equal(allSettings.SecretReferences))
+			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(allSettings.K8sSecrets))
 			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
 				KeyFilter: &testKey,
 			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
@@ -704,17 +704,17 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			secretMetadata2 := make(map[string]loader.KeyVaultSecretMetadata)
-			cachedSecretReferences := make(map[string]*loader.TargetSecretReference)
+			cachedK8sSecrets := make(map[string]*loader.TargetK8sSecretMetadata)
 			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &fakeId,
 			}
 			secretMetadata2["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &cachedFakeId,
 			}
-			cachedSecretReferences[secretName] = &loader.TargetSecretReference{
-				Type:                  corev1.SecretType("Opaque"),
-				SecretsMetadata:       secretMetadata2,
-				SecretResourceVersion: fakeSecretResourceVersion,
+			cachedK8sSecrets[secretName] = &loader.TargetK8sSecretMetadata{
+				Type:                    corev1.SecretType("Opaque"),
+				SecretsKeyVaultMetadata: secretMetadata2,
+				SecretResourceVersion:   fakeSecretResourceVersion,
 			}
 
 			newFakeEtag := azcore.ETag("fake-etag-1")
@@ -735,10 +735,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						Type: corev1.SecretType("Opaque"),
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -817,7 +817,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						},
 					},
 					FeatureFlagETags:         existingFeatureFlagEtags,
-					ExistingSecretReferences: cachedSecretReferences,
+					ExistingK8sSecrets:       cachedK8sSecrets,
 					Generation:               1,
 					ConfigMapResourceVersion: &fakeResourceVersion,
 				},
@@ -837,7 +837,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			_, _ = processor.Finish()
 
-			Expect(processor.ReconciliationState.ExistingSecretReferences).Should(Equal(allSettings.SecretReferences))
+			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(allSettings.K8sSecrets))
 			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
 				KeyFilter: &testKey,
 			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
@@ -890,17 +890,17 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			secretMetadata2 := make(map[string]loader.KeyVaultSecretMetadata)
-			cachedSecretReferences := make(map[string]*loader.TargetSecretReference)
+			cachedK8sSecrets := make(map[string]*loader.TargetK8sSecretMetadata)
 			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &fakeId,
 			}
 			secretMetadata2["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &cachedFakeId,
 			}
-			cachedSecretReferences[secretName] = &loader.TargetSecretReference{
-				Type:                  corev1.SecretType("Opaque"),
-				SecretsMetadata:       secretMetadata2,
-				SecretResourceVersion: fakeSecretResourceVersion,
+			cachedK8sSecrets[secretName] = &loader.TargetK8sSecretMetadata{
+				Type:                    corev1.SecretType("Opaque"),
+				SecretsKeyVaultMetadata: secretMetadata2,
+				SecretResourceVersion:   fakeSecretResourceVersion,
 			}
 
 			newFakeEtag := azcore.ETag("fake-etag-1")
@@ -924,10 +924,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						Type: corev1.SecretType("Opaque"),
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -1006,7 +1006,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						},
 					},
 					KeyValueETags:            existingKeyValueEtags,
-					ExistingSecretReferences: cachedSecretReferences,
+					ExistingK8sSecrets:       cachedK8sSecrets,
 					Generation:               1,
 					ConfigMapResourceVersion: &fakeResourceVersion,
 				},
@@ -1027,7 +1027,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			_, _ = processor.Finish()
 
-			Expect(processor.ReconciliationState.ExistingSecretReferences).Should(Equal(allSettingsReturnedBySecretRefresh.SecretReferences))
+			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(allSettingsReturnedBySecretRefresh.K8sSecrets))
 			// KeyValue Etag should not be updated
 			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
 				KeyFilter: &testKey,
@@ -1080,17 +1080,17 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			secretMetadata2 := make(map[string]loader.KeyVaultSecretMetadata)
-			cachedSecretReferences := make(map[string]*loader.TargetSecretReference)
+			cachedK8sSecrets := make(map[string]*loader.TargetK8sSecretMetadata)
 			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &fakeId,
 			}
 			secretMetadata2["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &cachedFakeId,
 			}
-			cachedSecretReferences[secretName] = &loader.TargetSecretReference{
-				Type:                  corev1.SecretType("Opaque"),
-				SecretsMetadata:       secretMetadata2,
-				SecretResourceVersion: fakeSecretResourceVersion,
+			cachedK8sSecrets[secretName] = &loader.TargetK8sSecretMetadata{
+				Type:                    corev1.SecretType("Opaque"),
+				SecretsKeyVaultMetadata: secretMetadata2,
+				SecretResourceVersion:   fakeSecretResourceVersion,
 			}
 
 			newFakeEtag := azcore.ETag("fake-etag-1")
@@ -1124,10 +1124,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						Type: corev1.SecretType("Opaque"),
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -1206,7 +1206,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						},
 					},
 					KeyValueETags:            existingKeyValueEtags,
-					ExistingSecretReferences: cachedSecretReferences,
+					ExistingK8sSecrets:       cachedK8sSecrets,
 					Generation:               1,
 					ConfigMapResourceVersion: &fakeResourceVersion,
 				},
@@ -1229,8 +1229,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			_, _ = processor.Finish()
 
 			// SecretsMetadata keeps the same when no changes in KVR
-			Expect(*processor.ReconciliationState.ExistingSecretReferences[secretName].SecretsMetadata["testSecretKey"].SecretId).Should(
-				Equal(*allSettingsReturnedByKeyValueRefresh.SecretReferences[secretName].SecretsMetadata["testSecretKey"].SecretId))
+			Expect(*processor.ReconciliationState.ExistingK8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey"].SecretId).Should(
+				Equal(*allSettingsReturnedByKeyValueRefresh.K8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey"].SecretId))
 			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
 				KeyFilter: &testKey,
 			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
@@ -1274,17 +1274,17 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			secretMetadata2 := make(map[string]loader.KeyVaultSecretMetadata)
-			cachedSecretReferences := make(map[string]*loader.TargetSecretReference)
+			cachedK8sSecrets := make(map[string]*loader.TargetK8sSecretMetadata)
 			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &fakeId,
 			}
 			secretMetadata2["testSecretKey"] = loader.KeyVaultSecretMetadata{
 				SecretId: &cachedFakeId,
 			}
-			cachedSecretReferences[secretName] = &loader.TargetSecretReference{
-				Type:                  corev1.SecretType("Opaque"),
-				SecretsMetadata:       secretMetadata2,
-				SecretResourceVersion: fakeSecretResourceVersion,
+			cachedK8sSecrets[secretName] = &loader.TargetK8sSecretMetadata{
+				Type:                    corev1.SecretType("Opaque"),
+				SecretsKeyVaultMetadata: secretMetadata2,
+				SecretResourceVersion:   fakeSecretResourceVersion,
 			}
 			fakeKeyValueEtag := azcore.ETag("fake-etag-1")
 			existingKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
@@ -1330,10 +1330,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						Type: corev1.SecretType("Opaque"),
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -1347,11 +1347,11 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						Type: corev1.SecretType("Opaque"),
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:                  corev1.SecretType("Opaque"),
-						SecretsMetadata:       secretMetadata,
-						SecretResourceVersion: fakeSecretResourceVersion,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
+						SecretResourceVersion:   fakeSecretResourceVersion,
 					},
 				},
 			}
@@ -1423,7 +1423,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 					NextFeatureFlagRefreshReconcileTime:     nowTime,
 					KeyValueETags:                           existingKeyValueEtags,
 					FeatureFlagETags:                        existingFeatureFlagEtags,
-					ExistingSecretReferences:                cachedSecretReferences,
+					ExistingK8sSecrets:                      cachedK8sSecrets,
 					Generation:                              1,
 					ConfigMapResourceVersion:                &fakeResourceVersion,
 				},
@@ -1444,7 +1444,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			_, _ = processor.Finish()
 
-			Expect(processor.ReconciliationState.ExistingSecretReferences).Should(Equal(cachedSecretReferences))
+			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(cachedK8sSecrets))
 			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
 				KeyFilter: &testKey,
 			}]).Should(Equal(existingKeyValueEtags[acpv1.Selector{
@@ -1473,7 +1473,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			_, _ = processor.Finish()
 
-			Expect(processor.ReconciliationState.ExistingSecretReferences).Should(Equal(allSettingsReturnedByKeyValueRefresh.SecretReferences))
+			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(allSettingsReturnedByKeyValueRefresh.K8sSecrets))
 			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
 				KeyFilter: &testKey,
 			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
@@ -1497,10 +1497,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 						Type: corev1.SecretType("Opaque"),
 					},
 				},
-				SecretReferences: map[string]*loader.TargetSecretReference{
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
 					secretName: {
-						Type:            corev1.SecretType("Opaque"),
-						SecretsMetadata: secretMetadata,
+						Type:                    corev1.SecretType("Opaque"),
+						SecretsKeyVaultMetadata: secretMetadata,
 					},
 				},
 			}
@@ -1518,7 +1518,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			_, _ = processor.Finish()
 
-			Expect(processor.ReconciliationState.ExistingSecretReferences).Should(Equal(allSettingsReturnedBySecretRefresh.SecretReferences))
+			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(allSettingsReturnedBySecretRefresh.K8sSecrets))
 			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
 				KeyFilter: &testKey,
 			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{

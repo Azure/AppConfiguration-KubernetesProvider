@@ -45,16 +45,16 @@ type TargetKeyValueSettings struct {
 	ConfigMapSettings map[string]string
 	// Multiple secrets could be managed
 	SecretSettings   map[string]corev1.Secret
-	SecretReferences map[string]*TargetSecretReference
+	K8sSecrets       map[string]*TargetK8sSecretMetadata
 	KeyValueETags    map[acpv1.Selector][]*azcore.ETag
 	FeatureFlagETags map[acpv1.Selector][]*azcore.ETag
 	SentinelETags    map[acpv1.Sentinel]*azcore.ETag
 }
 
-type TargetSecretReference struct {
-	Type                  corev1.SecretType
-	SecretsMetadata       map[string]KeyVaultSecretMetadata
-	SecretResourceVersion string
+type TargetK8sSecretMetadata struct {
+	Type                    corev1.SecretType
+	SecretsKeyVaultMetadata map[string]KeyVaultSecretMetadata
+	SecretResourceVersion   string
 }
 
 type RawSettings struct {
@@ -62,7 +62,7 @@ type RawSettings struct {
 	IsJsonContentTypeMap map[string]bool
 	FeatureFlagSettings  map[string]interface{}
 	SecretSettings       map[string]corev1.Secret
-	SecretReferences     map[string]*TargetSecretReference
+	K8sSecrets           map[string]*TargetK8sSecretMetadata
 	KeyValueETags        map[acpv1.Selector][]*azcore.ETag
 	FeatureFlagETags     map[acpv1.Selector][]*azcore.ETag
 }
@@ -73,7 +73,7 @@ type ConfigurationSettingsRetriever interface {
 	CheckPageETags(ctx context.Context, eTags map[acpv1.Selector][]*azcore.ETag) (bool, error)
 	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
-	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetSecretReference, kvResolver SecretReferenceResolver) (*TargetKeyValueSettings, error)
+	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetK8sSecretMetadata, kvResolver SecretReferenceResolver) (*TargetKeyValueSettings, error)
 }
 
 type ServicePrincipleAuthenticationParameters struct {
@@ -142,7 +142,7 @@ func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context,
 	return &TargetKeyValueSettings{
 		ConfigMapSettings: typedSettings,
 		SecretSettings:    rawSettings.SecretSettings,
-		SecretReferences:  rawSettings.SecretReferences,
+		K8sSecrets:        rawSettings.K8sSecrets,
 		KeyValueETags:     rawSettings.KeyValueETags,
 		FeatureFlagETags:  rawSettings.FeatureFlagETags,
 		SentinelETags:     initializedSentinelETags,
@@ -170,7 +170,7 @@ func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Conte
 	return &TargetKeyValueSettings{
 		ConfigMapSettings: typedSettings,
 		SecretSettings:    rawSettings.SecretSettings,
-		SecretReferences:  rawSettings.SecretReferences,
+		K8sSecrets:        rawSettings.K8sSecrets,
 		KeyValueETags:     rawSettings.KeyValueETags,
 	}, nil
 }
@@ -217,14 +217,14 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 		KeyValueSettings:     make(map[string]*string),
 		IsJsonContentTypeMap: make(map[string]bool),
 		SecretSettings:       make(map[string]corev1.Secret),
-		SecretReferences:     make(map[string]*TargetSecretReference),
+		K8sSecrets:           make(map[string]*TargetK8sSecretMetadata),
 		KeyValueETags:        settingsResponse.Etags,
 	}
 
 	if csl.Spec.Secret != nil {
-		rawSettings.SecretReferences[csl.Spec.Secret.Target.SecretName] = &TargetSecretReference{
-			Type:            corev1.SecretTypeOpaque,
-			SecretsMetadata: make(map[string]KeyVaultSecretMetadata),
+		rawSettings.K8sSecrets[csl.Spec.Secret.Target.SecretName] = &TargetK8sSecretMetadata{
+			Type:                    corev1.SecretTypeOpaque,
+			SecretsKeyVaultMetadata: make(map[string]KeyVaultSecretMetadata),
 		}
 	}
 
@@ -283,13 +283,13 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 				secretName = csl.Spec.Secret.Target.SecretName
 			}
 
-			if _, ok := rawSettings.SecretReferences[secretName]; !ok {
-				rawSettings.SecretReferences[secretName] = &TargetSecretReference{
-					Type:            secretType,
-					SecretsMetadata: make(map[string]KeyVaultSecretMetadata),
+			if _, ok := rawSettings.K8sSecrets[secretName]; !ok {
+				rawSettings.K8sSecrets[secretName] = &TargetK8sSecretMetadata{
+					Type:                    secretType,
+					SecretsKeyVaultMetadata: make(map[string]KeyVaultSecretMetadata),
 				}
 			}
-			rawSettings.SecretReferences[secretName].SecretsMetadata[trimmedKey] = *secretMetadata
+			rawSettings.K8sSecrets[secretName].SecretsKeyVaultMetadata[trimmedKey] = *secretMetadata
 		default:
 			rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 			rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
@@ -297,10 +297,10 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 	}
 
 	// resolve the secret reference settings
-	if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.SecretReferences, resolver); err != nil {
+	if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.K8sSecrets, resolver); err != nil {
 		return nil, err
 	} else {
-		rawSettings.SecretReferences = resolvedSecret.SecretReferences
+		rawSettings.K8sSecrets = resolvedSecret.K8sSecrets
 		err = MergeSecret(rawSettings.SecretSettings, resolvedSecret.SecretSettings)
 		if err != nil {
 			return nil, err
@@ -393,7 +393,7 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 
 func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 	ctx context.Context,
-	secretReferencesToResolve map[string]*TargetSecretReference,
+	secretReferencesToResolve map[string]*TargetK8sSecretMetadata,
 	resolver SecretReferenceResolver) (*TargetKeyValueSettings, error) {
 	if resolver == nil {
 		if kvResolver, err := csl.createSecretReferenceResolver(ctx); err != nil {
@@ -412,9 +412,9 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 
 		var eg errgroup.Group
 		if targetSecretReference.Type == corev1.SecretTypeOpaque {
-			if len(targetSecretReference.SecretsMetadata) > 0 {
+			if len(targetSecretReference.SecretsKeyVaultMetadata) > 0 {
 				lock := &sync.Mutex{}
-				for key, kvReference := range targetSecretReference.SecretsMetadata {
+				for key, kvReference := range targetSecretReference.SecretsKeyVaultMetadata {
 					currentKey := key
 					currentReference := kvReference
 					eg.Go(func() error {
@@ -425,9 +425,9 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 						lock.Lock()
 						defer lock.Unlock()
 						resolvedSecrets[name].Data[currentKey] = []byte(*resolvedSecret.Value)
-						currentSecretMetadata := targetSecretReference.SecretsMetadata[currentKey]
+						currentSecretMetadata := targetSecretReference.SecretsKeyVaultMetadata[currentKey]
 						currentSecretMetadata.SecretId = resolvedSecret.ID
-						secretReferencesToResolve[name].SecretsMetadata[currentKey] = currentSecretMetadata
+						secretReferencesToResolve[name].SecretsKeyVaultMetadata[currentKey] = currentSecretMetadata
 						return nil
 					})
 				}
@@ -438,10 +438,10 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 			}
 		} else if targetSecretReference.Type == corev1.SecretTypeTLS {
 			eg.Go(func() error {
-				resolvedSecret, err := resolver.Resolve(targetSecretReference.SecretsMetadata[name], ctx)
-				currentSecretMetadata := targetSecretReference.SecretsMetadata[name]
+				resolvedSecret, err := resolver.Resolve(targetSecretReference.SecretsKeyVaultMetadata[name], ctx)
+				currentSecretMetadata := targetSecretReference.SecretsKeyVaultMetadata[name]
 				currentSecretMetadata.SecretId = resolvedSecret.ID
-				secretReferencesToResolve[name].SecretsMetadata[name] = currentSecretMetadata
+				secretReferencesToResolve[name].SecretsKeyVaultMetadata[name] = currentSecretMetadata
 				if err != nil {
 					return fmt.Errorf("fail to resolve the Key Vault reference type setting '%s': %s", name, err.Error())
 				}
@@ -474,8 +474,8 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 	}
 
 	return &TargetKeyValueSettings{
-		SecretSettings:   resolvedSecrets,
-		SecretReferences: secretReferencesToResolve,
+		SecretSettings: resolvedSecrets,
+		K8sSecrets:     secretReferencesToResolve,
 	}, nil
 }
 

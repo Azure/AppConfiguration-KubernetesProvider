@@ -310,23 +310,23 @@ func shouldCreateOrUpdate(processor *AppConfigurationProviderProcessor, secretNa
 		return true
 	}
 
-	existingSecretReferences := processor.ReconciliationState.ExistingSecretReferences
-	if _, ok := existingSecretReferences[secretName]; !ok {
+	existingK8sSecrets := processor.ReconciliationState.ExistingK8sSecrets
+	if _, ok := existingK8sSecrets[secretName]; !ok {
 		return true
 	}
 
-	secretReference := processor.Settings.SecretReferences[secretName]
-	if len(existingSecretReferences[secretName].SecretsMetadata) != len(secretReference.SecretsMetadata) {
+	k8sSecretMetadata := processor.Settings.K8sSecrets[secretName]
+	if len(existingK8sSecrets[secretName].SecretsKeyVaultMetadata) != len(k8sSecretMetadata.SecretsKeyVaultMetadata) {
 		return true
 	}
 
-	for key, secretMetadata := range secretReference.SecretsMetadata {
-		if _, ok := existingSecretReferences[secretName].SecretsMetadata[key]; !ok {
+	for key, secretMetadata := range k8sSecretMetadata.SecretsKeyVaultMetadata {
+		if _, ok := existingK8sSecrets[secretName].SecretsKeyVaultMetadata[key]; !ok {
 			return true
 		}
 		if secretMetadata.SecretId != nil &&
-			existingSecretReferences[secretName].SecretsMetadata[key].SecretId != nil &&
-			*(existingSecretReferences[secretName].SecretsMetadata[key].SecretId) != *(secretMetadata.SecretId) {
+			existingK8sSecrets[secretName].SecretsKeyVaultMetadata[key].SecretId != nil &&
+			*(existingK8sSecrets[secretName].SecretsKeyVaultMetadata[key].SecretId) != *(secretMetadata.SecretId) {
 			return true
 		}
 	}

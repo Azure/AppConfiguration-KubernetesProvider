@@ -431,10 +431,10 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 					ContentType: &contentType,
 				},
 			}
-			secretReferencesToResolve := map[string]*TargetSecretReference{
+			secretReferencesToResolve := map[string]*TargetK8sSecretMetadata{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					SecretsMetadata: map[string]KeyVaultSecretMetadata{
+					SecretsKeyVaultMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -484,10 +484,10 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				},
 			}
 
-			secretReferencesToResolve := map[string]*TargetSecretReference{
+			secretReferencesToResolve := map[string]*TargetK8sSecretMetadata{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					SecretsMetadata: map[string]KeyVaultSecretMetadata{
+					SecretsKeyVaultMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -540,10 +540,10 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				},
 			}
 
-			secretReferencesToResolve := map[string]*TargetSecretReference{
+			secretReferencesToResolve := map[string]*TargetK8sSecretMetadata{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					SecretsMetadata: map[string]KeyVaultSecretMetadata{
+					SecretsKeyVaultMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -596,10 +596,10 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				},
 			}
 
-			secretReferencesToResolve := map[string]*TargetSecretReference{
+			secretReferencesToResolve := map[string]*TargetK8sSecretMetadata{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					SecretsMetadata: map[string]KeyVaultSecretMetadata{
+					SecretsKeyVaultMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -652,10 +652,10 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				},
 			}
 
-			secretReferencesToResolve := map[string]*TargetSecretReference{
+			secretReferencesToResolve := map[string]*TargetK8sSecretMetadata{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					SecretsMetadata: map[string]KeyVaultSecretMetadata{
+					SecretsKeyVaultMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -711,10 +711,10 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				},
 			}
 
-			secretReferencesToResolve := map[string]*TargetSecretReference{
+			secretReferencesToResolve := map[string]*TargetK8sSecretMetadata{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					SecretsMetadata: map[string]KeyVaultSecretMetadata{
+					SecretsKeyVaultMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -768,10 +768,10 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				},
 			}
 
-			secretReferencesToResolve := map[string]*TargetSecretReference{
+			secretReferencesToResolve := map[string]*TargetK8sSecretMetadata{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					SecretsMetadata: map[string]KeyVaultSecretMetadata{
+					SecretsKeyVaultMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",
@@ -825,10 +825,10 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				},
 			}
 
-			secretReferencesToResolve := map[string]*TargetSecretReference{
+			secretReferencesToResolve := map[string]*TargetK8sSecretMetadata{
 				secretName: {
 					Type: corev1.SecretTypeTLS,
-					SecretsMetadata: map[string]KeyVaultSecretMetadata{
+					SecretsKeyVaultMetadata: map[string]KeyVaultSecretMetadata{
 						secretName: {
 							HostName:      "fake-vault",
 							SecretName:    "fake-secret",

@@ -120,12 +120,14 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 	}
 
 	if spec.Configuration.Refresh != nil {
-		sentinelMap := make(map[acpv1.Sentinel]bool)
-		for _, sentinel := range spec.Configuration.Refresh.Monitoring.Sentinels {
-			if _, ok := sentinelMap[sentinel]; ok {
-				return loader.NewArgumentError("spec.configuration.refresh.monitoring.keyValues", fmt.Errorf("monitoring duplicated key '%s'", sentinel.Key))
+		if spec.Configuration.Refresh.Monitoring != nil {
+			sentinelMap := make(map[acpv1.Sentinel]bool)
+			for _, sentinel := range spec.Configuration.Refresh.Monitoring.Sentinels {
+				if _, ok := sentinelMap[sentinel]; ok {
+					return loader.NewArgumentError("spec.configuration.refresh.monitoring.keyValues", fmt.Errorf("monitoring duplicated key '%s'", sentinel.Key))
+				}
+				sentinelMap[sentinel] = true
 			}
-			sentinelMap[sentinel] = true
 		}
 
 		if spec.Configuration.Refresh.Interval != "" {
@@ -301,4 +303,33 @@ func verifySelectorObject(selector acpv1.Selector) error {
 	}
 
 	return nil
+}
+
+func shouldCreateOrUpdate(processor *AppConfigurationProviderProcessor, secretName string) bool {
+	if processor.ShouldReconcile {
+		return true
+	}
+
+	existingK8sSecrets := processor.ReconciliationState.ExistingK8sSecrets
+	if _, ok := existingK8sSecrets[secretName]; !ok {
+		return true
+	}
+
+	k8sSecretMetadata := processor.Settings.K8sSecrets[secretName]
+	if len(existingK8sSecrets[secretName].SecretsKeyVaultMetadata) != len(k8sSecretMetadata.SecretsKeyVaultMetadata) {
+		return true
+	}
+
+	for key, secretMetadata := range k8sSecretMetadata.SecretsKeyVaultMetadata {
+		if _, ok := existingK8sSecrets[secretName].SecretsKeyVaultMetadata[key]; !ok {
+			return true
+		}
+		if secretMetadata.SecretId != nil &&
+			existingK8sSecrets[secretName].SecretsKeyVaultMetadata[key].SecretId != nil &&
+			*(existingK8sSecrets[secretName].SecretsKeyVaultMetadata[key].SecretId) != *(secretMetadata.SecretId) {
+			return true
+		}
+	}
+
+	return false
 }

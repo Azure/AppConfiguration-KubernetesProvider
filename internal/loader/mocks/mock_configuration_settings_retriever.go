@@ -12,7 +12,6 @@ import (
 
 	azcore "github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	gomock "github.com/golang/mock/gomock"
-	v10 "k8s.io/api/core/v1"
 )
 
 // MockConfigurationSettingsRetriever is a mock of ConfigurationSettingsRetriever interface.
@@ -52,6 +51,21 @@ func (m *MockConfigurationSettingsRetriever) CheckAndRefreshSentinels(arg0 conte
 func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckAndRefreshSentinels(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAndRefreshSentinels", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckAndRefreshSentinels), arg0, arg1, arg2)
+}
+
+// CheckPageETags mocks base method.
+func (m *MockConfigurationSettingsRetriever) CheckPageETags(arg0 context.Context, arg1 map[v1.Selector][]*azcore.ETag) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckPageETags", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckPageETags indicates an expected call of CheckPageETags.
+func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckPageETags(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPageETags", reflect.TypeOf((*MockConfigurationSettingsRetriever)(nil).CheckPageETags), arg0, arg1)
 }
 
 // CreateTargetSettings mocks base method.
@@ -100,10 +114,10 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) RefreshKeyValueSetting
 }
 
 // ResolveSecretReferences mocks base method.
-func (m *MockConfigurationSettingsRetriever) ResolveSecretReferences(arg0 context.Context, arg1 map[string]*loader.TargetSecretReference, arg2 loader.SecretReferenceResolver) (map[string]v10.Secret, error) {
+func (m *MockConfigurationSettingsRetriever) ResolveSecretReferences(arg0 context.Context, arg1 map[string]*loader.TargetK8sSecretMetadata, arg2 loader.SecretReferenceResolver) (*loader.TargetKeyValueSettings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResolveSecretReferences", arg0, arg1, arg2)
-	ret0, _ := ret[0].(map[string]v10.Secret)
+	ret0, _ := ret[0].(*loader.TargetKeyValueSettings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

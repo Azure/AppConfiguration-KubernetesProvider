@@ -249,9 +249,13 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 
 	/* Create ConfigMap from key-value settings */
 	if processor.RefreshOptions.ConfigMapSettingPopulated {
-		result, err := reconciler.createOrUpdateConfigMap(ctx, provider, processor.Settings)
-		if err != nil {
-			return result, nil
+		if !DataChanged(&existingConfigMap, provider.Spec.Target.ConfigMapData, processor.Settings.ConfigMapSettings) {
+			klog.V(5).Infof("Skip updating the configMap %q in %q namespace since data is not changed", provider.Spec.Target.ConfigMapName, provider.Namespace)
+		} else {
+			result, err := reconciler.createOrUpdateConfigMap(ctx, provider, processor.Settings)
+			if err != nil {
+				return result, nil
+			}
 		}
 	}
 
@@ -273,7 +277,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 			}
 		}
 
-		result, err := reconciler.createOrUpdateSecrets(ctx, provider, processor)
+		result, err := reconciler.createOrUpdateSecrets(ctx, provider, processor, existingSecrets)
 		if err != nil {
 			return result, nil
 		}
@@ -415,7 +419,8 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets(
 	ctx context.Context,
 	provider *acpv1.AzureAppConfigurationProvider,
-	processor *AppConfigurationProviderProcessor) (reconcile.Result, error) {
+	processor *AppConfigurationProviderProcessor,
+	existingSecrets map[string]corev1.Secret) (reconcile.Result, error) {
 	if len(processor.Settings.SecretSettings) == 0 {
 		klog.V(3).Info("No secret settings are fetched from Azure AppConfiguration")
 	}
@@ -430,7 +435,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 	}
 
 	for secretName, secret := range processor.Settings.SecretSettings {
-		if !shouldCreateOrUpdate(processor, secretName) {
+		if !shouldCreateOrUpdate(processor, secretName, existingSecrets) {
 			if _, ok := reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName]; ok {
 				processor.Settings.K8sSecrets[secretName].SecretResourceVersion = reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName].SecretResourceVersion
 			}

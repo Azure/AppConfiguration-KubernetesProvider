@@ -1214,7 +1214,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(string(secret.Data["testSecretKey"])).Should(Equal("testSecretValue"))
 			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 			Expect(secret.Annotations["azconfig.io/LastReconcileTime"]).ShouldNot(Equal(secretLastReconcileTime))
-			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).ShouldNot(Equal(configmapLastReconcileTime))
+			// Since no data change in configMap, the last reconcile time should not change
+			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).Should(Equal(configmapLastReconcileTime))
 
 			_ = k8sClient.Delete(ctx, configProvider)
 		})
@@ -1340,7 +1341,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(string(secret.Data["testSecretKey"])).Should(Equal("testSecretValue"))
 			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 			Expect(secret.Annotations["azconfig.io/LastReconcileTime"]).ShouldNot(Equal(secretLastReconcileTime))
-			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).ShouldNot(Equal(configmapLastReconcileTime))
+			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).Should(Equal(configmapLastReconcileTime))
 
 			_ = k8sClient.Delete(ctx, configProvider)
 		})

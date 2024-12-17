@@ -601,6 +601,84 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			_ = k8sClient.Delete(ctx, configProvider)
 		})
 
+		It("Should on-demand refresh configMap", func() {
+			By("By updating the provider's annotations and trigger reconciliation")
+			mapResult := make(map[string]string)
+			mapResult["testKey"] = "testValue"
+			mapResult["testKey2"] = "testValue2"
+			mapResult["testKey3"] = "testValue3"
+
+			allSettings := &loader.TargetKeyValueSettings{
+				ConfigMapSettings: mapResult,
+			}
+
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+
+			ctx := context.Background()
+			providerName := "on-demand-refresh-appconfigurationprovider-1"
+			configMapName := "configmap-on-demand-refresh"
+			configProvider := &acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "appconfig.kubernetes.config/v1",
+					Kind:       "AzureAppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        providerName,
+					Namespace:   ProviderNamespace,
+					Annotations: map[string]string{"foo": "fooValue"},
+				},
+				Spec: acpv1.AzureAppConfigurationProviderSpec{
+					Endpoint: &EndpointName,
+					Target: acpv1.ConfigurationGenerationParameters{
+						ConfigMapName: configMapName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
+			configmap := &corev1.ConfigMap{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(configmap.Name).Should(Equal(configMapName))
+			Expect(configmap.Namespace).Should(Equal(ProviderNamespace))
+			Expect(configmap.Data["testKey"]).Should(Equal("testValue"))
+			Expect(configmap.Data["testKey2"]).Should(Equal("testValue2"))
+			Expect(configmap.Data["testKey3"]).Should(Equal("testValue3"))
+
+			mapResult2 := make(map[string]string)
+			mapResult2["testKey"] = "newtestValue"
+			mapResult2["testKey2"] = "newtestValue2"
+			mapResult2["testKey3"] = "newtestValue3"
+
+			allSettings2 := &loader.TargetKeyValueSettings{
+				ConfigMapSettings: mapResult2,
+			}
+
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+
+			_ = k8sClient.Get(ctx, types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}, configProvider)
+			configProvider.ObjectMeta.Annotations["foo"] = "fooValue2"
+
+			Expect(k8sClient.Update(ctx, configProvider)).Should(Succeed())
+
+			time.Sleep(5 * time.Second)
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(configmap.Data["testKey"]).Should(Equal("newtestValue"))
+			Expect(configmap.Data["testKey2"]).Should(Equal("newtestValue2"))
+			Expect(configmap.Data["testKey3"]).Should(Equal("newtestValue3"))
+
+			_ = k8sClient.Delete(ctx, configProvider)
+		})
+
 		It("Should refresh configMap", func() {
 			By("By sentinel value updated in Azure App Configuration")
 			mapResult := make(map[string]string)

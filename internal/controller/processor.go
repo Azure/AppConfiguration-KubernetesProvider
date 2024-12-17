@@ -227,13 +227,7 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 
 	// Only resolve the secret references that not specified the secret version
 	secretReferencesToSolve := make(map[string]*loader.TargetK8sSecretMetadata)
-	copiedSecretReferences := make(map[string]*loader.TargetK8sSecretMetadata)
 	for secretName, k8sSecret := range reconcileState.ExistingK8sSecrets {
-		copiedSecretReferences[secretName] = &loader.TargetK8sSecretMetadata{
-			Type:                    k8sSecret.Type,
-			SecretsKeyVaultMetadata: make(map[string]loader.KeyVaultSecretMetadata),
-		}
-
 		for key, secretMetadata := range k8sSecret.SecretsKeyVaultMetadata {
 			if secretMetadata.SecretVersion == "" {
 				if secretReferencesToSolve[secretName] == nil {
@@ -244,7 +238,6 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 				}
 				secretReferencesToSolve[secretName].SecretsKeyVaultMetadata[key] = secretMetadata
 			}
-			copiedSecretReferences[secretName].SecretsKeyVaultMetadata[key] = secretMetadata
 		}
 	}
 
@@ -253,19 +246,20 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 		return err
 	}
 
+	secrets := make(map[string]corev1.Secret)
+	for key, secret := range existingSecrets {
+		secrets[key] = *secret.DeepCopy()
+	}
+
 	for secretName, resolvedSecret := range resolvedSecrets.SecretSettings {
-		existingSecret, ok := existingSecrets[secretName]
+		existingSecret, ok := secrets[secretName]
 		if ok {
 			maps.Copy(existingSecret.Data, resolvedSecret.Data)
 		}
 	}
 
-	for secretName, k8sSecret := range resolvedSecrets.K8sSecrets {
-		maps.Copy(copiedSecretReferences[secretName].SecretsKeyVaultMetadata, k8sSecret.SecretsKeyVaultMetadata)
-	}
-
-	processor.Settings.SecretSettings = existingSecrets
-	processor.Settings.K8sSecrets = copiedSecretReferences
+	processor.Settings.SecretSettings = secrets
+	processor.Settings.K8sSecrets = reconcileState.ExistingK8sSecrets
 	processor.RefreshOptions.SecretSettingPopulated = true
 
 	// Update next refresh time only if settings updated successfully

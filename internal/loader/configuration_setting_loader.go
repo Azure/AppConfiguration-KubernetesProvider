@@ -434,9 +434,6 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 						lock.Lock()
 						defer lock.Unlock()
 						resolvedSecrets[name].Data[currentKey] = []byte(*resolvedSecret.Value)
-						currentSecretMetadata := targetSecretReference.SecretsKeyVaultMetadata[currentKey]
-						currentSecretMetadata.SecretId = resolvedSecret.ID
-						secretReferencesToResolve[name].SecretsKeyVaultMetadata[currentKey] = currentSecretMetadata
 						return nil
 					})
 				}
@@ -448,9 +445,6 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 		} else if targetSecretReference.Type == corev1.SecretTypeTLS {
 			eg.Go(func() error {
 				resolvedSecret, err := resolver.Resolve(targetSecretReference.SecretsKeyVaultMetadata[name], ctx)
-				currentSecretMetadata := targetSecretReference.SecretsKeyVaultMetadata[name]
-				currentSecretMetadata.SecretId = resolvedSecret.ID
-				secretReferencesToResolve[name].SecretsKeyVaultMetadata[name] = currentSecretMetadata
 				if err != nil {
 					return fmt.Errorf("fail to resolve the Key Vault reference type setting '%s': %s", name, err.Error())
 				}

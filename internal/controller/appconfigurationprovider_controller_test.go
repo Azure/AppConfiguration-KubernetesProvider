@@ -13,7 +13,6 @@ import (
 	acpv1 "azappconfig/provider/api/v1"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -1107,11 +1106,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			secretResult["testSecretKey"] = []byte("testSecretValue")
 
 			secretName := "secret-to-be-modified"
-			var fakeId azsecrets.ID = "fakeSecretId"
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
-			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
-				SecretId: &fakeId,
-			}
+			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{}
 
 			allSettings := &loader.TargetKeyValueSettings{
 				SecretSettings: map[string]corev1.Secret{
@@ -1231,11 +1227,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			secretResult["testSecretKey"] = []byte("testSecretValue")
 
 			secretName := "secret-to-be-deleted"
-			var fakeId azsecrets.ID = "fakeSecretId"
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
-			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
-				SecretId: &fakeId,
-			}
+			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{}
 
 			allSettings := &loader.TargetKeyValueSettings{
 				SecretSettings: map[string]corev1.Secret{
@@ -1357,10 +1350,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			secretResult["testSecretKey"] = []byte("testSecretValue")
 
 			secretName := "secret-to-be-refreshed-3"
-			var fakeId azsecrets.ID = "fakeSecretId"
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
-				SecretId: &fakeId,
+				HostName:      "fake-host",
+				SecretVersion: "",
+				SecretName:    "fake-secret",
 			}
 
 			allSettings := &loader.TargetKeyValueSettings{
@@ -1450,10 +1444,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			var newFakeId azsecrets.ID = "newFakeSecretId"
 			newSecretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			newSecretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
-				SecretId: &newFakeId,
+				HostName:      "fake-host",
+				SecretVersion: "",
+				SecretName:    "fake-secret",
 			}
 			mockedSecretReference := make(map[string]*loader.TargetK8sSecretMetadata)
 			mockedSecretReference[secretName] = &loader.TargetK8sSecretMetadata{
@@ -1751,7 +1746,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 
-			time.Sleep(5 * time.Second)
+			time.Sleep(6 * time.Second)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
@@ -1769,7 +1764,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
 
-			time.Sleep(5 * time.Second)
+			time.Sleep(7 * time.Second)
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
@@ -1795,10 +1790,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			secretResult["testSecretKey"] = []byte("testSecretValue")
 
 			secretName := "secret-to-be-refreshed-4"
-			var fakeId azsecrets.ID = "fakeSecretId"
 			secretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			secretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
-				SecretId: &fakeId,
+				HostName:      "fake-host",
+				SecretVersion: "",
+				SecretName:    "fake-secret",
 			}
 
 			allSettings := &loader.TargetKeyValueSettings{
@@ -1933,10 +1929,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			var newFakeId azsecrets.ID = "newFakeSecretId"
 			newSecretMetadata := make(map[string]loader.KeyVaultSecretMetadata)
 			newSecretMetadata["testSecretKey"] = loader.KeyVaultSecretMetadata{
-				SecretId: &newFakeId,
+				HostName:      "fake-host",
+				SecretVersion: "",
+				SecretName:    "fake-secret",
 			}
 			mockedSecretReference := make(map[string]*loader.TargetK8sSecretMetadata)
 			mockedSecretReference[secretName] = &loader.TargetK8sSecretMetadata{

@@ -21,6 +21,7 @@ package controller
 import (
 	acpv1 "azappconfig/provider/api/v1"
 	"azappconfig/provider/internal/loader"
+	"azappconfig/provider/internal/loader/mocks"
 	"context"
 	"errors"
 	"strconv"
@@ -46,6 +47,7 @@ type AzureAppConfigurationProviderReconciler struct {
 	Scheme                  *runtime.Scheme
 	Retriever               loader.ConfigurationSettingsRetriever
 	ProvidersReconcileState map[types.NamespacedName]*ReconciliationState
+	MockedRetrievers        map[types.NamespacedName]*mocks.MockConfigurationSettingsRetriever
 }
 
 type ReconciliationState struct {
@@ -221,10 +223,11 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 	}
 	var retriever loader.ConfigurationSettingsRetriever
-	if reconciler.Retriever == nil {
+	if reconciler.MockedRetrievers == nil {
 		retriever = configLoader
 	} else {
-		retriever = reconciler.Retriever
+		// Use the mocked retrievers for testing
+		retriever = reconciler.MockedRetrievers[req.NamespacedName]
 	}
 
 	ctx = context.WithValue(ctx, loader.RequestTracingKey, loader.RequestTracing{

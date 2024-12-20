@@ -21,10 +21,10 @@ package controller
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
@@ -48,10 +48,10 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
-var mockCtrl *gomock.Controller
-var mockConfigurationSettings *mocks.MockConfigurationSettingsRetriever
 var ctx context.Context
 var cancel context.CancelFunc
+var mu sync.Mutex
+var mockedRetrievers map[types.NamespacedName]*mocks.MockConfigurationSettingsRetriever
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -86,14 +86,12 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	mockCtrl = gomock.NewController(GinkgoT())
-	mockConfigurationSettings = mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
-
+	mockedRetrievers = make(map[types.NamespacedName]*mocks.MockConfigurationSettingsRetriever)
 	err = (&AzureAppConfigurationProviderReconciler{
 		Client:                  k8sManager.GetClient(),
 		Scheme:                  k8sManager.GetScheme(),
-		Retriever:               mockConfigurationSettings,
 		ProvidersReconcileState: make(map[types.NamespacedName]*ReconciliationState),
+		MockedRetrievers:        mockedRetrievers,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -110,7 +108,6 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	cancel()
-	mockCtrl.Finish()
 	err := testEnv.Stop()
 	if err != nil {
 		time.Sleep(1 * time.Minute)

@@ -5,6 +5,7 @@ package controller
 
 import (
 	"azappconfig/provider/internal/loader"
+	"azappconfig/provider/internal/loader/mocks"
 	"context"
 	"time"
 
@@ -94,9 +95,11 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			fakeEtag := azcore.ETag("fake-etag")
 			fakeResourceVersion := "1"
 
+			mockCtrl := gomock.NewController(GinkgoT())
+			mockedRetriever := mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
 			processor := AppConfigurationProviderProcessor{
 				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
+				Retriever:       mockedRetriever,
 				Provider:        configProvider,
 				ShouldReconcile: false,
 				Settings:        &loader.TargetKeyValueSettings{},
@@ -119,7 +122,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			expectedNextKeyValueRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(5 * time.Second))
 
 			//Sentinel Etag is updated
-			mockConfigurationSettings.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+			mockedRetriever.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(
 				true,
 				map[acpv1.Sentinel]*azcore.ETag{
 					{
@@ -132,7 +135,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				nil,
 			)
 
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockedRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			_ = processor.PopulateSettings(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				ResourceVersion: fakeResourceVersion,
@@ -147,6 +150,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				Key: sentinelKey2,
 			}]).Should(Equal(&newFakeEtag2))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
+
+			mockCtrl.Finish()
 		})
 
 		It("Secret refresh can work with multiple version secrets when secret refresh enabled", func() {
@@ -240,9 +245,11 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			fakeResourceVersion := "1"
 			tmpTime := metav1.Now()
+			mockCtrl := gomock.NewController(GinkgoT())
+			mockedRetriever := mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
 			processor := AppConfigurationProviderProcessor{
 				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
+				Retriever:       mockedRetriever,
 				Provider:        configProvider,
 				ShouldReconcile: false,
 				Settings:        &loader.TargetKeyValueSettings{},
@@ -257,7 +264,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			// Only resolve non-version Key Vault references
-			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockedRetriever.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			_ = processor.PopulateSettings(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				ResourceVersion: fakeResourceVersion,
@@ -267,6 +274,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			Expect(processor.ReconciliationState.ExistingK8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey"]).Should(Equal(allSettings.K8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey"]))
 			Expect(processor.ReconciliationState.ExistingK8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey2"]).Should(Equal(cachedK8sSecrets[secretName].SecretsKeyVaultMetadata["testSecretKey2"]))
+
+			mockCtrl.Finish()
 		})
 	})
 
@@ -327,9 +336,11 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			fakeEtag2 := azcore.ETag("fake-etag2")
 			fakeResourceVersion := "1"
 
+			mockCtrl := gomock.NewController(GinkgoT())
+			mockedRetriever := mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
 			processor := AppConfigurationProviderProcessor{
 				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
+				Retriever:       mockedRetriever,
 				Provider:        configProvider,
 				ShouldReconcile: false,
 				Settings:        &loader.TargetKeyValueSettings{},
@@ -385,10 +396,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			//Both Etags are updated
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			_ = processor.PopulateSettings(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 				ResourceVersion: fakeResourceVersion,
@@ -424,9 +435,9 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			//Only keyValue Etag is updated
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			time.Sleep(2 * time.Second)
 			processor.CurrentTime = metav1.Now()
@@ -463,9 +474,9 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			//Only featureFlag Etag is updated
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings3, nil)
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings3, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
 
 			time.Sleep(2 * time.Second)
 			processor.CurrentTime = metav1.Now()
@@ -488,7 +499,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}]))
 
 			//Both Etags are not updated
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 
 			time.Sleep(2 * time.Second)
 			processor.CurrentTime = metav1.Now()
@@ -509,6 +520,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}]).Should(Equal(updatedKeyValueEtags2[acpv1.Selector{
 				KeyFilter: &testKey,
 			}]))
+
+			mockCtrl.Finish()
 		})
 
 		It("Should update reconcile state when keyValue pageEtag and secret references updated when configuration refresh and secret refresh enabled", func() {
@@ -621,9 +634,11 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			fakeResourceVersion := "1"
 			fakeEtag := azcore.ETag("fake-etag")
 			nowTime := metav1.Now()
+			mockCtrl := gomock.NewController(GinkgoT())
+			mockedRetriever := mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
 			processor := AppConfigurationProviderProcessor{
 				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
+				Retriever:       mockedRetriever,
 				Provider:        configProvider,
 				ShouldReconcile: false,
 				Settings:        &loader.TargetKeyValueSettings{},
@@ -645,8 +660,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				RefreshOptions: &RefreshOptions{},
 			}
 
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			expectedNextKeyValueRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(5 * time.Second))
 			expectedNextSecretReferenceRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(1 * time.Minute))
 
@@ -664,6 +679,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}]))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime).Should(Equal(expectedNextSecretReferenceRefreshReconcileTime))
+
+			mockCtrl.Finish()
 		})
 	})
 
@@ -799,9 +816,11 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			fakeResourceVersion := "1"
 			fakeEtag := azcore.ETag("fake-etag")
 			nowTime := metav1.Now()
+			mockCtrl := gomock.NewController(GinkgoT())
+			mockedRetriever := mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
 			processor := AppConfigurationProviderProcessor{
 				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
+				Retriever:       mockedRetriever,
 				Provider:        configProvider,
 				ShouldReconcile: false,
 				Settings:        &loader.TargetKeyValueSettings{},
@@ -825,8 +844,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				RefreshOptions: &RefreshOptions{},
 			}
 
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			expectedNextKeyValueRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(10 * time.Second))
 			cachedNextSecretReferenceRefreshReconcileTime := processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime
 			cachedNextFeatureFlagRefreshReconcileTime := processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime
@@ -852,6 +871,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime).Should(Equal(cachedNextSecretReferenceRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime).Should(Equal(cachedNextFeatureFlagRefreshReconcileTime))
+
+			mockCtrl.Finish()
 		})
 
 		It("Should update feature flag pageEtag and existing secret references when configuration, secret and feature flag refresh enabled", func() {
@@ -988,9 +1009,11 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			fakeResourceVersion := "1"
 			fakeEtag := azcore.ETag("fake-etag")
 			nowTime := metav1.Now()
+			mockCtrl := gomock.NewController(GinkgoT())
+			mockedRetriever := mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
 			processor := AppConfigurationProviderProcessor{
 				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
+				Retriever:       mockedRetriever,
 				Provider:        configProvider,
 				ShouldReconcile: false,
 				Settings:        &loader.TargetKeyValueSettings{},
@@ -1014,9 +1037,9 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				RefreshOptions: &RefreshOptions{},
 			}
 
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettingsReturnedByFeatureFlagRefresh, nil)
-			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettingsReturnedBySecretRefresh, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettingsReturnedByFeatureFlagRefresh, nil)
+			mockedRetriever.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettingsReturnedBySecretRefresh, nil)
 			expectedNextFeatureFlagRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(1 * time.Minute))
 			expectedNextSecretReferenceRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(1 * time.Hour))
 			cachedNextKeyValueRefreshReconcileTime := processor.ReconciliationState.NextKeyValueRefreshReconcileTime
@@ -1042,6 +1065,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(cachedNextKeyValueRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime).Should(Equal(expectedNextSecretReferenceRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime).Should(Equal(expectedNextFeatureFlagRefreshReconcileTime))
+
+			mockCtrl.Finish()
 		})
 
 		It("Should update feature flag pageEtag and keyValue pageEtag when configuration, secret and feature flag refresh enabled", func() {
@@ -1188,9 +1213,11 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			fakeResourceVersion := "1"
 			fakeEtag := azcore.ETag("fake-etag")
 			nowTime := metav1.Now()
+			mockCtrl := gomock.NewController(GinkgoT())
+			mockedRetriever := mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
 			processor := AppConfigurationProviderProcessor{
 				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
+				Retriever:       mockedRetriever,
 				Provider:        configProvider,
 				ShouldReconcile: false,
 				Settings:        &loader.TargetKeyValueSettings{},
@@ -1214,10 +1241,10 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				RefreshOptions: &RefreshOptions{},
 			}
 
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettingsReturnedByFeatureFlagRefresh, nil)
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettingsReturnedByKeyValueRefresh, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettingsReturnedByFeatureFlagRefresh, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettingsReturnedByKeyValueRefresh, nil)
 			expectedNextKeyValueRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(70 * time.Second))
 			expectedNextFeatureFlagRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(1 * time.Minute))
 			cachedNextSecretReferenceRefreshReconcileTime := processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime
@@ -1244,6 +1271,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime).Should(Equal(cachedNextSecretReferenceRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime).Should(Equal(expectedNextFeatureFlagRefreshReconcileTime))
+
+			mockCtrl.Finish()
 		})
 
 		// Should update the corresponding target's reconcile state, and those that shouldn't be updated should be as is.
@@ -1411,9 +1440,11 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			fakeResourceVersion := "1"
 			nowTime := metav1.Now()
+			mockCtrl := gomock.NewController(GinkgoT())
+			mockedRetriever := mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
 			processor := AppConfigurationProviderProcessor{
 				Context:         ctx,
-				Retriever:       mockConfigurationSettings,
+				Retriever:       mockedRetriever,
 				Provider:        configProvider,
 				ShouldReconcile: false,
 				Settings:        &loader.TargetKeyValueSettings{},
@@ -1432,8 +1463,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			// only feature flag refresh
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettingsReturnedByFeatureFlagRefresh, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettingsReturnedByFeatureFlagRefresh, nil)
 			expectedNextFeatureFlagRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(40 * time.Second))
 			cachedNextKeyValueRefreshReconcileTime := processor.ReconciliationState.NextKeyValueRefreshReconcileTime
 			cachedNextSecretReferenceRefreshReconcileTime := processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime
@@ -1462,8 +1493,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			processor.CurrentTime = metav1.NewTime(processor.ReconciliationState.NextKeyValueRefreshReconcileTime.Time.Add(1 * time.Second))
 
 			// only key value refresh
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettingsReturnedByKeyValueRefresh, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockedRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettingsReturnedByKeyValueRefresh, nil)
 			expectedNextKeyValueRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(45 * time.Second))
 			cachedNextFeatureFlagRefreshReconcileTime := processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime
 
@@ -1506,8 +1537,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			// only secret refresh
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
-			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettingsReturnedBySecretRefresh, nil)
+			mockedRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+			mockedRetriever.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettingsReturnedBySecretRefresh, nil)
 			expectedNextSecretReferenceRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(1 * time.Minute))
 			cachedNextKeyValueRefreshReconcileTime = processor.ReconciliationState.NextKeyValueRefreshReconcileTime
 			cachedNextFeatureFlagRefreshReconcileTime = processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime
@@ -1532,6 +1563,8 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime).Should(Equal(expectedNextSecretReferenceRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(cachedNextKeyValueRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime).Should(Equal(cachedNextFeatureFlagRefreshReconcileTime))
+
+			mockCtrl.Finish()
 		})
 	})
 })

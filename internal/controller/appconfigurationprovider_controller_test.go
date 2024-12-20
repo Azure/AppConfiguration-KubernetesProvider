@@ -5,6 +5,7 @@ package controller
 
 import (
 	"azappconfig/provider/internal/loader"
+	"azappconfig/provider/internal/loader/mocks"
 	"context"
 	"fmt"
 	"os"
@@ -21,6 +22,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+func newMockedRetriever(providerName, providerNamespace string, mockCtl *gomock.Controller) *mocks.MockConfigurationSettingsRetriever {
+	mu.Lock()
+	defer mu.Unlock()
+
+	mockRetriever := mocks.NewMockConfigurationSettingsRetriever(mockCtl)
+	mockedRetrievers[types.NamespacedName{Name: providerName, Namespace: providerNamespace}] = mockRetriever
+
+	return mockRetriever
+}
 
 var _ = Describe("AppConfiguationProvider controller", func() {
 
@@ -48,8 +59,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider"
 			configMapName := "configmap-to-be-created"
@@ -70,6 +79,10 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
 
 			providerLookupKey := types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}
@@ -97,6 +110,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(createdProvider.Status.Phase).Should(Equal(acpv1.PhaseComplete))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should create new configMap", func() {
@@ -109,8 +123,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-2"
@@ -132,7 +144,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -150,6 +166,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["testKey3"]).Should(Equal("testValue3"))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should create new secret", func() {
@@ -188,8 +205,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-3"
 			configMapName := "configmap-to-be-created-3"
@@ -214,7 +229,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			secretLookupKey := types.NamespacedName{Name: secretName, Namespace: ProviderNamespace}
 			secretLookupKey2 := types.NamespacedName{Name: secretName2, Namespace: ProviderNamespace}
 			secret := &corev1.Secret{}
@@ -248,6 +267,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(secret2.Type).Should(Equal(corev1.SecretTypeOpaque))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should create empty secret successfully when secret section specified", func() {
@@ -269,8 +289,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-emptysecret"
@@ -296,7 +314,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			secretLookupKey := types.NamespacedName{Name: secretName, Namespace: ProviderNamespace}
 			secret := &corev1.Secret{}
 
@@ -313,6 +335,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(secret.Type).Should(Equal(corev1.SecretTypeOpaque))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should create proper configmap and secret", func() {
@@ -344,8 +367,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-5"
 			configMapName := "configmap-to-be-created-5"
@@ -371,7 +392,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -404,6 +429,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should create file style configMap", func() {
@@ -414,8 +440,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-7"
@@ -441,7 +465,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			time.Sleep(time.Second * 5) //Wait few seconds to wait the second round reconcile complete
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
@@ -459,6 +487,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(len(configmap.Data)).Should(Equal(1))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should create file style ConfigMap with feature flag settings", func() {
@@ -469,8 +498,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-8"
@@ -503,7 +530,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			time.Sleep(time.Second * 5) //Wait few seconds to wait the second round reconcile complete
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
@@ -519,6 +550,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(len(configmap.Data)).Should(Equal(1))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should refresh configMap", func() {
@@ -531,8 +563,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-1"
@@ -554,7 +584,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -582,7 +616,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: mapResult2,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			_ = k8sClient.Get(ctx, types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}, configProvider)
 			configProvider.Spec.Endpoint = &newEndpoint
@@ -601,6 +635,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["testKey3"]).Should(Equal("newtestValue3"))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should refresh configMap", func() {
@@ -622,10 +657,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings2 := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult2,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()
 			testKey := "testKey"
@@ -660,7 +691,13 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockRetriever.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil, nil)
+			mockRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -689,6 +726,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["testKey3"]).Should(Equal("newtestValue3"))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should refresh file style ConfigMap", func() {
@@ -699,8 +737,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-8a"
@@ -731,7 +767,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			time.Sleep(time.Second * 5) //Wait few seconds to wait the second round reconcile complete
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
@@ -752,8 +792,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				ConfigMapSettings: newResult,
 			}
 
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(newSettings, nil)
+			mockRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(newSettings, nil)
 
 			time.Sleep(time.Second * 5) //Wait few seconds to wait the second round reconcile complete
 
@@ -768,6 +808,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(len(configmap.Data)).Should(Equal(1))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should not refresh configMap", func() {
@@ -780,9 +821,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil, nil)
 
 			ctx := context.Background()
 			testNewKey := "testNewKey"
@@ -817,7 +855,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockRetriever.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -845,6 +888,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).Should(Equal(lastReconcileTime))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should not refresh configMap", func() {
@@ -857,8 +901,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			testNewKey := "testNewKey"
@@ -893,7 +935,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -921,6 +967,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).Should(Equal(lastReconcileTime))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should trigger reconciliation", func() {
@@ -942,10 +989,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings2 := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: mapResult2,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil, nil)
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			ctx := context.Background()
 			testKeyOne := "testKeyOne"
@@ -983,7 +1026,13 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockRetriever.EXPECT().CheckAndRefreshSentinels(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil, nil)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -1025,6 +1074,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).ShouldNot(Equal(lastReconcileTime))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should trigger reconciliation", func() {
@@ -1035,8 +1085,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			allSettings := &loader.TargetKeyValueSettings{
 				ConfigMapSettings: configMapResult,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "appconfigurationprovider-modify-configmap"
@@ -1058,7 +1106,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -1075,7 +1127,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["testKey"]).Should(Equal("testValue"))
 			configmapLastReconcileTime := configmap.Annotations["azconfig.io/LastReconcileTime"]
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			configmap.Data["testKey"] = "newTestValue"
 			_ = k8sClient.Update(ctx, configmap)
@@ -1096,6 +1148,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).ShouldNot(Equal(configmapLastReconcileTime))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should trigger reconciliation", func() {
@@ -1129,8 +1182,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-
 			ctx := context.Background()
 			providerName := "appconfigurationprovider-delete-secret"
 			configMapName := "configmap-not-deleted"
@@ -1156,7 +1207,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -1186,7 +1241,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			secretLastReconcileTime := secret.Annotations["azconfig.io/LastReconcileTime"]
 			configmapLastReconcileTime := configmap.Annotations["azconfig.io/LastReconcileTime"]
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			secret.Data["testSecretKey"] = []byte("newTestSecretValue")
 			_ = k8sClient.Update(ctx, secret)
@@ -1217,6 +1272,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).ShouldNot(Equal(configmapLastReconcileTime))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should trigger reconciliation", func() {
@@ -1252,8 +1308,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-
 			ctx := context.Background()
 			providerName := "appconfigurationprovider-delete-secret"
 			configMapName := "configmap-not-to-be-deleted"
@@ -1279,7 +1333,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -1311,7 +1369,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			secretLastReconcileTime := secret.Annotations["azconfig.io/LastReconcileTime"]
 			configmapLastReconcileTime := configmap.Annotations["azconfig.io/LastReconcileTime"]
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			_ = k8sClient.Delete(ctx, secret)
 
@@ -1343,6 +1401,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).ShouldNot(Equal(configmapLastReconcileTime))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should refresh secret when data change", func() {
@@ -1378,8 +1437,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				},
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-3"
 			configMapName := "configmap-to-be-refreshed-3"
@@ -1409,7 +1466,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -1465,7 +1526,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				K8sSecrets:     mockedSecretReference,
 			}
 
-			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings, nil)
+			mockRetriever.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings, nil)
 			// Refresh interval is 1 minute, wait for 65 seconds to make sure the refresh is triggered
 			time.Sleep(65 * time.Second)
 
@@ -1484,7 +1545,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				K8sSecrets:     mockedSecretReference,
 			}
 
-			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings2, nil)
+			mockRetriever.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings2, nil)
 			// Refresh interval is 1 minute, wait for 65 seconds to make sure the refresh is triggered
 			time.Sleep(65 * time.Second)
 
@@ -1498,6 +1559,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(secret.Type).Should(Equal(corev1.SecretType("Opaque")))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should refresh configMap by watching all keys", func() {
@@ -1529,10 +1591,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				FeatureFlagETags:  featureFlagEtags,
 			}
 
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
-
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-4"
 			configMapName := "configmap-to-be-refresh-4"
@@ -1559,7 +1617,13 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockRetriever.EXPECT().RefreshKeyValueSettings(gomock.Any(), gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -1588,6 +1652,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["testKey3"]).Should(Equal("newtestValue3"))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Should not refresh configMap by watching all keys", func() {
@@ -1604,9 +1669,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				KeyValueETags:     keyValueEtags,
 				FeatureFlagETags:  featureFlagEtags,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-5"
@@ -1634,7 +1696,12 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
+			mockRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -1663,6 +1730,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["testKey3"]).Should(Equal("testValue3"))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 	})
 
@@ -1688,8 +1756,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				KeyValueETags:     keyValueEtags,
 				FeatureFlagETags:  featureFlagEtags,
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-7a"
@@ -1733,7 +1799,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			time.Sleep(time.Second * 5) //Wait few seconds to wait the second round reconcile complete
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
@@ -1750,7 +1820,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["filestyle.json"]).Should(Equal("{\"aKey\":\"testValue\",\"feature_management\":{\"feature_flags\":[{\"id\": \"testFeatureFlag\",\"enabled\": true,\"conditions\": {\"client_filters\": []}}]}}"))
 			Expect(len(configmap.Data)).Should(Equal(1))
 
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
+			mockRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 
 			time.Sleep(5 * time.Second)
 
@@ -1766,9 +1836,9 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Data["filestyle.json"]).Should(Equal("{\"aKey\":\"testValue\",\"feature_management\":{\"feature_flags\":[{\"id\": \"testFeatureFlag\",\"enabled\": true,\"conditions\": {\"client_filters\": []}}]}}"))
 			Expect(len(configmap.Data)).Should(Equal(1))
 
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
+			mockRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockRetriever.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+			mockRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(false, nil)
 
 			time.Sleep(5 * time.Second)
 
@@ -1785,6 +1855,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(len(configmap.Data)).Should(Equal(1))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 		It("Feature flag refresh can work with secret refresh", func() {
@@ -1817,8 +1888,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 
 			ctx := context.Background()
 			providerName := "refresh-appconfigurationprovider-secret-ff"
@@ -1865,7 +1934,11 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					},
 				},
 			}
+			mockCtl := gomock.NewController(GinkgoT())
+			mockRetriever := newMockedRetriever(providerName, ProviderNamespace, mockCtl)
+			mockRetriever.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
 			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
+
 			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
 			configmap := &corev1.ConfigMap{}
 
@@ -1900,8 +1973,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			}
 
 			// feature flag refresh
-			mockConfigurationSettings.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
-			mockConfigurationSettings.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
+			mockRetriever.EXPECT().CheckPageETags(gomock.Any(), gomock.Any()).Return(true, nil)
+			mockRetriever.EXPECT().RefreshFeatureFlagSettings(gomock.Any(), gomock.Any()).Return(allSettings2, nil)
 
 			time.Sleep(55 * time.Second)
 
@@ -1950,7 +2023,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				K8sSecrets:     mockedSecretReference,
 			}
 
-			mockConfigurationSettings.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings, nil)
+			mockRetriever.EXPECT().ResolveSecretReferences(gomock.Any(), gomock.Any(), gomock.Any()).Return(newTargetSettings, nil)
 
 			time.Sleep(5 * time.Second)
 
@@ -1971,6 +2044,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			Expect(configmap.Annotations["azconfig.io/LastReconcileTime"]).Should(Equal(configmapLastReconcileTime))
 
 			_ = k8sClient.Delete(ctx, configProvider)
+			mockCtl.Finish()
 		})
 
 	})

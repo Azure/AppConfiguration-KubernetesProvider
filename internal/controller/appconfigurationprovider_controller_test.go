@@ -38,7 +38,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 		EndpointName = "https://fake-endpoint"
 	)
 
-	Context("When create AzureAppConfigurationProvider object", func() {
+	Describe("When create AzureAppConfigurationProvider object", Ordered, func() {
 		It("Should update AzureAppConfigurationProvider Status to COMPLETE after reconcile finish", func() {
 			By("By creating a new AzureAppConfigurationProvider")
 			mapResult := make(map[string]string)
@@ -1664,9 +1664,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			_ = k8sClient.Delete(ctx, configProvider)
 		})
-	})
 
-	Context("AppConfigurationProvider can dynamically refresh feature flag data in ConfigMap", func() {
 		It("Should refresh configMap when both configuration.refresh and featureFlag.refresh enabled", func() {
 			By("When selected feattureFlags updated in Azure App Configuration")
 			mapResult := make(map[string]string)
@@ -1972,7 +1970,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 
 			_ = k8sClient.Delete(ctx, configProvider)
 		})
-
 	})
 
 	Context("Verify exist non escaped value in label", func() {

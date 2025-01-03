@@ -5,6 +5,7 @@ package controller
 
 import (
 	"azappconfig/provider/internal/loader"
+	"azappconfig/provider/internal/loader/mocks"
 	"context"
 	"time"
 
@@ -28,8 +29,19 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 	)
 
 	var (
-		EndpointName = "https://fake-endpoint"
+		EndpointName              = "https://fake-endpoint"
+		mockCtrl                  *gomock.Controller
+		mockConfigurationSettings *mocks.MockConfigurationSettingsRetriever
 	)
+
+	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
+		mockConfigurationSettings = mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
+	})
+
+	AfterEach(func() {
+		mockCtrl.Finish()
+	})
 
 	Context("Reconcile triggered by one component refresh scenarios", func() {
 		It("Should update reconcile state when sentinel Etag updated when configuration refresh enabled", func() {

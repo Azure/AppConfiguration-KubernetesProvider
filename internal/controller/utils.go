@@ -309,7 +309,7 @@ func verifySelectorObject(selector acpv1.Selector) error {
 	return nil
 }
 
-func shouldCreateOrUpdate(processor *AppConfigurationProviderProcessor, secretName string, existingK8sSecrets map[string]corev1.Secret) bool {
+func shouldCreateOrUpdateSecret(processor *AppConfigurationProviderProcessor, secretName string, existingK8sSecrets map[string]corev1.Secret) bool {
 	// If the secret does not exist, create it
 	if _, ok := existingK8sSecrets[secretName]; !ok {
 		return true
@@ -322,7 +322,7 @@ func shouldCreateOrUpdate(processor *AppConfigurationProviderProcessor, secretNa
 	return !reflect.DeepEqual(processor.Settings.SecretSettings[secretName].Data, existingK8sSecrets[secretName].Data)
 }
 
-func DataChanged(existingConfigMap *corev1.ConfigMap, dataOptions *acpv1.ConfigMapDataOptions, latestConfigMapSettings map[string]string) bool {
+func shouldCreateOrUpdateConfigMap(existingConfigMap *corev1.ConfigMap, dataOptions *acpv1.ConfigMapDataOptions, latestConfigMapSettings map[string]string) bool {
 	if existingConfigMap == nil || existingConfigMap.Data == nil {
 		return true
 	}

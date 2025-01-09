@@ -370,31 +370,32 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 	}
 
 	settingsLength := len(settingsResponse.Settings)
-	featureFlagExisted := make(map[string]bool, settingsLength)
-	deduplicateFeatureFlags := make([]interface{}, 0)
+	featureFlagExist := make(map[string]bool, settingsLength)
+	deduplicatedFeatureFlags := make([]interface{}, 0)
+
 	// if settings returned like this: [{"id": "Beta"...}, {"id": "Alpha"...}, {"id": "Beta"...}], we need to deduplicate it to [{"id": "Alpha"...}, {"id": "Beta"...}], the last one wins
 	for i := settingsLength - 1; i >= 0; i-- {
 		key := *settingsResponse.Settings[i].Key
-		if featureFlagExisted[key] {
+		if featureFlagExist[key] {
 			continue
 		}
-		featureFlagExisted[key] = true
+		featureFlagExist[key] = true
 		var out interface{}
 		err := json.Unmarshal([]byte(*settingsResponse.Settings[i].Value), &out)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
-		deduplicateFeatureFlags = append(deduplicateFeatureFlags, out)
+		deduplicatedFeatureFlags = append(deduplicatedFeatureFlags, out)
 	}
 
 	// reverse the deduplicateFeatureFlags to keep the order
-	for i, j := 0, len(deduplicateFeatureFlags)-1; i < j; i, j = i+1, j-1 {
-		deduplicateFeatureFlags[i], deduplicateFeatureFlags[j] = deduplicateFeatureFlags[j], deduplicateFeatureFlags[i]
+	for i, j := 0, len(deduplicatedFeatureFlags)-1; i < j; i, j = i+1, j-1 {
+		deduplicatedFeatureFlags[i], deduplicatedFeatureFlags[j] = deduplicatedFeatureFlags[j], deduplicatedFeatureFlags[i]
 	}
 
 	// featureFlagSection = {"feature_flags": [{...}, {...}]}
 	var featureFlagSection = map[string]interface{}{
-		FeatureFlagSectionName: deduplicateFeatureFlags,
+		FeatureFlagSectionName: deduplicatedFeatureFlags,
 	}
 
 	return featureFlagSection, settingsResponse.Etags, nil

@@ -372,7 +372,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 	existingConfigMap *corev1.ConfigMap,
 	provider *acpv1.AzureAppConfigurationProvider,
 	settings *loader.TargetKeyValueSettings) (reconcile.Result, error) {
-	if !shouldCreateOrUpdateConfigMap(existingConfigMap, provider.Spec.Target.ConfigMapData, settings.ConfigMapSettings) {
+	if !shouldCreateOrUpdateConfigMap(existingConfigMap, settings.ConfigMapSettings, provider.Spec.Target.ConfigMapData) {
 		klog.V(5).Infof("Skip updating the configMap %q in %q namespace since data is not changed", provider.Spec.Target.ConfigMapName, provider.Namespace)
 		return reconcile.Result{}, nil
 	}

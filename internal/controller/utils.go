@@ -322,7 +322,7 @@ func shouldCreateOrUpdateSecret(processor *AppConfigurationProviderProcessor, se
 	return !reflect.DeepEqual(processor.Settings.SecretSettings[secretName].Data, existingK8sSecrets[secretName].Data)
 }
 
-func shouldCreateOrUpdateConfigMap(existingConfigMap *corev1.ConfigMap, dataOptions *acpv1.ConfigMapDataOptions, latestConfigMapSettings map[string]string) bool {
+func shouldCreateOrUpdateConfigMap(existingConfigMap *corev1.ConfigMap, latestConfigMapSettings map[string]string, dataOptions *acpv1.ConfigMapDataOptions) bool {
 	if existingConfigMap == nil || existingConfigMap.Data == nil {
 		return true
 	}

@@ -28,7 +28,6 @@ type KeyVaultSecretMetadata struct {
 	HostName      string
 	SecretName    string
 	SecretVersion string
-	SecretId      *azsecrets.ID
 }
 
 type SecretReferenceResolver interface {

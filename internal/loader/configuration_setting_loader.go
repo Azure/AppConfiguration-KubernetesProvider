@@ -19,7 +19,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"golang.org/x/crypto/pkcs12"
 	"golang.org/x/exp/maps"
@@ -370,22 +369,33 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 		return nil, nil, err
 	}
 
-	deduplicateFeatureFlags := make(map[string]azappconfig.Setting, len(settingsResponse.Settings))
-	for _, setting := range settingsResponse.Settings {
-		deduplicateFeatureFlags[*setting.Key] = setting
-	}
+	settingsLength := len(settingsResponse.Settings)
+	featureFlagExist := make(map[string]bool, settingsLength)
+	deduplicatedFeatureFlags := make([]interface{}, 0)
 
-	// featureFlagSection = {"featureFlags": [{...}, {...}]}
-	var featureFlagSection = map[string]interface{}{
-		FeatureFlagSectionName: make([]interface{}, 0),
-	}
-	for _, setting := range deduplicateFeatureFlags {
+	// if settings returned like this: [{"id": "Beta"...}, {"id": "Alpha"...}, {"id": "Beta"...}], we need to deduplicate it to [{"id": "Alpha"...}, {"id": "Beta"...}], the last one wins
+	for i := settingsLength - 1; i >= 0; i-- {
+		key := *settingsResponse.Settings[i].Key
+		if featureFlagExist[key] {
+			continue
+		}
+		featureFlagExist[key] = true
 		var out interface{}
-		err := json.Unmarshal([]byte(*setting.Value), &out)
+		err := json.Unmarshal([]byte(*settingsResponse.Settings[i].Value), &out)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
-		featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
+		deduplicatedFeatureFlags = append(deduplicatedFeatureFlags, out)
+	}
+
+	// reverse the deduplicateFeatureFlags to keep the order
+	for i, j := 0, len(deduplicatedFeatureFlags)-1; i < j; i, j = i+1, j-1 {
+		deduplicatedFeatureFlags[i], deduplicatedFeatureFlags[j] = deduplicatedFeatureFlags[j], deduplicatedFeatureFlags[i]
+	}
+
+	// featureFlagSection = {"feature_flags": [{...}, {...}]}
+	var featureFlagSection = map[string]interface{}{
+		FeatureFlagSectionName: deduplicatedFeatureFlags,
 	}
 
 	return featureFlagSection, settingsResponse.Etags, nil
@@ -425,9 +435,6 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 						lock.Lock()
 						defer lock.Unlock()
 						resolvedSecrets[name].Data[currentKey] = []byte(*resolvedSecret.Value)
-						currentSecretMetadata := targetSecretReference.SecretsKeyVaultMetadata[currentKey]
-						currentSecretMetadata.SecretId = resolvedSecret.ID
-						secretReferencesToResolve[name].SecretsKeyVaultMetadata[currentKey] = currentSecretMetadata
 						return nil
 					})
 				}
@@ -439,9 +446,6 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 		} else if targetSecretReference.Type == corev1.SecretTypeTLS {
 			eg.Go(func() error {
 				resolvedSecret, err := resolver.Resolve(targetSecretReference.SecretsKeyVaultMetadata[name], ctx)
-				currentSecretMetadata := targetSecretReference.SecretsKeyVaultMetadata[name]
-				currentSecretMetadata.SecretId = resolvedSecret.ID
-				secretReferencesToResolve[name].SecretsKeyVaultMetadata[name] = currentSecretMetadata
 				if err != nil {
 					return fmt.Errorf("fail to resolve the Key Vault reference type setting '%s': %s", name, err.Error())
 				}

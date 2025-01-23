@@ -1503,7 +1503,7 @@ func TestAllocationId(t *testing.T) {
         }
     }`
 	_ = json.Unmarshal([]byte(NoPercentileAndSeed), &featureFlag1)
-	allocationId1 := generateAllocationId(featureFlag1)
+	allocationId1 := calculateAllocationId(featureFlag1)
 	assert.Equal(t, "", allocationId1)
 
 	var featureFlag2 map[string]interface{}
@@ -1518,7 +1518,7 @@ func TestAllocationId(t *testing.T) {
         }
     }`
 	_ = json.Unmarshal([]byte(SeedOnly), &featureFlag2)
-	allocationId2 := generateAllocationId(featureFlag2)
+	allocationId2 := calculateAllocationId(featureFlag2)
 	assert.Equal(t, "qZApcKdfXscxpgn_8CMf", allocationId2)
 
 	var featureFlag3 map[string]interface{}
@@ -1531,7 +1531,7 @@ func TestAllocationId(t *testing.T) {
         }
     }`
 	_ = json.Unmarshal([]byte(DefaultWhenEnabledOnly), &featureFlag3)
-	allocationId3 := generateAllocationId(featureFlag3)
+	allocationId3 := calculateAllocationId(featureFlag3)
 	assert.Equal(t, "k486zJjud_HkKaL1C4qB", allocationId3)
 
 	var featureFlag4 map[string]interface{}
@@ -1544,7 +1544,7 @@ func TestAllocationId(t *testing.T) {
         }
     }`
 	_ = json.Unmarshal([]byte(PercentileOnly), &featureFlag4)
-	allocationId4 := generateAllocationId(featureFlag4)
+	allocationId4 := calculateAllocationId(featureFlag4)
 	assert.Equal(t, "5YUbmP0P5s47zagO_LvI", allocationId4)
 
 	var featureFlag5 map[string]interface{}
@@ -1559,7 +1559,7 @@ func TestAllocationId(t *testing.T) {
         }
     }`
 	_ = json.Unmarshal([]byte(SimpleConfigurationValue), &featureFlag5)
-	allocationId5 := generateAllocationId(featureFlag5)
+	allocationId5 := calculateAllocationId(featureFlag5)
 	assert.Equal(t, "QIOEOTQJr2AXo4dkFFqy", allocationId5)
 
 	var featureFlag6 map[string]interface{}
@@ -1574,7 +1574,7 @@ func TestAllocationId(t *testing.T) {
         }
     }`
 	_ = json.Unmarshal([]byte(ComplexConfigurationValue), &featureFlag6)
-	allocationId6 := generateAllocationId(featureFlag6)
+	allocationId6 := calculateAllocationId(featureFlag6)
 	assert.Equal(t, "4Bes0AlwuO8kYX-YkBWs", allocationId6)
 
 	var featureFlag7 map[string]interface{}
@@ -1607,7 +1607,7 @@ func TestAllocationId(t *testing.T) {
         }
     }`
 	_ = json.Unmarshal([]byte(TelemetryVariantPercentile), &featureFlag7)
-	allocationId7 := generateAllocationId(featureFlag7)
+	allocationId7 := calculateAllocationId(featureFlag7)
 	assert.Equal(t, "YsdJ4pQpmhYa8KEhRLUn", allocationId7)
 }
 

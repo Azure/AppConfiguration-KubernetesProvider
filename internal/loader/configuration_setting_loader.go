@@ -94,29 +94,33 @@ const (
 	FeatureFlagKeyPrefix                  string = ".appconfig.featureflag/"
 	FeatureFlagSectionName                string = "feature_flags"
 	FeatureManagementSectionName          string = "feature_management"
-	FeatureFlagTelemetryKey               string = "telemetry"
-	FeatureFlagEnabledKey                 string = "enabled"
-	FeatureFlagMetadataKey                string = "metadata"
-	FeatureFlagETagKey                    string = "ETag"
-	FeatureFlagIdKey                      string = "FeatureFlagId"
-	FeatureFlagReferenceKey               string = "FeatureFlagReference"
-	NameKey                               string = "name"
-	AllocationKey                         string = "allocation"
-	AllocationIdKey                       string = "AllocationId"
-	DefaultWhenEnabledKey                 string = "default_when_enabled"
-	PercentileKey                         string = "percentile"
-	FromKey                               string = "from"
-	ToKey                                 string = "to"
-	SeedKey                               string = "seed"
-	VariantKey                            string = "variant"
-	VariantsKey                           string = "variants"
-	ConfigurationValueKey                 string = "configuration_value"
 	PreservedSecretTypeTag                string = ".kubernetes.secret.type"
 	CertTypePem                           string = "application/x-pem-file"
 	CertTypePfx                           string = "application/x-pkcs12"
 	TlsKey                                string = "tls.key"
 	TlsCrt                                string = "tls.crt"
 	RequestTracingEnabled                 string = "REQUEST_TRACING_ENABLED"
+)
+
+// Feature flag telemetry
+const (
+	TelemetryKey            string = "telemetry"
+	EnabledKey              string = "enabled"
+	MetadataKey             string = "metadata"
+	ETagKey                 string = "ETag"
+	FeatureFlagIdKey        string = "FeatureFlagId"
+	FeatureFlagReferenceKey string = "FeatureFlagReference"
+	NameKey                 string = "name"
+	AllocationKey           string = "allocation"
+	AllocationIdKey         string = "AllocationId"
+	DefaultWhenEnabledKey   string = "default_when_enabled"
+	PercentileKey           string = "percentile"
+	FromKey                 string = "from"
+	ToKey                   string = "to"
+	SeedKey                 string = "seed"
+	VariantKey              string = "variant"
+	VariantsKey             string = "variants"
+	ConfigurationValueKey   string = "configuration_value"
 )
 
 func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
@@ -926,13 +930,13 @@ func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
 
 func calculateFeatureFlagId(setting azappconfig.Setting) string {
 	// Create the basic value string
-	featureFlagValue := *setting.Key + "\n"
+	featureFlagId := *setting.Key + "\n"
 	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
-		featureFlagValue += *setting.Label
+		featureFlagId += *setting.Label
 	}
 
 	// Generate SHA-256 hash, and encode it to Base64
-	hash := sha256.Sum256([]byte(featureFlagValue))
+	hash := sha256.Sum256([]byte(featureFlagId))
 	encodedFeatureFlag := base64.StdEncoding.EncodeToString(hash[:])
 
 	// Replace '+' with '-' and '/' with '_'
@@ -947,44 +951,43 @@ func calculateFeatureFlagId(setting azappconfig.Setting) string {
 	return encodedFeatureFlag
 }
 
-func createFeatureFlagReference(setting azappconfig.Setting, endpoint string) string {
+func generateFeatureFlagReference(setting azappconfig.Setting, endpoint string) string {
 	featureFlagReference := fmt.Sprintf("%s/kv/%s", endpoint, *setting.Key)
 
 	// Check if the label is present and not empty
 	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
-		// Encode the label to ensure it is safe for URLs
-		encodedLabel := url.QueryEscape(*setting.Label)
-		featureFlagReference += fmt.Sprintf("?label=%s", encodedLabel)
+		featureFlagReference += fmt.Sprintf("?label=%s", *setting.Label)
 	}
 
 	return featureFlagReference
 }
 
-func generateAllocationId(featureFlag map[string]interface{}) string {
-	var rawAllocationId strings.Builder
-	var variantsForExperimentation []string
+func calculateAllocationId(featureFlag map[string]interface{}) string {
+	var allocationIdBuilder strings.Builder
+	var allocatedVariants []string
 
-	allocationSection, ok := featureFlag[AllocationKey].(map[string]interface{})
+	allocation, ok := featureFlag[AllocationKey].(map[string]interface{})
 	if !ok {
 		return ""
 	}
 
 	// Seed
 	seedValue := ""
-	if allocationSection[SeedKey] != nil {
-		seedValue = allocationSection[SeedKey].(string)
+	if allocation[SeedKey] != nil {
+		seedValue = allocation[SeedKey].(string)
 	}
-	rawAllocationId.WriteString(fmt.Sprintf("seed=%v\ndefault_when_enabled=", seedValue))
+	allocationIdBuilder.WriteString(fmt.Sprintf("seed=%v", seedValue))
 
 	// Default variant when enabled
-	if defaultVariant, exists := allocationSection[DefaultWhenEnabledKey]; exists {
-		variantsForExperimentation = append(variantsForExperimentation, defaultVariant.(string))
-		rawAllocationId.WriteString(fmt.Sprintf("%v", defaultVariant.(string)))
+	allocationIdBuilder.WriteString("\ndefault_when_enabled=")
+	if defaultVariant, exists := allocation[DefaultWhenEnabledKey]; exists {
+		allocatedVariants = append(allocatedVariants, defaultVariant.(string))
+		allocationIdBuilder.WriteString(fmt.Sprintf("%v", defaultVariant.(string)))
 	}
 
 	// Percentiles
-	rawAllocationId.WriteString("\npercentiles=")
-	if percentiles, exists := allocationSection[PercentileKey].([]interface{}); exists {
+	allocationIdBuilder.WriteString("\npercentiles=")
+	if percentiles, exists := allocation[PercentileKey].([]interface{}); exists {
 		var sortedPercentiles []map[string]interface{}
 
 		// Filter and sort percentiles
@@ -1003,26 +1006,26 @@ func generateAllocationId(featureFlag map[string]interface{}) string {
 		})
 
 		for i, percentile := range sortedPercentiles {
-			variantsForExperimentation = append(variantsForExperimentation, percentile[VariantKey].(string))
-			rawAllocationId.WriteString(fmt.Sprintf("%v,%s,%v", percentile[FromKey].(float64), base64.StdEncoding.EncodeToString([]byte(percentile[VariantKey].(string))), percentile[ToKey].(float64)))
+			allocatedVariants = append(allocatedVariants, percentile[VariantKey].(string))
+			allocationIdBuilder.WriteString(fmt.Sprintf("%v,%s,%v", percentile[FromKey].(float64), base64.StdEncoding.EncodeToString([]byte(percentile[VariantKey].(string))), percentile[ToKey].(float64)))
 			if i != len(sortedPercentiles)-1 {
-				rawAllocationId.WriteString(";")
+				allocationIdBuilder.WriteString(";")
 			}
 		}
 	}
 
 	// Short-circuit if no valid data
-	if len(variantsForExperimentation) == 0 && allocationSection[SeedKey] == nil {
+	if len(allocatedVariants) == 0 && allocation[SeedKey] == nil {
 		return ""
 	}
 
-	rawAllocationId.WriteString("\nvariants=")
-	if len(variantsForExperimentation) != 0 {
+	allocationIdBuilder.WriteString("\nvariants=")
+	if len(allocatedVariants) != 0 {
 		variants, variantsExist := featureFlag[VariantsKey].([]interface{})
 		sortedVariants := make([]map[string]interface{}, 0)
 		if variantsExist {
 			for _, v := range variants {
-				if contains(variantsForExperimentation, v.(map[string]interface{})[NameKey].(string)) {
+				if contains(allocatedVariants, v.(map[string]interface{})[NameKey].(string)) {
 					sortedVariants = append(sortedVariants, v.(map[string]interface{}))
 				}
 			}
@@ -1035,16 +1038,16 @@ func generateAllocationId(featureFlag map[string]interface{}) string {
 		for i, variant := range sortedVariants {
 			configurationValue := []byte("")
 			if _, exist := variant[ConfigurationValueKey]; exist {
-				configurationValue, _ = json.Marshal(jsonSorter(variant[ConfigurationValueKey]))
+				configurationValue, _ = json.Marshal(variant[ConfigurationValueKey])
 			}
-			rawAllocationId.WriteString(fmt.Sprintf("%s,%s", base64.StdEncoding.EncodeToString([]byte(variant[NameKey].(string))), string(configurationValue)))
+			allocationIdBuilder.WriteString(fmt.Sprintf("%s,%s", base64.StdEncoding.EncodeToString([]byte(variant[NameKey].(string))), string(configurationValue)))
 			if i != len(sortedVariants)-1 {
-				rawAllocationId.WriteString(";")
+				allocationIdBuilder.WriteString(";")
 			}
 		}
 	}
 	// Hash the raw allocation ID
-	hash := sha256.Sum256([]byte(rawAllocationId.String()))
+	hash := sha256.Sum256([]byte(allocationIdBuilder.String()))
 	first15Bytes := hash[:15]
 
 	// Convert to base64 URL-safe string
@@ -1053,21 +1056,21 @@ func generateAllocationId(featureFlag map[string]interface{}) string {
 }
 
 func updateFeatureFlagTelemetry(featureFlag map[string]interface{}, setting azappconfig.Setting, endpoint string) {
-	if telemetry, ok := featureFlag[FeatureFlagTelemetryKey].(map[string]interface{}); ok {
-		if enabled, ok := telemetry[FeatureFlagEnabledKey].(bool); ok && enabled {
-			metadata, _ := telemetry[FeatureFlagMetadataKey].(map[string]interface{})
+	if telemetry, ok := featureFlag[TelemetryKey].(map[string]interface{}); ok {
+		if enabled, ok := telemetry[EnabledKey].(bool); ok && enabled {
+			metadata, _ := telemetry[MetadataKey].(map[string]interface{})
 			if metadata == nil {
 				metadata = make(map[string]interface{})
 			}
 
 			// Set the new metadata
-			metadata[FeatureFlagETagKey] = *setting.ETag
+			metadata[ETagKey] = *setting.ETag
 			metadata[FeatureFlagIdKey] = calculateFeatureFlagId(setting)
-			metadata[FeatureFlagReferenceKey] = createFeatureFlagReference(setting, endpoint)
-			if allocationId := generateAllocationId(featureFlag); allocationId != "" {
+			metadata[FeatureFlagReferenceKey] = generateFeatureFlagReference(setting, endpoint)
+			if allocationId := calculateAllocationId(featureFlag); allocationId != "" {
 				metadata[AllocationIdKey] = allocationId
 			}
-			telemetry[FeatureFlagMetadataKey] = metadata
+			telemetry[MetadataKey] = metadata
 		}
 	}
 }
@@ -1078,29 +1081,6 @@ func contains(arr []string, target string) bool {
 			return true
 		}
 	}
-	return false
-}
 
-func jsonSorter(v interface{}) interface{} {
-	switch value := v.(type) {
-	case nil:
-		return nil
-	case []interface{}:
-		return value // Return arrays as-is
-	case map[string]interface{}:
-		sortedMap := make(map[string]interface{})
-		// Get keys and sort them
-		keys := make([]string, 0, len(value))
-		for k := range value {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		// Populate the sorted map
-		for _, k := range keys {
-			sortedMap[k] = jsonSorter(value[k]) // Recursively sort values
-		}
-		return sortedMap
-	default:
-		return v // Return other types (strings, numbers, etc.) as-is
-	}
+	return false
 }

@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -78,6 +79,13 @@ func mockFeatureFlagSettings() []azappconfig.Setting {
 	return settingsToReturn
 }
 
+func mockVariantFeatureFlagSettings() []azappconfig.Setting {
+	settingsToReturn := make([]azappconfig.Setting, 1)
+	settingsToReturn[0] = newFeatureFlagVariant(".appconfig.featureflag/Telemetry_2", "Test", true)
+
+	return settingsToReturn
+}
+
 func newKeyValueSelector(key string, label *string) acpv1.Selector {
 	return acpv1.Selector{
 		KeyFilter:   &key,
@@ -130,6 +138,49 @@ func newFeatureFlagSettings(key string, label string) azappconfig.Setting {
 		Value:       &featureFlagValue,
 		Label:       &label,
 		ContentType: &featureFlagContentType,
+	}
+}
+
+func newFeatureFlagVariant(key string, label string, telemetryEnabled bool) azappconfig.Setting {
+	featureFlagContentType := FeatureFlagContentType
+	fakeETag := azcore.ETag("fakeETag")
+	featureFlagId := strings.TrimPrefix(key, ".appconfig.featureflag/")
+	featureFlagValue := fmt.Sprintf(`{
+		"id": "%s",
+		"description": "",
+		"enabled": false,
+		"variants": [
+			{
+				"name": "Off",
+				"configuration_value": false
+			},
+			{
+				"name": "On",
+				"configuration_value": true
+			}
+		],
+		"allocation": {
+			"percentile": [
+				{
+					"variant": "Off",
+					"from": 0,
+					"to": 100
+				}
+			],
+			"default_when_enabled": "Off",
+			"default_when_disabled": "Off"
+		},
+		"telemetry": {
+			"enabled": %t
+		}
+	}`, featureFlagId, telemetryEnabled)
+
+	return azappconfig.Setting{
+		Key:         &key,
+		Value:       &featureFlagValue,
+		Label:       &label,
+		ContentType: &featureFlagContentType,
+		ETag:        &fakeETag,
 	}
 }
 
@@ -1074,6 +1125,57 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			Expect(allSettings.ConfigMapSettings["settings.json"]).Should(Equal("{\"feature_management\":{\"feature_flags\":[{\"conditions\":{\"client_filters\":[]},\"description\":\"\",\"enabled\":false,\"id\":\"Beta\"}]}}"))
 		})
 
+		It("Succeed to get feature flag settings", func() {
+			By("By updating telemetry with feature flag variants")
+			featureFlagKeyFilter := "*"
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+					ConfigMapData: &acpv1.ConfigMapDataOptions{
+						Type: acpv1.Json,
+						Key:  "settings.json",
+					},
+				},
+				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter: &featureFlagKeyFilter,
+						},
+					},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			featureFlagsToReturn := mockVariantFeatureFlagSettings()
+			featureFlagEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			featureFlagEtags[newFeatureFlagSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: featureFlagsToReturn,
+				Etags:    featureFlagEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(2)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(2)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(1))
+			Expect(allSettings.ConfigMapSettings["settings.json"]).Should(
+				Equal("{\"feature_management\":{\"feature_flags\":[{\"allocation\":{\"default_when_disabled\":\"Off\",\"default_when_enabled\":\"Off\",\"percentile\":[{\"from\":0,\"to\":100,\"variant\":\"Off\"}]},\"description\":\"\",\"enabled\":false,\"id\":\"Telemetry_2\",\"telemetry\":{\"enabled\":true,\"metadata\":{\"AllocationId\":\"5QQaU_fROjgJ3gjG0sVe\",\"ETag\":\"fakeETag\",\"FeatureFlagId\":\"Rc8Am7HIGDT7HC5Ovs3wKN_aGaaK_Uz1mH2e11gaK0o\",\"FeatureFlagReference\":\"/kv/.appconfig.featureflag/Telemetry_2?label=Test\"}},\"variants\":[{\"configuration_value\":false,\"name\":\"Off\"},{\"configuration_value\":true,\"name\":\"On\"}]}]}}"))
+		})
+
 		It("Fail to get all configuration settings", func() {
 			By("By getting error from Azure App Configuration")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
@@ -1377,6 +1479,136 @@ func TestCompare(t *testing.T) {
 	assert.False(t, compare(&stringB, nilString))
 	assert.True(t, compare(&stringA, &anotherStringA))
 	assert.False(t, compare(&stringA, &stringB))
+}
+
+func TestFeatureFlagId(t *testing.T) {
+	telemetrySetting1 := newFeatureFlagVariant(".appconfig.featureflag/Telemetry_1", "", true)
+	calculatedId1 := calculateFeatureFlagId(telemetrySetting1)
+	assert.Equal(t, "krkOsu9dVV9huwbQDPR6gkV_2T0buWxOCS-nNsj5-6g", calculatedId1)
+
+	telemetrySetting2 := newFeatureFlagVariant(".appconfig.featureflag/Telemetry_2", "Test", true)
+	calculatedId2 := calculateFeatureFlagId(telemetrySetting2)
+	assert.Equal(t, "Rc8Am7HIGDT7HC5Ovs3wKN_aGaaK_Uz1mH2e11gaK0o", calculatedId2)
+}
+
+func TestAllocationId(t *testing.T) {
+	var featureFlag1 map[string]interface{}
+	NoPercentileAndSeed := `{
+        "enabled": true,
+        "telemetry": { "enabled": true },
+        "variants": [ { "name": "Control" }, { "name": "Test" } ],
+        "allocation": {
+            "default_when_disabled": "Control",
+            "user": [ {"users": ["Jeff"], "variant": "Test"} ]
+        }
+    }`
+	_ = json.Unmarshal([]byte(NoPercentileAndSeed), &featureFlag1)
+	allocationId1 := calculateAllocationId(featureFlag1)
+	assert.Equal(t, "", allocationId1)
+
+	var featureFlag2 map[string]interface{}
+	SeedOnly := `{
+        "enabled": true,
+        "telemetry": { "enabled": true },
+        "variants": [ { "name": "Control" }, { "name": "Test" } ],
+        "allocation": {
+            "default_when_disabled": "Control",
+            "user": [ {"users": ["Jeff"], "variant": "Test"} ],
+            "seed": "123"
+        }
+    }`
+	_ = json.Unmarshal([]byte(SeedOnly), &featureFlag2)
+	allocationId2 := calculateAllocationId(featureFlag2)
+	assert.Equal(t, "qZApcKdfXscxpgn_8CMf", allocationId2)
+
+	var featureFlag3 map[string]interface{}
+	DefaultWhenEnabledOnly := `{
+        "enabled": true,
+        "telemetry": { "enabled": true },
+        "variants": [ { "name": "Control" }, { "name": "Test" } ],
+        "allocation": {
+            "default_when_enabled": "Control"
+        }
+    }`
+	_ = json.Unmarshal([]byte(DefaultWhenEnabledOnly), &featureFlag3)
+	allocationId3 := calculateAllocationId(featureFlag3)
+	assert.Equal(t, "k486zJjud_HkKaL1C4qB", allocationId3)
+
+	var featureFlag4 map[string]interface{}
+	PercentileOnly := `{
+        "enabled": true,
+        "telemetry": { "enabled": true },
+        "variants": [ ],
+        "allocation": {
+            "percentile": [ { "from": 0, "to": 50, "variant": "Control" }, { "from": 50, "to": 100, "variant": "Test" } ]
+        }
+    }`
+	_ = json.Unmarshal([]byte(PercentileOnly), &featureFlag4)
+	allocationId4 := calculateAllocationId(featureFlag4)
+	assert.Equal(t, "5YUbmP0P5s47zagO_LvI", allocationId4)
+
+	var featureFlag5 map[string]interface{}
+	SimpleConfigurationValue := `{
+        "enabled": true,
+        "telemetry": { "enabled": true },
+        "variants": [ { "name": "Control", "configuration_value": "standard" }, { "name": "Test", "configuration_value": "special" } ],
+        "allocation": {
+            "default_when_enabled": "Control",
+            "percentile": [ { "from": 0, "to": 50, "variant": "Control" }, { "from": 50, "to": 100, "variant": "Test" } ],
+            "seed": "123"
+        }
+    }`
+	_ = json.Unmarshal([]byte(SimpleConfigurationValue), &featureFlag5)
+	allocationId5 := calculateAllocationId(featureFlag5)
+	assert.Equal(t, "QIOEOTQJr2AXo4dkFFqy", allocationId5)
+
+	var featureFlag6 map[string]interface{}
+	ComplexConfigurationValue := `{
+        "enabled": true,
+        "telemetry": { "enabled": true },
+        "variants": [ { "name": "Control", "configuration_value": { "title": { "size": 100, "color": "red" }, "options": [ 1, 2, 3 ]} }, { "name": "Test", "configuration_value": { "title": { "size": 200, "color": "blue" }, "options": [ "1", "2", "3" ]} } ],
+        "allocation": {
+            "default_when_enabled": "Control",
+            "percentile": [ { "from": 0, "to": 50, "variant": "Control" }, { "from": 50, "to": 100, "variant": "Test" } ],
+            "seed": "123"
+        }
+    }`
+	_ = json.Unmarshal([]byte(ComplexConfigurationValue), &featureFlag6)
+	allocationId6 := calculateAllocationId(featureFlag6)
+	assert.Equal(t, "4Bes0AlwuO8kYX-YkBWs", allocationId6)
+
+	var featureFlag7 map[string]interface{}
+	TelemetryVariantPercentile := `{
+        "enabled": true,
+        "telemetry": { "enabled": true },
+        "variants": [
+            {
+                "name": "True_Override",
+                "configuration_value": {
+                    "someOtherKey": {
+                        "someSubKey": "someSubValue"
+                    },
+                    "someKey4": [3, 1, 4, true],
+                    "someKey": "someValue",
+                    "someKey3": 3.14,
+                    "someKey2": 3
+                }
+            }
+        ],
+        "allocation": {
+            "default_when_enabled": "True_Override",
+            "percentile": [
+                {
+                    "variant": "True_Override",
+                    "from": 0,
+                    "to": 100
+                }
+            ]
+        }
+    }`
+	_ = json.Unmarshal([]byte(TelemetryVariantPercentile), &featureFlag7)
+	allocationId7 := calculateAllocationId(featureFlag7)
+	assert.Equal(t, "YsdJ4pQpmhYa8KEhRLUn", allocationId7)
 }
 
 func TestCreateSecretClients(t *testing.T) {

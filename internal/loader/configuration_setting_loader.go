@@ -413,7 +413,7 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
-		updateFeatureFlagTelemetry(out, settingsResponse.Settings[i], clientEndpoint)
+		populateTelemetryMetadata(out, settingsResponse.Settings[i], clientEndpoint)
 		deduplicatedFeatureFlags = append(deduplicatedFeatureFlags, out)
 	}
 
@@ -1055,7 +1055,7 @@ func calculateAllocationId(featureFlag map[string]interface{}) string {
 	return allocationId
 }
 
-func updateFeatureFlagTelemetry(featureFlag map[string]interface{}, setting azappconfig.Setting, endpoint string) {
+func populateTelemetryMetadata(featureFlag map[string]interface{}, setting azappconfig.Setting, endpoint string) {
 	if telemetry, ok := featureFlag[TelemetryKey].(map[string]interface{}); ok {
 		if enabled, ok := telemetry[EnabledKey].(bool); ok && enabled {
 			metadata, _ := telemetry[MetadataKey].(map[string]interface{})

@@ -113,6 +113,8 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			ctx := context.Background()
 			providerName := "test-appconfigurationprovider-2"
 			configMapName := "configmap-to-be-created-2"
+			keyFilter := "testKey"
+			snapshotName := "testSnapshot"
 			configProvider := &acpv1.AzureAppConfigurationProvider{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "appconfig.kubernetes.config/v1",
@@ -127,6 +129,16 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Endpoint: &EndpointName,
 					Target: acpv1.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
+					},
+					Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+						Selectors: []acpv1.Selector{
+							{
+								KeyFilter: &keyFilter,
+							},
+							{
+								SnapshotName: &snapshotName,
+							},
+						},
 					},
 				},
 			}

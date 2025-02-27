@@ -1364,6 +1364,37 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, "\x00", *sentinels[0].Label)
 	assert.Equal(t, "two", sentinels[1].Key)
 	assert.Equal(t, "\x00", *sentinels[1].Label)
+
+	snapshot := "snapshot"
+	testSpec9 := acpv1.AzureAppConfigurationProviderSpec{
+		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acpv1.Selector{
+				{KeyFilter: &one, LabelFilter: &emptyLabel},
+				{SnapshotName: &snapshot},
+			},
+		},
+	}
+
+	filters9 := GetKeyValueFilters(testSpec9)
+	assert.Len(t, filters9, 2)
+	assert.Equal(t, "one", *filters9[0].KeyFilter)
+	assert.Equal(t, "\x00", *filters9[0].LabelFilter)
+	assert.Equal(t, "snapshot", *filters9[1].SnapshotName)
+
+	testSpec10 := acpv1.AzureAppConfigurationProviderSpec{
+		FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+			Selectors: []acpv1.Selector{
+				{KeyFilter: &one, LabelFilter: &emptyLabel},
+				{SnapshotName: &snapshot},
+			},
+		},
+	}
+
+	filters10 := GetFeatureFlagFilters(testSpec10)
+	assert.Len(t, filters10, 2)
+	assert.Equal(t, ".appconfig.featureflag/one", *filters10[0].KeyFilter)
+	assert.Equal(t, "\x00", *filters10[0].LabelFilter)
+	assert.Equal(t, "snapshot", *filters10[1].SnapshotName)
 }
 
 func TestCompare(t *testing.T) {

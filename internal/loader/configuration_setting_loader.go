@@ -684,8 +684,9 @@ func normalizeLabelFilter(filters []acpv1.Selector) []acpv1.Selector {
 		}
 
 		result = append(result, acpv1.Selector{
-			KeyFilter:   filters[i].KeyFilter,
-			LabelFilter: labelFilter,
+			KeyFilter:    filters[i].KeyFilter,
+			LabelFilter:  labelFilter,
+			SnapshotName: filters[i].SnapshotName,
 		})
 	}
 

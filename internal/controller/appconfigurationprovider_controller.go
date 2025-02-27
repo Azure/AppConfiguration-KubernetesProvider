@@ -23,6 +23,7 @@ import (
 	"azappconfig/provider/internal/loader"
 	"context"
 	"errors"
+	"maps"
 	"strconv"
 	"time"
 
@@ -391,17 +392,16 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 	}
 
-	if provider.Annotations == nil {
-		provider.Annotations = make(map[string]string)
-	}
-	provider.Annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
+	annotations := make(map[string]string)
+	maps.Copy(annotations, provider.Annotations)
+	annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
 	if len(settings.ConfigMapSettings) == 0 {
 		klog.V(3).Info("No configMap settings are fetched from Azure AppConfiguration")
 	}
 	operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, configMapObj, func() error {
 		configMapObj.Data = settings.ConfigMapSettings
 		configMapObj.Labels = provider.Labels
-		configMapObj.Annotations = provider.Annotations
+		configMapObj.Annotations = annotations
 
 		return nil
 	})
@@ -457,14 +457,13 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 		}
 
-		if provider.Annotations == nil {
-			provider.Annotations = make(map[string]string)
-		}
-		provider.Annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
+		annotations := make(map[string]string)
+		maps.Copy(annotations, provider.Annotations)
+		annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
 		operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, secretObj, func() error {
 			secretObj.Data = secret.Data
 			secretObj.Labels = provider.Labels
-			secretObj.Annotations = provider.Annotations
+			secretObj.Annotations = annotations
 
 			return nil
 		})

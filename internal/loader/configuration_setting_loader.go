@@ -6,6 +6,7 @@ package loader
 import (
 	acpv1 "azappconfig/provider/api/v1"
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"golang.org/x/crypto/pkcs12"
 	"golang.org/x/exp/maps"
@@ -97,6 +99,16 @@ const (
 	TlsKey                                string = "tls.key"
 	TlsCrt                                string = "tls.crt"
 	RequestTracingEnabled                 string = "REQUEST_TRACING_ENABLED"
+)
+
+// Feature flag telemetry
+const (
+	TelemetryKey            string = "telemetry"
+	EnabledKey              string = "enabled"
+	MetadataKey             string = "metadata"
+	ETagKey                 string = "ETag"
+	FeatureFlagIdKey        string = "FeatureFlagId"
+	FeatureFlagReferenceKey string = "FeatureFlagReference"
 )
 
 func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
@@ -372,6 +384,10 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 	settingsLength := len(settingsResponse.Settings)
 	featureFlagExist := make(map[string]bool, settingsLength)
 	deduplicatedFeatureFlags := make([]interface{}, 0)
+	clientEndpoint := ""
+	if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
+		clientEndpoint = manager.lastSuccessfulEndpoint
+	}
 
 	// if settings returned like this: [{"id": "Beta"...}, {"id": "Alpha"...}, {"id": "Beta"...}], we need to deduplicate it to [{"id": "Alpha"...}, {"id": "Beta"...}], the last one wins
 	for i := settingsLength - 1; i >= 0; i-- {
@@ -380,11 +396,12 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 			continue
 		}
 		featureFlagExist[key] = true
-		var out interface{}
+		var out map[string]interface{}
 		err := json.Unmarshal([]byte(*settingsResponse.Settings[i].Value), &out)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
+		populateTelemetryMetadata(out, settingsResponse.Settings[i], clientEndpoint)
 		deduplicatedFeatureFlags = append(deduplicatedFeatureFlags, out)
 	}
 
@@ -897,5 +914,56 @@ func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
 		clients[start], clients[end] = clients[end], clients[start]
 		start++
 		end--
+	}
+}
+
+func calculateFeatureFlagId(setting azappconfig.Setting) string {
+	// Create the basic value string
+	featureFlagId := *setting.Key + "\n"
+	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
+		featureFlagId += *setting.Label
+	}
+
+	// Generate SHA-256 hash, and encode it to Base64
+	hash := sha256.Sum256([]byte(featureFlagId))
+	encodedFeatureFlag := base64.StdEncoding.EncodeToString(hash[:])
+
+	// Replace '+' with '-' and '/' with '_'
+	encodedFeatureFlag = strings.ReplaceAll(encodedFeatureFlag, "+", "-")
+	encodedFeatureFlag = strings.ReplaceAll(encodedFeatureFlag, "/", "_")
+
+	// Remove all instances of "=" at the end of the string that were added as padding
+	if idx := strings.Index(encodedFeatureFlag, "="); idx != -1 {
+		encodedFeatureFlag = encodedFeatureFlag[:idx]
+	}
+
+	return encodedFeatureFlag
+}
+
+func generateFeatureFlagReference(setting azappconfig.Setting, endpoint string) string {
+	featureFlagReference := fmt.Sprintf("%s/kv/%s", endpoint, *setting.Key)
+
+	// Check if the label is present and not empty
+	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
+		featureFlagReference += fmt.Sprintf("?label=%s", *setting.Label)
+	}
+
+	return featureFlagReference
+}
+
+func populateTelemetryMetadata(featureFlag map[string]interface{}, setting azappconfig.Setting, endpoint string) {
+	if telemetry, ok := featureFlag[TelemetryKey].(map[string]interface{}); ok {
+		if enabled, ok := telemetry[EnabledKey].(bool); ok && enabled {
+			metadata, _ := telemetry[MetadataKey].(map[string]interface{})
+			if metadata == nil {
+				metadata = make(map[string]interface{})
+			}
+
+			// Set the new metadata
+			metadata[ETagKey] = *setting.ETag
+			metadata[FeatureFlagIdKey] = calculateFeatureFlagId(setting)
+			metadata[FeatureFlagReferenceKey] = generateFeatureFlagReference(setting, endpoint)
+			telemetry[MetadataKey] = metadata
+		}
 	}
 }

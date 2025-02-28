@@ -277,6 +277,10 @@ func (processor *AppConfigurationProviderProcessor) shouldReconcile(
 		return true
 	}
 
+	if annotationChanged(processor.ReconciliationState.Annotations, processor.Provider.Annotations) {
+		return true
+	}
+
 	if processor.ReconciliationState.ConfigMapResourceVersion == nil ||
 		*processor.ReconciliationState.ConfigMapResourceVersion != existingConfigMap.ResourceVersion {
 		// If the ConfigMap is removed or updated, we need to reconcile anyway
@@ -303,6 +307,7 @@ func (processor *AppConfigurationProviderProcessor) shouldReconcile(
 
 func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error) {
 	processor.ReconciliationState.Generation = processor.Provider.Generation
+	processor.ReconciliationState.Annotations = processor.Provider.Annotations
 
 	if processor.RefreshOptions.SecretSettingPopulated {
 		processor.ReconciliationState.ExistingK8sSecrets = processor.Settings.K8sSecrets
@@ -385,4 +390,18 @@ func (processor *AppConfigurationProviderProcessor) calculateRequeueAfterInterva
 	}
 
 	return requeueAfterInterval
+}
+
+func annotationChanged(oldAnnotations, newAnnotations map[string]string) bool {
+	if len(oldAnnotations) != len(newAnnotations) {
+		return true
+	}
+
+	for key, value := range newAnnotations {
+		if oldValue, ok := oldAnnotations[key]; !ok || value != oldValue {
+			return true
+		}
+	}
+
+	return false
 }

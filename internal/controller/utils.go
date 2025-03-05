@@ -315,10 +315,6 @@ func shouldCreateOrUpdateSecret(processor *AppConfigurationProviderProcessor, se
 		return true
 	}
 
-	if processor.ReconciliationState.ExistingK8sSecrets[secretName].SecretResourceVersion != existingK8sSecrets[secretName].ResourceVersion {
-		return true
-	}
-
 	return !reflect.DeepEqual(processor.Settings.SecretSettings[secretName].Data, existingK8sSecrets[secretName].Data)
 }
 

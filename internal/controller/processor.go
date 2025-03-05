@@ -297,7 +297,8 @@ func (processor *AppConfigurationProviderProcessor) shouldReconcile(
 	}
 
 	for name, secret := range existingSecrets {
-		if processor.ReconciliationState.ExistingK8sSecrets[name].SecretResourceVersion != secret.ResourceVersion {
+		if processor.ReconciliationState.ExistingK8sSecrets[name] != nil &&
+			processor.ReconciliationState.ExistingK8sSecrets[name].SecretResourceVersion != secret.ResourceVersion {
 			return true
 		}
 	}

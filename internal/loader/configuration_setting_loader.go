@@ -6,6 +6,7 @@ package loader
 import (
 	acpv1 "azappconfig/provider/api/v1"
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -98,6 +99,16 @@ const (
 	TlsKey                                string = "tls.key"
 	TlsCrt                                string = "tls.crt"
 	RequestTracingEnabled                 string = "REQUEST_TRACING_ENABLED"
+)
+
+// Feature flag telemetry
+const (
+	TelemetryKey            string = "telemetry"
+	EnabledKey              string = "enabled"
+	MetadataKey             string = "metadata"
+	ETagKey                 string = "ETag"
+	FeatureFlagIdKey        string = "FeatureFlagId"
+	FeatureFlagReferenceKey string = "FeatureFlagReference"
 )
 
 func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
@@ -370,22 +381,38 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 		return nil, nil, err
 	}
 
-	deduplicateFeatureFlags := make(map[string]azappconfig.Setting, len(settingsResponse.Settings))
-	for _, setting := range settingsResponse.Settings {
-		deduplicateFeatureFlags[*setting.Key] = setting
+	settingsLength := len(settingsResponse.Settings)
+	featureFlagExist := make(map[string]bool, settingsLength)
+	deduplicatedFeatureFlags := make([]interface{}, 0)
+	clientEndpoint := ""
+	if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
+		clientEndpoint = manager.lastSuccessfulEndpoint
 	}
 
-	// featureFlagSection = {"featureFlags": [{...}, {...}]}
-	var featureFlagSection = map[string]interface{}{
-		FeatureFlagSectionName: make([]interface{}, 0),
-	}
-	for _, setting := range deduplicateFeatureFlags {
-		var out interface{}
-		err := json.Unmarshal([]byte(*setting.Value), &out)
+	// if settings returned like this: [{"id": "Beta"...}, {"id": "Alpha"...}, {"id": "Beta"...}], we need to deduplicate it to [{"id": "Alpha"...}, {"id": "Beta"...}], the last one wins
+	for i := settingsLength - 1; i >= 0; i-- {
+		key := *settingsResponse.Settings[i].Key
+		if featureFlagExist[key] {
+			continue
+		}
+		featureFlagExist[key] = true
+		var out map[string]interface{}
+		err := json.Unmarshal([]byte(*settingsResponse.Settings[i].Value), &out)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
-		featureFlagSection[FeatureFlagSectionName] = append(featureFlagSection[FeatureFlagSectionName].([]interface{}), out)
+		populateTelemetryMetadata(out, settingsResponse.Settings[i], clientEndpoint)
+		deduplicatedFeatureFlags = append(deduplicatedFeatureFlags, out)
+	}
+
+	// reverse the deduplicateFeatureFlags to keep the order
+	for i, j := 0, len(deduplicatedFeatureFlags)-1; i < j; i, j = i+1, j-1 {
+		deduplicatedFeatureFlags[i], deduplicatedFeatureFlags[j] = deduplicatedFeatureFlags[j], deduplicatedFeatureFlags[i]
+	}
+
+	// featureFlagSection = {"feature_flags": [{...}, {...}]}
+	var featureFlagSection = map[string]interface{}{
+		FeatureFlagSectionName: deduplicatedFeatureFlags,
 	}
 
 	return featureFlagSection, settingsResponse.Etags, nil
@@ -425,9 +452,6 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 						lock.Lock()
 						defer lock.Unlock()
 						resolvedSecrets[name].Data[currentKey] = []byte(*resolvedSecret.Value)
-						currentSecretMetadata := targetSecretReference.SecretsKeyVaultMetadata[currentKey]
-						currentSecretMetadata.SecretId = resolvedSecret.ID
-						secretReferencesToResolve[name].SecretsKeyVaultMetadata[currentKey] = currentSecretMetadata
 						return nil
 					})
 				}
@@ -439,9 +463,6 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 		} else if targetSecretReference.Type == corev1.SecretTypeTLS {
 			eg.Go(func() error {
 				resolvedSecret, err := resolver.Resolve(targetSecretReference.SecretsKeyVaultMetadata[name], ctx)
-				currentSecretMetadata := targetSecretReference.SecretsKeyVaultMetadata[name]
-				currentSecretMetadata.SecretId = resolvedSecret.ID
-				secretReferencesToResolve[name].SecretsKeyVaultMetadata[name] = currentSecretMetadata
 				if err != nil {
 					return fmt.Errorf("fail to resolve the Key Vault reference type setting '%s': %s", name, err.Error())
 				}
@@ -680,8 +701,9 @@ func normalizeLabelFilter(filters []acpv1.Selector) []acpv1.Selector {
 		}
 
 		result = append(result, acpv1.Selector{
-			KeyFilter:   filters[i].KeyFilter,
-			LabelFilter: labelFilter,
+			KeyFilter:    filters[i].KeyFilter,
+			LabelFilter:  labelFilter,
+			SnapshotName: filters[i].SnapshotName,
 		})
 	}
 
@@ -892,5 +914,56 @@ func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
 		clients[start], clients[end] = clients[end], clients[start]
 		start++
 		end--
+	}
+}
+
+func calculateFeatureFlagId(setting azappconfig.Setting) string {
+	// Create the basic value string
+	featureFlagId := *setting.Key + "\n"
+	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
+		featureFlagId += *setting.Label
+	}
+
+	// Generate SHA-256 hash, and encode it to Base64
+	hash := sha256.Sum256([]byte(featureFlagId))
+	encodedFeatureFlag := base64.StdEncoding.EncodeToString(hash[:])
+
+	// Replace '+' with '-' and '/' with '_'
+	encodedFeatureFlag = strings.ReplaceAll(encodedFeatureFlag, "+", "-")
+	encodedFeatureFlag = strings.ReplaceAll(encodedFeatureFlag, "/", "_")
+
+	// Remove all instances of "=" at the end of the string that were added as padding
+	if idx := strings.Index(encodedFeatureFlag, "="); idx != -1 {
+		encodedFeatureFlag = encodedFeatureFlag[:idx]
+	}
+
+	return encodedFeatureFlag
+}
+
+func generateFeatureFlagReference(setting azappconfig.Setting, endpoint string) string {
+	featureFlagReference := fmt.Sprintf("%s/kv/%s", endpoint, *setting.Key)
+
+	// Check if the label is present and not empty
+	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
+		featureFlagReference += fmt.Sprintf("?label=%s", *setting.Label)
+	}
+
+	return featureFlagReference
+}
+
+func populateTelemetryMetadata(featureFlag map[string]interface{}, setting azappconfig.Setting, endpoint string) {
+	if telemetry, ok := featureFlag[TelemetryKey].(map[string]interface{}); ok {
+		if enabled, ok := telemetry[EnabledKey].(bool); ok && enabled {
+			metadata, _ := telemetry[MetadataKey].(map[string]interface{})
+			if metadata == nil {
+				metadata = make(map[string]interface{})
+			}
+
+			// Set the new metadata
+			metadata[ETagKey] = *setting.ETag
+			metadata[FeatureFlagIdKey] = calculateFeatureFlagId(setting)
+			metadata[FeatureFlagReferenceKey] = generateFeatureFlagReference(setting, endpoint)
+			telemetry[MetadataKey] = metadata
+		}
 	}
 }

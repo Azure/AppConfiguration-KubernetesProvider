@@ -78,6 +78,13 @@ func mockFeatureFlagSettings() []azappconfig.Setting {
 	return settingsToReturn
 }
 
+func mockVariantFeatureFlagSettings(key, label string, telemetryEnabled bool) []azappconfig.Setting {
+	settingsToReturn := make([]azappconfig.Setting, 1)
+	settingsToReturn[0] = newFeatureFlagVariant(key, label, telemetryEnabled)
+
+	return settingsToReturn
+}
+
 func newKeyValueSelector(key string, label *string) acpv1.Selector {
 	return acpv1.Selector{
 		KeyFilter:   &key,
@@ -130,6 +137,49 @@ func newFeatureFlagSettings(key string, label string) azappconfig.Setting {
 		Value:       &featureFlagValue,
 		Label:       &label,
 		ContentType: &featureFlagContentType,
+	}
+}
+
+func newFeatureFlagVariant(key string, label string, telemetryEnabled bool) azappconfig.Setting {
+	featureFlagContentType := FeatureFlagContentType
+	fakeETag := azcore.ETag("fakeETag")
+	featureFlagId := strings.TrimPrefix(key, ".appconfig.featureflag/")
+	featureFlagValue := fmt.Sprintf(`{
+		"id": "%s",
+		"description": "",
+		"enabled": false,
+		"variants": [
+			{
+				"name": "Off",
+				"configuration_value": false
+			},
+			{
+				"name": "On",
+				"configuration_value": true
+			}
+		],
+		"allocation": {
+			"percentile": [
+				{
+					"variant": "Off",
+					"from": 0,
+					"to": 100
+				}
+			],
+			"default_when_enabled": "Off",
+			"default_when_disabled": "Off"
+		},
+		"telemetry": {
+			"enabled": %t
+		}
+	}`, featureFlagId, telemetryEnabled)
+
+	return azappconfig.Setting{
+		Key:         &key,
+		Value:       &featureFlagValue,
+		Label:       &label,
+		ContentType: &featureFlagContentType,
+		ETag:        &fakeETag,
 	}
 }
 
@@ -1074,6 +1124,108 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			Expect(allSettings.ConfigMapSettings["settings.json"]).Should(Equal("{\"feature_management\":{\"feature_flags\":[{\"conditions\":{\"client_filters\":[]},\"description\":\"\",\"enabled\":false,\"id\":\"Beta\"}]}}"))
 		})
 
+		It("Succeed to get feature flag settings", func() {
+			By("By updating telemetry when telemetry is enabled")
+			featureFlagKeyFilter := "*"
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+					ConfigMapData: &acpv1.ConfigMapDataOptions{
+						Type: acpv1.Json,
+						Key:  "settings.json",
+					},
+				},
+				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter: &featureFlagKeyFilter,
+						},
+					},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			featureFlagsToReturn := mockVariantFeatureFlagSettings(".appconfig.featureflag/Telemetry_2", "Test", true)
+			featureFlagEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			featureFlagEtags[newFeatureFlagSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: featureFlagsToReturn,
+				Etags:    featureFlagEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(2)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(2)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(1))
+			Expect(allSettings.ConfigMapSettings["settings.json"]).Should(
+				Equal("{\"feature_management\":{\"feature_flags\":[{\"allocation\":{\"default_when_disabled\":\"Off\",\"default_when_enabled\":\"Off\",\"percentile\":[{\"from\":0,\"to\":100,\"variant\":\"Off\"}]},\"description\":\"\",\"enabled\":false,\"id\":\"Telemetry_2\",\"telemetry\":{\"enabled\":true,\"metadata\":{\"ETag\":\"fakeETag\",\"FeatureFlagId\":\"Rc8Am7HIGDT7HC5Ovs3wKN_aGaaK_Uz1mH2e11gaK0o\",\"FeatureFlagReference\":\"/kv/.appconfig.featureflag/Telemetry_2?label=Test\"}},\"variants\":[{\"configuration_value\":false,\"name\":\"Off\"},{\"configuration_value\":true,\"name\":\"On\"}]}]}}"))
+		})
+
+		It("Succeed to get feature flag settings", func() {
+			By("By not populating telemetry when telemetry is disabled")
+			featureFlagKeyFilter := "*"
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+					ConfigMapData: &acpv1.ConfigMapDataOptions{
+						Type: acpv1.Json,
+						Key:  "settings.json",
+					},
+				},
+				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter: &featureFlagKeyFilter,
+						},
+					},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			featureFlagsToReturn := mockVariantFeatureFlagSettings(".appconfig.featureflag/Telemetry_2", "Test", false)
+			featureFlagEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			featureFlagEtags[newFeatureFlagSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: featureFlagsToReturn,
+				Etags:    featureFlagEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(2)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(2)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(1))
+			Expect(allSettings.ConfigMapSettings["settings.json"]).Should(
+				Equal("{\"feature_management\":{\"feature_flags\":[{\"allocation\":{\"default_when_disabled\":\"Off\",\"default_when_enabled\":\"Off\",\"percentile\":[{\"from\":0,\"to\":100,\"variant\":\"Off\"}]},\"description\":\"\",\"enabled\":false,\"id\":\"Telemetry_2\",\"telemetry\":{\"enabled\":false},\"variants\":[{\"configuration_value\":false,\"name\":\"Off\"},{\"configuration_value\":true,\"name\":\"On\"}]}]}}"))
+		})
+
 		It("Fail to get all configuration settings", func() {
 			By("By getting error from Azure App Configuration")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
@@ -1364,6 +1516,47 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, "\x00", *sentinels[0].Label)
 	assert.Equal(t, "two", sentinels[1].Key)
 	assert.Equal(t, "\x00", *sentinels[1].Label)
+
+	snapshot := "snapshot"
+	testSpec9 := acpv1.AzureAppConfigurationProviderSpec{
+		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acpv1.Selector{
+				{KeyFilter: &one, LabelFilter: &emptyLabel},
+				{SnapshotName: &snapshot},
+			},
+		},
+	}
+
+	filters9 := GetKeyValueFilters(testSpec9)
+	assert.Len(t, filters9, 2)
+	assert.Equal(t, "one", *filters9[0].KeyFilter)
+	assert.Equal(t, "\x00", *filters9[0].LabelFilter)
+	assert.Equal(t, "snapshot", *filters9[1].SnapshotName)
+
+	testSpec10 := acpv1.AzureAppConfigurationProviderSpec{
+		FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+			Selectors: []acpv1.Selector{
+				{KeyFilter: &one, LabelFilter: &emptyLabel},
+				{SnapshotName: &snapshot},
+			},
+		},
+	}
+
+	filters10 := GetFeatureFlagFilters(testSpec10)
+	assert.Len(t, filters10, 2)
+	assert.Equal(t, ".appconfig.featureflag/one", *filters10[0].KeyFilter)
+	assert.Equal(t, "\x00", *filters10[0].LabelFilter)
+	assert.Equal(t, "snapshot", *filters10[1].SnapshotName)
+}
+
+func TestFeatureFlagId(t *testing.T) {
+	telemetrySetting1 := newFeatureFlagVariant(".appconfig.featureflag/Telemetry_1", "", true)
+	calculatedId1 := calculateFeatureFlagId(telemetrySetting1)
+	assert.Equal(t, "krkOsu9dVV9huwbQDPR6gkV_2T0buWxOCS-nNsj5-6g", calculatedId1)
+
+	telemetrySetting2 := newFeatureFlagVariant(".appconfig.featureflag/Telemetry_2", "Test", true)
+	calculatedId2 := calculateFeatureFlagId(telemetrySetting2)
+	assert.Equal(t, "Rc8Am7HIGDT7HC5Ovs3wKN_aGaaK_Uz1mH2e11gaK0o", calculatedId2)
 }
 
 func TestCompare(t *testing.T) {

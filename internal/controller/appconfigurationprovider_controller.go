@@ -23,6 +23,7 @@ import (
 	"azappconfig/provider/internal/loader"
 	"context"
 	"errors"
+	"maps"
 	"strconv"
 	"time"
 
@@ -51,6 +52,7 @@ type AzureAppConfigurationProviderReconciler struct {
 type ReconciliationState struct {
 	Generation                              int64
 	ConfigMapResourceVersion                *string
+	Annotations                             map[string]string
 	SentinelETags                           map[acpv1.Sentinel]*azcore.ETag
 	KeyValueETags                           map[acpv1.Selector][]*azcore.ETag
 	FeatureFlagETags                        map[acpv1.Selector][]*azcore.ETag
@@ -180,6 +182,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 		reconciler.ProvidersReconcileState[req.NamespacedName] = &ReconciliationState{
 			Generation:               -1,
 			ConfigMapResourceVersion: nil,
+			Annotations:              make(map[string]string),
 			SentinelETags:            make(map[acpv1.Sentinel]*azcore.ETag),
 			KeyValueETags:            make(map[acpv1.Selector][]*azcore.ETag),
 			FeatureFlagETags:         make(map[acpv1.Selector][]*azcore.ETag),
@@ -249,7 +252,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 
 	/* Create ConfigMap from key-value settings */
 	if processor.RefreshOptions.ConfigMapSettingPopulated {
-		result, err := reconciler.createOrUpdateConfigMap(ctx, provider, processor.Settings)
+		result, err := reconciler.createOrUpdateConfigMap(ctx, &existingConfigMap, provider, processor.Settings)
 		if err != nil {
 			return result, nil
 		}
@@ -273,7 +276,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 			}
 		}
 
-		result, err := reconciler.createOrUpdateSecrets(ctx, provider, processor)
+		result, err := reconciler.createOrUpdateSecrets(ctx, provider, processor, existingSecrets)
 		if err != nil {
 			return result, nil
 		}
@@ -369,8 +372,14 @@ func (reconciler *AzureAppConfigurationProviderReconciler) requeueWhenGetSetting
 
 func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigMap(
 	ctx context.Context,
+	existingConfigMap *corev1.ConfigMap,
 	provider *acpv1.AzureAppConfigurationProvider,
 	settings *loader.TargetKeyValueSettings) (reconcile.Result, error) {
+	if !shouldCreateOrUpdateConfigMap(existingConfigMap, settings.ConfigMapSettings, provider.Spec.Target.ConfigMapData) {
+		klog.V(5).Infof("Skip updating the configMap %q in %q namespace since data is not changed", provider.Spec.Target.ConfigMapName, provider.Namespace)
+		return reconcile.Result{}, nil
+	}
+
 	configMapObj := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      provider.Spec.Target.ConfigMapName,
@@ -383,17 +392,16 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 	}
 
-	if provider.Annotations == nil {
-		provider.Annotations = make(map[string]string)
-	}
-	provider.Annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
+	annotations := make(map[string]string)
+	maps.Copy(annotations, provider.Annotations)
+	annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
 	if len(settings.ConfigMapSettings) == 0 {
 		klog.V(3).Info("No configMap settings are fetched from Azure AppConfiguration")
 	}
 	operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, configMapObj, func() error {
 		configMapObj.Data = settings.ConfigMapSettings
 		configMapObj.Labels = provider.Labels
-		configMapObj.Annotations = provider.Annotations
+		configMapObj.Annotations = annotations
 
 		return nil
 	})
@@ -415,13 +423,10 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets(
 	ctx context.Context,
 	provider *acpv1.AzureAppConfigurationProvider,
-	processor *AppConfigurationProviderProcessor) (reconcile.Result, error) {
+	processor *AppConfigurationProviderProcessor,
+	existingSecrets map[string]corev1.Secret) (reconcile.Result, error) {
 	if len(processor.Settings.SecretSettings) == 0 {
 		klog.V(3).Info("No secret settings are fetched from Azure AppConfiguration")
-	}
-
-	if provider.Annotations == nil {
-		provider.Annotations = make(map[string]string)
 	}
 
 	namespacedName := types.NamespacedName{
@@ -430,7 +435,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 	}
 
 	for secretName, secret := range processor.Settings.SecretSettings {
-		if !shouldCreateOrUpdate(processor, secretName) {
+		if !shouldCreateOrUpdateSecret(processor, secretName, existingSecrets) {
 			if _, ok := reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName]; ok {
 				processor.Settings.K8sSecrets[secretName].SecretResourceVersion = reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName].SecretResourceVersion
 			}
@@ -452,11 +457,13 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 		}
 
-		provider.Annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
+		annotations := make(map[string]string)
+		maps.Copy(annotations, provider.Annotations)
+		annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
 		operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, secretObj, func() error {
 			secretObj.Data = secret.Data
 			secretObj.Labels = provider.Labels
-			secretObj.Annotations = provider.Annotations
+			secretObj.Annotations = annotations
 
 			return nil
 		})

@@ -6,13 +6,17 @@ package controller
 import (
 	acpv1 "azappconfig/provider/api/v1"
 	"azappconfig/provider/internal/loader"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"gopkg.in/yaml.v2"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -305,30 +309,42 @@ func verifySelectorObject(selector acpv1.Selector) error {
 	return nil
 }
 
-func shouldCreateOrUpdate(processor *AppConfigurationProviderProcessor, secretName string) bool {
-	if processor.ShouldReconcile {
-		return true
-	}
-
-	existingK8sSecrets := processor.ReconciliationState.ExistingK8sSecrets
+func shouldCreateOrUpdateSecret(processor *AppConfigurationProviderProcessor, secretName string, existingK8sSecrets map[string]corev1.Secret) bool {
+	// If the secret does not exist, create it
 	if _, ok := existingK8sSecrets[secretName]; !ok {
 		return true
 	}
 
-	k8sSecretMetadata := processor.Settings.K8sSecrets[secretName]
-	if len(existingK8sSecrets[secretName].SecretsKeyVaultMetadata) != len(k8sSecretMetadata.SecretsKeyVaultMetadata) {
+	return !reflect.DeepEqual(processor.Settings.SecretSettings[secretName].Data, existingK8sSecrets[secretName].Data)
+}
+
+func shouldCreateOrUpdateConfigMap(existingConfigMap *corev1.ConfigMap, latestConfigMapSettings map[string]string, dataOptions *acpv1.ConfigMapDataOptions) bool {
+	if existingConfigMap == nil || existingConfigMap.Data == nil {
 		return true
 	}
 
-	for key, secretMetadata := range k8sSecretMetadata.SecretsKeyVaultMetadata {
-		if _, ok := existingK8sSecrets[secretName].SecretsKeyVaultMetadata[key]; !ok {
-			return true
-		}
-		if secretMetadata.SecretId != nil &&
-			existingK8sSecrets[secretName].SecretsKeyVaultMetadata[key].SecretId != nil &&
-			*(existingK8sSecrets[secretName].SecretsKeyVaultMetadata[key].SecretId) != *(secretMetadata.SecretId) {
-			return true
-		}
+	if dataOptions == nil || dataOptions.Type == acpv1.Default || dataOptions.Type == acpv1.Properties {
+		return !reflect.DeepEqual(existingConfigMap.Data, latestConfigMapSettings)
+	}
+
+	// spec.target.configMapData.key is changed
+	if _, ok := existingConfigMap.Data[dataOptions.Key]; !ok {
+		return true
+	}
+
+	var existingSettings, latestSettings map[string]interface{}
+	if dataOptions.Type == acpv1.Yaml {
+		_ = yaml.Unmarshal([]byte(existingConfigMap.Data[dataOptions.Key]), &existingSettings)
+		_ = yaml.Unmarshal([]byte(latestConfigMapSettings[dataOptions.Key]), &latestSettings)
+
+		return !reflect.DeepEqual(existingSettings, latestSettings)
+	}
+
+	if dataOptions.Type == acpv1.Json {
+		_ = json.Unmarshal([]byte(existingConfigMap.Data[dataOptions.Key]), &existingSettings)
+		_ = json.Unmarshal([]byte(latestConfigMapSettings[dataOptions.Key]), &latestSettings)
+
+		return !reflect.DeepEqual(existingSettings, latestSettings)
 	}
 
 	return false

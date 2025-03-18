@@ -12,6 +12,8 @@ helm install azureappconfiguration.kubernetesprovider \
      --create-namespace
 ```
 
+Azure App Configuration Kubernetes Provider is also available as Azure Kubernetes Service (AKS) extension. You can use Azure CLI or Bicep to install the extension on your AKS cluster. See [Install Azure App Configuration AKS extension](https://learn.microsoft.com/azure/aks/azure-app-configuration) for more information.
+
 ## Getting started
 
 Documentation on how to use the Azure App Configuration Kubernetes Provider is available in the following links:

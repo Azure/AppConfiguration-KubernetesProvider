@@ -386,7 +386,8 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 	deduplicatedFeatureFlags := make([]interface{}, 0)
 	clientEndpoint := ""
 	if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
-		clientEndpoint = manager.lastSuccessfulEndpoint
+		// use primary client endpoint in feature flag reference
+		clientEndpoint = manager.StaticClientWrappers[0].Endpoint
 	}
 
 	// if settings returned like this: [{"id": "Beta"...}, {"id": "Alpha"...}, {"id": "Beta"...}], we need to deduplicate it to [{"id": "Alpha"...}, {"id": "Beta"...}], the last one wins

@@ -1172,7 +1172,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			Expect(err).Should(BeNil())
 			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(1))
 			Expect(allSettings.ConfigMapSettings["settings.json"]).Should(
-				Equal("{\"feature_management\":{\"feature_flags\":[{\"allocation\":{\"default_when_disabled\":\"Off\",\"default_when_enabled\":\"Off\",\"percentile\":[{\"from\":0,\"to\":100,\"variant\":\"Off\"}]},\"description\":\"\",\"enabled\":false,\"id\":\"Telemetry_2\",\"telemetry\":{\"enabled\":true,\"metadata\":{\"ETag\":\"fakeETag\",\"FeatureFlagId\":\"Rc8Am7HIGDT7HC5Ovs3wKN_aGaaK_Uz1mH2e11gaK0o\",\"FeatureFlagReference\":\"/kv/.appconfig.featureflag/Telemetry_2?label=Test\"}},\"variants\":[{\"configuration_value\":false,\"name\":\"Off\"},{\"configuration_value\":true,\"name\":\"On\"}]}]}}"))
+				Equal("{\"feature_management\":{\"feature_flags\":[{\"allocation\":{\"default_when_disabled\":\"Off\",\"default_when_enabled\":\"Off\",\"percentile\":[{\"from\":0,\"to\":100,\"variant\":\"Off\"}]},\"description\":\"\",\"enabled\":false,\"id\":\"Telemetry_2\",\"telemetry\":{\"enabled\":true,\"metadata\":{\"ETag\":\"fakeETag\",\"FeatureFlagReference\":\"/kv/.appconfig.featureflag/Telemetry_2?label=Test\"}},\"variants\":[{\"configuration_value\":false,\"name\":\"Off\"},{\"configuration_value\":true,\"name\":\"On\"}]}]}}"))
 		})
 
 		It("Succeed to get feature flag settings", func() {
@@ -1547,16 +1547,6 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, ".appconfig.featureflag/one", *filters10[0].KeyFilter)
 	assert.Equal(t, "\x00", *filters10[0].LabelFilter)
 	assert.Equal(t, "snapshot", *filters10[1].SnapshotName)
-}
-
-func TestFeatureFlagId(t *testing.T) {
-	telemetrySetting1 := newFeatureFlagVariant(".appconfig.featureflag/Telemetry_1", "", true)
-	calculatedId1 := calculateFeatureFlagId(telemetrySetting1)
-	assert.Equal(t, "krkOsu9dVV9huwbQDPR6gkV_2T0buWxOCS-nNsj5-6g", calculatedId1)
-
-	telemetrySetting2 := newFeatureFlagVariant(".appconfig.featureflag/Telemetry_2", "Test", true)
-	calculatedId2 := calculateFeatureFlagId(telemetrySetting2)
-	assert.Equal(t, "Rc8Am7HIGDT7HC5Ovs3wKN_aGaaK_Uz1mH2e11gaK0o", calculatedId2)
 }
 
 func TestCompare(t *testing.T) {

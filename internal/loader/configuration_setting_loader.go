@@ -6,7 +6,6 @@ package loader
 import (
 	acpv1 "azappconfig/provider/api/v1"
 	"context"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -107,7 +106,6 @@ const (
 	EnabledKey              string = "enabled"
 	MetadataKey             string = "metadata"
 	ETagKey                 string = "ETag"
-	FeatureFlagIdKey        string = "FeatureFlagId"
 	FeatureFlagReferenceKey string = "FeatureFlagReference"
 )
 
@@ -918,29 +916,6 @@ func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
 	}
 }
 
-func calculateFeatureFlagId(setting azappconfig.Setting) string {
-	// Create the basic value string
-	featureFlagId := *setting.Key + "\n"
-	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
-		featureFlagId += *setting.Label
-	}
-
-	// Generate SHA-256 hash, and encode it to Base64
-	hash := sha256.Sum256([]byte(featureFlagId))
-	encodedFeatureFlag := base64.StdEncoding.EncodeToString(hash[:])
-
-	// Replace '+' with '-' and '/' with '_'
-	encodedFeatureFlag = strings.ReplaceAll(encodedFeatureFlag, "+", "-")
-	encodedFeatureFlag = strings.ReplaceAll(encodedFeatureFlag, "/", "_")
-
-	// Remove all instances of "=" at the end of the string that were added as padding
-	if idx := strings.Index(encodedFeatureFlag, "="); idx != -1 {
-		encodedFeatureFlag = encodedFeatureFlag[:idx]
-	}
-
-	return encodedFeatureFlag
-}
-
 func generateFeatureFlagReference(setting azappconfig.Setting, endpoint string) string {
 	featureFlagReference := fmt.Sprintf("%s/kv/%s", endpoint, *setting.Key)
 
@@ -962,7 +937,6 @@ func populateTelemetryMetadata(featureFlag map[string]interface{}, setting azapp
 
 			// Set the new metadata
 			metadata[ETagKey] = *setting.ETag
-			metadata[FeatureFlagIdKey] = calculateFeatureFlagId(setting)
 			metadata[FeatureFlagReferenceKey] = generateFeatureFlagReference(setting, endpoint)
 			telemetry[MetadataKey] = metadata
 		}

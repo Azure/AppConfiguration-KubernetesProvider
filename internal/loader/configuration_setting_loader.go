@@ -112,8 +112,8 @@ const (
 
 // AI Configuration telemetry
 const (
-	AIMimeProfileKey                  string = "https://azconfig.io/mime-profiles/ai"
-	UseAIChatCompletionMimeProfileKey string = "https://azconfig.io/mime-profiles/ai/chat-completion"
+	AIMimeProfileKey               string = "https://azconfig.io/mime-profiles/ai"
+	AIChatCompletionMimeProfileKey string = "https://azconfig.io/mime-profiles/ai/chat-completion"
 )
 
 func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
@@ -317,7 +317,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 					useAIConfiguration = true
 				}
 
-				if strings.Contains(*setting.ContentType, UseAIChatCompletionMimeProfileKey) {
+				if strings.Contains(*setting.ContentType, AIChatCompletionMimeProfileKey) {
 					useAIChatCompletionConfiguration = true
 				}
 			}

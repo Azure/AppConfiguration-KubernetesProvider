@@ -633,3 +633,131 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 	}
 	assert.Nil(t, err)
 }
+
+func TestIsAIConfigurationContentType(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType *string
+		expected    bool
+	}{
+		{
+			name:        "valid AI configuration content type",
+			contentType: strPtr("application/json; profile=\"https://azconfig.io/mime-profiles/ai\""),
+			expected:    true,
+		},
+		{
+			name:        "valid AI configuration content type with extra parameters",
+			contentType: strPtr("application/json; charset=utf-8; profile=\"https://azconfig.io/mime-profiles/ai\"; param=value"),
+			expected:    true,
+		},
+		{
+			name:        "invalid AI configuration content type - missing profile keyword",
+			contentType: strPtr("application/json; \"https://azconfig.io/mime-profiles/ai\""),
+			expected:    false,
+		},
+		{
+			name:        "invalid content type - wrong profile",
+			contentType: strPtr("application/json; profile=\"https://azconfig.io/mime-profiles/other\""),
+			expected:    false,
+		},
+		{
+			name:        "invalid content type - partial match",
+			contentType: strPtr("application/json; profile=\"prefix-https://azconfig.io/mime-profiles/ai\""),
+			expected:    false,
+		},
+		{
+			name:        "invalid content type - not JSON",
+			contentType: strPtr("text/plain; profile=\"https://azconfig.io/mime-profiles/ai\""),
+			expected:    false,
+		},
+		{
+			name:        "empty content type",
+			contentType: strPtr(""),
+			expected:    false,
+		},
+		{
+			name:        "nil content type",
+			contentType: nil,
+			expected:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isAIConfigurationContentType(tt.contentType)
+			if result != tt.expected {
+				t.Errorf("isAIConfigurationContentType(%v) = %v, want %v",
+					tt.contentType, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsAIChatCompletionContentType(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType *string
+		expected    bool
+	}{
+		{
+			name:        "valid AI chat completion content type",
+			contentType: strPtr("application/json; profile=\"https://azconfig.io/mime-profiles/ai/chat-completion\""),
+			expected:    true,
+		},
+		{
+			name:        "valid AI chat completion with multiple parameters",
+			contentType: strPtr("application/json; charset=utf-8; profile=\"https://azconfig.io/mime-profiles/ai/chat-completion\"; param=value"),
+			expected:    true,
+		},
+		{
+			name:        "invalid content type - missing profile keyword",
+			contentType: strPtr("application/json; \"https://azconfig.io/mime-profiles/ai/chat-completion\""),
+			expected:    false,
+		},
+		{
+			name:        "invalid content type - wrong profile",
+			contentType: strPtr("application/json; profile=\"https://azconfig.io/mime-profiles/other\""),
+			expected:    false,
+		},
+		{
+			name:        "invalid content type - partial match",
+			contentType: strPtr("application/json; profile=\"prefix-https://azconfig.io/mime-profiles/ai/chat-completion\""),
+			expected:    false,
+		},
+		{
+			name:        "invalid content type - not JSON",
+			contentType: strPtr("text/plain; profile=\"https://azconfig.io/mime-profiles/ai/chat-completion\""),
+			expected:    false,
+		},
+		{
+			name:        "JSON content type without AI chat completion profile",
+			contentType: strPtr("application/json"),
+			expected:    false,
+		},
+		{
+			name:        "empty content type",
+			contentType: strPtr(""),
+			expected:    false,
+		},
+		{
+			name:        "nil content type",
+			contentType: nil,
+			expected:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isAIChatCompletionContentType(tt.contentType)
+			if result != tt.expected {
+				t.Errorf("isAIChatCompletionContentType(%v) = %v, want %v",
+					tt.contentType, result, tt.expected)
+			}
+		})
+	}
+}
+
+// Helper function to create string pointers for tests
+func strPtr(s string) *string {
+	return &s
+}

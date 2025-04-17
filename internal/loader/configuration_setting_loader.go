@@ -101,21 +101,6 @@ const (
 	RequestTracingEnabled                 string = "REQUEST_TRACING_ENABLED"
 )
 
-// Feature flag telemetry
-const (
-	TelemetryKey            string = "telemetry"
-	EnabledKey              string = "enabled"
-	MetadataKey             string = "metadata"
-	ETagKey                 string = "ETag"
-	FeatureFlagReferenceKey string = "FeatureFlagReference"
-)
-
-// AI Configuration telemetry
-const (
-	AIMimeProfileKey               string = "https://azconfig.io/mime-profiles/ai"
-	AIChatCompletionMimeProfileKey string = "https://azconfig.io/mime-profiles/ai/chat-completion"
-)
-
 func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
 	return &ConfigurationSettingLoader{
 		AzureAppConfigurationProvider: provider,
@@ -311,16 +296,8 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 		default:
 			rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 			rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
-			if rawSettings.IsJsonContentTypeMap[trimmedKey] {
-				// if the content type is json, settings.ContentType is not nil
-				if strings.Contains(*setting.ContentType, AIMimeProfileKey) {
-					useAIConfiguration = true
-				}
-
-				if strings.Contains(*setting.ContentType, AIChatCompletionMimeProfileKey) {
-					useAIChatCompletionConfiguration = true
-				}
-			}
+			useAIConfiguration = isAIConfigurationContentType(setting.ContentType)
+			useAIChatCompletionConfiguration = isAIChatCompletionContentType(setting.ContentType)
 		}
 	}
 

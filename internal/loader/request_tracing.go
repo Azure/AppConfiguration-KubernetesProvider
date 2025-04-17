@@ -25,10 +25,28 @@ type TracingFeatures struct {
 	UseAIChatCompletionConfiguration bool
 }
 
+// Feature flag telemetry
+const (
+	TelemetryKey            string = "telemetry"
+	EnabledKey              string = "enabled"
+	MetadataKey             string = "metadata"
+	ETagKey                 string = "ETag"
+	FeatureFlagReferenceKey string = "FeatureFlagReference"
+)
+
+// AI Configuration telemetry
+const (
+	AIMimeProfileKey               string = "https://azconfig.io/mime-profiles/ai"
+	AIChatCompletionMimeProfileKey string = "https://azconfig.io/mime-profiles/ai/chat-completion"
+)
+
 const (
 	RequestTracingKey          TracingKey = TracingKey("tracing")
 	AzureExtensionContext      string     = "AZURE_EXTENSION_CONTEXT"
 	TracingFeatureDelimiterKey string     = "+"
+	LoadBalancingKey           string     = "LB"
+	AIConfigurationKey         string     = "AI"
+	AIChatCompletionKey        string     = "AICC"
 )
 
 func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, tracingFeatures TracingFeatures) http.Header {
@@ -66,22 +84,20 @@ func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureApp
 		}
 	}
 
-	if provider.Spec.LoadBalancingEnabled ||
-		tracingFeatures.UseAIConfiguration ||
-		tracingFeatures.UseAIChatCompletionConfiguration {
-		features := make([]string, 0)
-		if provider.Spec.LoadBalancingEnabled {
-			features = append(features, "LB")
-		}
+	features := make([]string, 0)
+	if provider.Spec.LoadBalancingEnabled {
+		features = append(features, LoadBalancingKey)
+	}
 
-		if tracingFeatures.UseAIConfiguration {
-			features = append(features, "AI")
-		}
+	if tracingFeatures.UseAIConfiguration {
+		features = append(features, AIConfigurationKey)
+	}
 
-		if tracingFeatures.UseAIChatCompletionConfiguration {
-			features = append(features, "AICC")
-		}
+	if tracingFeatures.UseAIChatCompletionConfiguration {
+		features = append(features, AIChatCompletionKey)
+	}
 
+	if len(features) > 0 {
 		featureStr := "Features=" + strings.Join(features, TracingFeatureDelimiterKey)
 		output = append(output, featureStr)
 	}

@@ -156,3 +156,43 @@ func marshalJsonYaml(settings map[string]interface{}, dataOptions *acpv1.ConfigM
 
 	return "", nil
 }
+
+func isAIConfigurationContentType(contentType *string) bool {
+	if !isJsonContentType(contentType) {
+		return false
+	}
+
+	return hasProfile(strings.ToLower(*contentType), AIMimeProfileKey)
+}
+
+func isAIChatCompletionContentType(contentType *string) bool {
+	if !isJsonContentType(contentType) {
+		return false
+	}
+
+	return hasProfile(strings.ToLower(*contentType), AIChatCompletionMimeProfileKey)
+}
+
+// hasProfile checks if a content type contains a specific profile parameter
+func hasProfile(contentType, profileValue string) bool {
+	// Split by semicolons to get content type parts
+	parts := strings.Split(contentType, ";")
+
+	// Check each part after the content type for profile parameter
+	for i := 1; i < len(parts); i++ {
+		part := strings.TrimSpace(parts[i])
+
+		// Look for profile="value" pattern
+		if strings.HasPrefix(part, "profile=") {
+			// Extract the profile value (handling quoted values)
+			profile := part[len("profile="):]
+			profile = strings.Trim(profile, "\"'")
+
+			if profile == profileValue {
+				return true
+			}
+		}
+	}
+
+	return false
+}

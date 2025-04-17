@@ -37,8 +37,9 @@ import (
 
 type ConfigurationSettingLoader struct {
 	acpv1.AzureAppConfigurationProvider
-	ClientManager  ClientManager
-	SettingsClient SettingsClient
+	ClientManager   ClientManager
+	SettingsClient  SettingsClient
+	TracingFeatures TracingFeatures
 }
 
 type TargetKeyValueSettings struct {
@@ -109,11 +110,18 @@ const (
 	FeatureFlagReferenceKey string = "FeatureFlagReference"
 )
 
+// AI Configuration telemetry
+const (
+	AIMimeProfileKey                  string = "https://azconfig.io/mime-profiles/ai"
+	UseAIChatCompletionMimeProfileKey string = "https://azconfig.io/mime-profiles/ai/chat-completion"
+)
+
 func NewConfigurationSettingLoader(provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, settingsClient SettingsClient) (*ConfigurationSettingLoader, error) {
 	return &ConfigurationSettingLoader{
 		AzureAppConfigurationProvider: provider,
 		ClientManager:                 clientManager,
 		SettingsClient:                settingsClient,
+		TracingFeatures:               TracingFeatures{},
 	}, nil
 }
 
@@ -238,7 +246,8 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 	}
 
 	resolver := secretReferenceResolver
-
+	useAIConfiguration := false
+	useAIChatCompletionConfiguration := false
 	for _, setting := range settingsResponse.Settings {
 		trimmedKey := trimPrefix(*setting.Key, csl.Spec.Configuration.TrimKeyPrefixes)
 		if len(trimmedKey) == 0 {
@@ -302,8 +311,21 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 		default:
 			rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 			rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
+			if rawSettings.IsJsonContentTypeMap[trimmedKey] {
+				// if the content type is json, settings.ContentType is not nil
+				if strings.Contains(*setting.ContentType, AIMimeProfileKey) {
+					useAIConfiguration = true
+				}
+
+				if strings.Contains(*setting.ContentType, UseAIChatCompletionMimeProfileKey) {
+					useAIChatCompletionConfiguration = true
+				}
+			}
 		}
 	}
+
+	csl.TracingFeatures.UseAIConfiguration = useAIConfiguration
+	csl.TracingFeatures.UseAIChatCompletionConfiguration = useAIChatCompletionConfiguration
 
 	// resolve the secret reference settings
 	if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.K8sSecrets, resolver); err != nil {
@@ -554,7 +576,9 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	}
 	for _, clientWrapper := range clients {
 		if tracingEnabled {
-			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.ClientManager, isFailoverRequest))
+			csl.TracingFeatures.IsFailoverRequest = isFailoverRequest
+			csl.TracingFeatures.ReplicaCount = len(manager.DynamicClientWrappers)
+			ctx = policy.WithHTTPHeader(ctx, createCorrelationContextHeader(ctx, csl.AzureAppConfigurationProvider, csl.TracingFeatures))
 		}
 		settingsResponse, err := settingsClient.GetSettings(ctx, clientWrapper.Client)
 		successful := true

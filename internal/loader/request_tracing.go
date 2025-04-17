@@ -18,12 +18,20 @@ type RequestTracing struct {
 	IsStartUp bool
 }
 
+type TracingFeatures struct {
+	ReplicaCount                     int
+	IsFailoverRequest                bool
+	UseAIConfiguration               bool
+	UseAIChatCompletionConfiguration bool
+}
+
 const (
-	RequestTracingKey     TracingKey = TracingKey("tracing")
-	AzureExtensionContext string     = "AZURE_EXTENSION_CONTEXT"
+	RequestTracingKey          TracingKey = TracingKey("tracing")
+	AzureExtensionContext      string     = "AZURE_EXTENSION_CONTEXT"
+	TracingFeatureDelimiterKey string     = "+"
 )
 
-func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, isFailoverRequest bool) http.Header {
+func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, tracingFeatures TracingFeatures) http.Header {
 	header := http.Header{}
 	output := make([]string, 0)
 
@@ -51,22 +59,31 @@ func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureApp
 	}
 
 	if provider.Spec.ReplicaDiscoveryEnabled {
-		if manager, ok := clientManager.(*ConfigurationClientManager); ok {
-			replicaCount := 0
-			if manager.DynamicClientWrappers != nil {
-				replicaCount = len(manager.DynamicClientWrappers)
-			}
+		output = append(output, fmt.Sprintf("ReplicaCount=%d", tracingFeatures.ReplicaCount))
 
-			output = append(output, fmt.Sprintf("ReplicaCount=%d", replicaCount))
-		}
-
-		if isFailoverRequest {
+		if tracingFeatures.IsFailoverRequest {
 			output = append(output, "FailoverRequest")
 		}
 	}
 
-	if provider.Spec.LoadBalancingEnabled {
-		output = append(output, "Features=LB")
+	if provider.Spec.LoadBalancingEnabled ||
+		tracingFeatures.UseAIConfiguration ||
+		tracingFeatures.UseAIChatCompletionConfiguration {
+		features := make([]string, 0)
+		if provider.Spec.LoadBalancingEnabled {
+			features = append(features, "LB")
+		}
+
+		if tracingFeatures.UseAIConfiguration {
+			features = append(features, "AI")
+		}
+
+		if tracingFeatures.UseAIChatCompletionConfiguration {
+			features = append(features, "AICC")
+		}
+
+		featureStr := "Features=" + strings.Join(features, TracingFeatureDelimiterKey)
+		output = append(output, featureStr)
 	}
 
 	if _, ok := os.LookupEnv(AzureExtensionContext); ok {

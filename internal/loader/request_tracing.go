@@ -18,12 +18,38 @@ type RequestTracing struct {
 	IsStartUp bool
 }
 
+type TracingFeatures struct {
+	ReplicaCount                     int
+	IsFailoverRequest                bool
+	UseAIConfiguration               bool
+	UseAIChatCompletionConfiguration bool
+}
+
+// Feature flag telemetry
 const (
-	RequestTracingKey     TracingKey = TracingKey("tracing")
-	AzureExtensionContext string     = "AZURE_EXTENSION_CONTEXT"
+	TelemetryKey            string = "telemetry"
+	EnabledKey              string = "enabled"
+	MetadataKey             string = "metadata"
+	ETagKey                 string = "ETag"
+	FeatureFlagReferenceKey string = "FeatureFlagReference"
 )
 
-func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, clientManager ClientManager, isFailoverRequest bool) http.Header {
+// AI Configuration telemetry
+const (
+	AIMimeProfileKey               string = "https://azconfig.io/mime-profiles/ai"
+	AIChatCompletionMimeProfileKey string = "https://azconfig.io/mime-profiles/ai/chat-completion"
+)
+
+const (
+	RequestTracingKey          TracingKey = TracingKey("tracing")
+	AzureExtensionContext      string     = "AZURE_EXTENSION_CONTEXT"
+	TracingFeatureDelimiterKey string     = "+"
+	LoadBalancingKey           string     = "LB"
+	AIConfigurationKey         string     = "AI"
+	AIChatCompletionKey        string     = "AICC"
+)
+
+func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, tracingFeatures TracingFeatures) http.Header {
 	header := http.Header{}
 	output := make([]string, 0)
 
@@ -51,22 +77,29 @@ func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureApp
 	}
 
 	if provider.Spec.ReplicaDiscoveryEnabled {
-		if manager, ok := clientManager.(*ConfigurationClientManager); ok {
-			replicaCount := 0
-			if manager.DynamicClientWrappers != nil {
-				replicaCount = len(manager.DynamicClientWrappers)
-			}
+		output = append(output, fmt.Sprintf("ReplicaCount=%d", tracingFeatures.ReplicaCount))
 
-			output = append(output, fmt.Sprintf("ReplicaCount=%d", replicaCount))
-		}
-
-		if isFailoverRequest {
+		if tracingFeatures.IsFailoverRequest {
 			output = append(output, "FailoverRequest")
 		}
 	}
 
+	features := make([]string, 0)
 	if provider.Spec.LoadBalancingEnabled {
-		output = append(output, "Features=LB")
+		features = append(features, LoadBalancingKey)
+	}
+
+	if tracingFeatures.UseAIConfiguration {
+		features = append(features, AIConfigurationKey)
+	}
+
+	if tracingFeatures.UseAIChatCompletionConfiguration {
+		features = append(features, AIChatCompletionKey)
+	}
+
+	if len(features) > 0 {
+		featureStr := "Features=" + strings.Join(features, TracingFeatureDelimiterKey)
+		output = append(output, featureStr)
 	}
 
 	if _, ok := os.LookupEnv(AzureExtensionContext); ok {

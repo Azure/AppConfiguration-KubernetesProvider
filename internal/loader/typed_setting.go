@@ -158,18 +158,10 @@ func marshalJsonYaml(settings map[string]interface{}, dataOptions *acpv1.ConfigM
 }
 
 func isAIConfigurationContentType(contentType *string) bool {
-	if !isJsonContentType(contentType) {
-		return false
-	}
-
 	return hasProfile(*contentType, AIMimeProfileKey)
 }
 
 func isAIChatCompletionContentType(contentType *string) bool {
-	if !isJsonContentType(contentType) {
-		return false
-	}
-
 	return hasProfile(*contentType, AIChatCompletionMimeProfileKey)
 }
 

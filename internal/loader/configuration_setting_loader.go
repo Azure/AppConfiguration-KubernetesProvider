@@ -296,8 +296,15 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 		default:
 			rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 			rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
-			useAIConfiguration = isAIConfigurationContentType(setting.ContentType)
-			useAIChatCompletionConfiguration = isAIChatCompletionContentType(setting.ContentType)
+			if !rawSettings.IsJsonContentTypeMap[trimmedKey] {
+				continue
+			}
+			if isAIConfigurationContentType(setting.ContentType) {
+				useAIConfiguration = true
+			}
+			if isAIChatCompletionContentType(setting.ContentType) {
+				useAIChatCompletionConfiguration = true
+			}
 		}
 	}
 

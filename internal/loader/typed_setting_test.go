@@ -684,7 +684,7 @@ func TestIsAIConfigurationContentType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isAIConfigurationContentType(tt.contentType)
+			result := isJsonContentType(tt.contentType) && isAIConfigurationContentType(tt.contentType)
 			if result != tt.expected {
 				t.Errorf("isAIConfigurationContentType(%v) = %v, want %v",
 					tt.contentType, result, tt.expected)
@@ -748,7 +748,7 @@ func TestIsAIChatCompletionContentType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isAIChatCompletionContentType(tt.contentType)
+			result := isJsonContentType(tt.contentType) && isAIChatCompletionContentType(tt.contentType)
 			if result != tt.expected {
 				t.Errorf("isAIChatCompletionContentType(%v) = %v, want %v",
 					tt.contentType, result, tt.expected)

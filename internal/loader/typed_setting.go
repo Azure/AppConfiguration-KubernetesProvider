@@ -162,7 +162,7 @@ func isAIConfigurationContentType(contentType *string) bool {
 		return false
 	}
 
-	return hasProfile(strings.ToLower(*contentType), AIMimeProfileKey)
+	return hasProfile(*contentType, AIMimeProfileKey)
 }
 
 func isAIChatCompletionContentType(contentType *string) bool {
@@ -170,7 +170,7 @@ func isAIChatCompletionContentType(contentType *string) bool {
 		return false
 	}
 
-	return hasProfile(strings.ToLower(*contentType), AIChatCompletionMimeProfileKey)
+	return hasProfile(*contentType, AIChatCompletionMimeProfileKey)
 }
 
 // hasProfile checks if a content type contains a specific profile parameter

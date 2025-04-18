@@ -245,7 +245,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 			rawSettings.IsJsonContentTypeMap[trimmedKey] = false
 			continue
 		}
-		switch *setting.ContentType {
+		switch strings.TrimSpace(strings.ToLower(*setting.ContentType)) {
 		case FeatureFlagContentType:
 			continue // ignore feature flag while getting key value settings
 		case SecretReferenceContentType:

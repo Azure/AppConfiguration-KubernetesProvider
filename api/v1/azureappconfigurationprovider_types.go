@@ -65,7 +65,7 @@ type ConfigurationGenerationParameters struct {
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:MinLength=1
 	ConfigMapName string                `json:"configMapName"`
-	ConfigMapData *ConfigMapDataOptions `json:"configMapData,omitempty"`
+	ConfigMapData *ObjectiveDataOptions `json:"configMapData,omitempty"`
 }
 
 // AzureAppConfigurationKeyValueOptions defines the options of fetching key-values from AppConfiguration.
@@ -111,12 +111,12 @@ type Sentinel struct {
 	Label *string `json:"label,omitempty"`
 }
 
-// ConfigMapDataOptions defines the options of generating ConfigMap data
-type ConfigMapDataOptions struct {
+// ObjectiveDataOptions defines the options of generating data
+type ObjectiveDataOptions struct {
 	// +kubebuilder:default="default"
-	Type ConfigMapDataType `json:"type,omitempty"`
+	Type ObjectiveDataType `json:"type,omitempty"`
 	Key  string            `json:"key,omitempty"`
-	// The delimiter that is used to output the ConfigMap data in hierarchical format when the type is set to json or yaml.
+	// The delimiter that is used to output the data in hierarchical format when the type is set to json or yaml.
 	// +kubebuilder:validation:MaxLength=50
 	// +kubebuilder:validation:MinLength=1
 	Separator *string `json:"separator,omitempty"`
@@ -189,17 +189,18 @@ type SecretGenerationParameters struct {
 	// +kubebuilder:validation:Pattern=[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:MinLength=1
-	SecretName string `json:"secretName"`
+	SecretName string                `json:"secretName"`
+	SecretData *ObjectiveDataOptions `json:"secretData,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=default;json;yaml;properties
-type ConfigMapDataType string
+type ObjectiveDataType string
 
 const (
-	Default    ConfigMapDataType = "default"
-	Properties ConfigMapDataType = "properties"
-	Yaml       ConfigMapDataType = "yaml"
-	Json       ConfigMapDataType = "json"
+	Default    ObjectiveDataType = "default"
+	Properties ObjectiveDataType = "properties"
+	Yaml       ObjectiveDataType = "yaml"
+	Json       ObjectiveDataType = "json"
 )
 
 type AppConfigurationSyncPhase string

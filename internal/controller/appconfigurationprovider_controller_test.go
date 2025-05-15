@@ -444,7 +444,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Endpoint: &EndpointName,
 					Target: acpv1.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
-						ConfigMapData: &acpv1.ObjectiveDataOptions{
+						ConfigMapData: &acpv1.DataOptions{
 							Type: "json",
 							Key:  "filestyle.json",
 						},
@@ -499,7 +499,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Endpoint: &EndpointName,
 					Target: acpv1.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
-						ConfigMapData: &acpv1.ObjectiveDataOptions{
+						ConfigMapData: &acpv1.DataOptions{
 							Type: "json",
 							Key:  "filestyle.json",
 						},
@@ -806,7 +806,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 					Endpoint: &EndpointName,
 					Target: acpv1.ConfigurationGenerationParameters{
 						ConfigMapName: configMapName,
-						ConfigMapData: &acpv1.ObjectiveDataOptions{
+						ConfigMapData: &acpv1.DataOptions{
 							Type: "json",
 							Key:  "filestyle.json",
 						},
@@ -1480,7 +1480,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ObjectiveDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type: acpv1.Default,
 						Key:  "testKey",
 					},
@@ -1496,7 +1496,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ObjectiveDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type: acpv1.Json,
 					},
 				},
@@ -1512,7 +1512,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ObjectiveDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type:      acpv1.Default,
 						Separator: &delimiter,
 					},
@@ -1529,7 +1529,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ObjectiveDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type:      acpv1.Properties,
 						Key:       "testKey",
 						Separator: &delimiter,
@@ -1655,7 +1655,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ObjectiveDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type: acpv1.Properties,
 						Key:  "testKey",
 					},
@@ -1678,7 +1678,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ObjectiveDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type: acpv1.Json,
 						Key:  "testKey",
 					},
@@ -1907,7 +1907,7 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 				Endpoint: &EndpointName,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: configMapName,
-					ConfigMapData: &acpv1.ObjectiveDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type: acpv1.Json,
 						Key:  "testKey",
 					},

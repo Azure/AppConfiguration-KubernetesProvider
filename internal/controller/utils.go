@@ -318,9 +318,9 @@ func shouldCreateOrUpdateSecret(processor *AppConfigurationProviderProcessor, se
 	dataOptions := processor.Provider.Spec.Secret.Target.SecretData
 
 	if secretName != processor.Provider.Spec.Secret.Target.SecretName ||
-	dataOptions == nil ||
-	dataOptions.Type == acpv1.Default ||
-	dataOptions.Type == acpv1.Properties {
+		dataOptions == nil ||
+		dataOptions.Type == acpv1.Default ||
+		dataOptions.Type == acpv1.Properties {
 		return !reflect.DeepEqual(processor.Settings.SecretSettings[secretName].Data, existingK8sSecrets[secretName].Data)
 	}
 
@@ -342,7 +342,7 @@ func shouldCreateOrUpdateSecret(processor *AppConfigurationProviderProcessor, se
 	return false
 }
 
-func shouldCreateOrUpdateConfigMap(existingConfigMap *corev1.ConfigMap, latestConfigMapSettings map[string]string, dataOptions *acpv1.ObjectiveDataOptions) bool {
+func shouldCreateOrUpdateConfigMap(existingConfigMap *corev1.ConfigMap, latestConfigMapSettings map[string]string, dataOptions *acpv1.DataOptions) bool {
 	if existingConfigMap == nil || existingConfigMap.Data == nil {
 		return true
 	}

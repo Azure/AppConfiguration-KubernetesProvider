@@ -269,7 +269,7 @@ spec:
                       Secret
                     properties:
                       secretData:
-                        description: ObjectiveDataOptions defines the options of generating
+                        description: DataOptions defines the options of generating
                           data
                         properties:
                           key:
@@ -306,8 +306,7 @@ spec:
                   target ConfigMap
                 properties:
                   configMapData:
-                    description: ObjectiveDataOptions defines the options of generating
-                      data
+                    description: DataOptions defines the options of generating data
                     properties:
                       key:
                         type: string

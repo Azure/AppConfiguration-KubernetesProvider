@@ -405,6 +405,142 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			Expect(string(allSettings.SecretSettings["targetSecret"].Data["secret:1"])).Should(Equal(secretValue))
 		})
 
+		It("Should put into Secret settings collection", func() {
+			By("Following the target secret data type after resolving the settings from Azure Key Vault")
+			managedIdentity := uuid.New().String()
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+				Secret: &acpv1.SecretReference{
+					Target: acpv1.SecretGenerationParameters{
+						SecretName: "targetSecret",
+						SecretData: &acpv1.DataOptions{
+							Type: acpv1.Json,
+							Key:  "settings.json",
+						},
+					},
+					Auth: &acpv1.AzureKeyVaultAuth{
+						AzureAppConfigurationProviderAuth: &acpv1.AzureAppConfigurationProviderAuth{
+							ManagedIdentityClientId: &managedIdentity,
+						},
+					},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			secretValue := "fakeSecretValue"
+			secret1 := azsecrets.GetSecretResponse{
+				Secret: azsecrets.Secret{
+					Value: &secretValue,
+				},
+			}
+
+			settingsToReturn := mockConfigurationSettingsWithKV()
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(2))
+			Expect(len(allSettings.SecretSettings)).Should(Equal(1))
+			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
+			Expect(allSettings.ConfigMapSettings["someSubKey1:1"]).Should(Equal("value4"))
+			Expect(string(allSettings.SecretSettings["targetSecret"].Data["settings.json"])).Should(Equal("{\"secret:1\":\"fakeSecretValue\"}"))
+		})
+
+		It("Should put into Secret settings collection", func() {
+			By("Following the target secret data type with separator")
+			managedIdentity := uuid.New().String()
+			separator := ":"
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					TrimKeyPrefixes: []string{"app:"},
+				},
+				Secret: &acpv1.SecretReference{
+					Target: acpv1.SecretGenerationParameters{
+						SecretName: "targetSecret",
+						SecretData: &acpv1.DataOptions{
+							Type:      acpv1.Json,
+							Separator: &separator,
+							Key:       "settings.json",
+						},
+					},
+					Auth: &acpv1.AzureKeyVaultAuth{
+						AzureAppConfigurationProviderAuth: &acpv1.AzureAppConfigurationProviderAuth{
+							ManagedIdentityClientId: &managedIdentity,
+						},
+					},
+				},
+			}
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+			secretValue := "fakeSecretValue"
+			secret1 := azsecrets.GetSecretResponse{
+				Secret: azsecrets.Secret{
+					Value: &secretValue,
+				},
+			}
+
+			settingsToReturn := mockConfigurationSettingsWithKV()
+			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
+			mockResolveSecretReference.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(secret1, nil)
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(2))
+			Expect(len(allSettings.SecretSettings)).Should(Equal(1))
+			Expect(allSettings.ConfigMapSettings["someKey1"]).Should(Equal("value1"))
+			Expect(allSettings.ConfigMapSettings["someSubKey1:1"]).Should(Equal("value4"))
+			Expect(string(allSettings.SecretSettings["targetSecret"].Data["settings.json"])).Should(Equal("{\"secret\":{\"1\":\"fakeSecretValue\"}}"))
+		})
+
 		It("Should throw exception", func() {
 			By("By resolving Key Vault reference to fail")
 			testSpec := acpv1.AzureAppConfigurationProviderSpec{
@@ -1082,7 +1218,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type: acpv1.Json,
 						Key:  "settings.json",
 					},
@@ -1132,7 +1268,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type: acpv1.Json,
 						Key:  "settings.json",
 					},
@@ -1183,7 +1319,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				ReplicaDiscoveryEnabled: false,
 				Target: acpv1.ConfigurationGenerationParameters{
 					ConfigMapName: ConfigMapName,
-					ConfigMapData: &acpv1.ConfigMapDataOptions{
+					ConfigMapData: &acpv1.DataOptions{
 						Type: acpv1.Json,
 						Key:  "settings.json",
 					},

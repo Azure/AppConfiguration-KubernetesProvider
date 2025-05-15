@@ -315,10 +315,34 @@ func shouldCreateOrUpdateSecret(processor *AppConfigurationProviderProcessor, se
 		return true
 	}
 
-	return !reflect.DeepEqual(processor.Settings.SecretSettings[secretName].Data, existingK8sSecrets[secretName].Data)
+	dataOptions := processor.Provider.Spec.Secret.Target.SecretData
+
+	if secretName != processor.Provider.Spec.Secret.Target.SecretName ||
+		dataOptions == nil ||
+		dataOptions.Type == acpv1.Default ||
+		dataOptions.Type == acpv1.Properties {
+		return !reflect.DeepEqual(processor.Settings.SecretSettings[secretName].Data, existingK8sSecrets[secretName].Data)
+	}
+
+	var existingSecret, latestSecret map[string]interface{}
+	if dataOptions.Type == acpv1.Yaml {
+		_ = yaml.Unmarshal(existingK8sSecrets[secretName].Data[dataOptions.Key], &existingSecret)
+		_ = yaml.Unmarshal(processor.Settings.SecretSettings[secretName].Data[dataOptions.Key], &latestSecret)
+
+		return !reflect.DeepEqual(existingSecret, latestSecret)
+	}
+
+	if dataOptions.Type == acpv1.Json {
+		_ = json.Unmarshal(existingK8sSecrets[secretName].Data[dataOptions.Key], &existingSecret)
+		_ = json.Unmarshal(processor.Settings.SecretSettings[secretName].Data[dataOptions.Key], &latestSecret)
+
+		return !reflect.DeepEqual(existingSecret, latestSecret)
+	}
+
+	return false
 }
 
-func shouldCreateOrUpdateConfigMap(existingConfigMap *corev1.ConfigMap, latestConfigMapSettings map[string]string, dataOptions *acpv1.ConfigMapDataOptions) bool {
+func shouldCreateOrUpdateConfigMap(existingConfigMap *corev1.ConfigMap, latestConfigMapSettings map[string]string, dataOptions *acpv1.DataOptions) bool {
 	if existingConfigMap == nil || existingConfigMap.Data == nil {
 		return true
 	}

@@ -268,6 +268,28 @@ spec:
                     description: SecretGenerationParameters defines the name of target
                       Secret
                     properties:
+                      secretData:
+                        description: DataOptions defines the options of generating
+                          data
+                        properties:
+                          key:
+                            type: string
+                          separator:
+                            description: The delimiter that is used to output the
+                              data in hierarchical format when the type is set to
+                              json or yaml.
+                            maxLength: 50
+                            minLength: 1
+                            type: string
+                          type:
+                            default: default
+                            enum:
+                            - default
+                            - json
+                            - yaml
+                            - properties
+                            type: string
+                        type: object
                       secretName:
                         maxLength: 253
                         minLength: 1
@@ -284,15 +306,13 @@ spec:
                   target ConfigMap
                 properties:
                   configMapData:
-                    description: ConfigMapDataOptions defines the options of generating
-                      ConfigMap data
+                    description: DataOptions defines the options of generating data
                     properties:
                       key:
                         type: string
                       separator:
-                        description: The delimiter that is used to output the ConfigMap
-                          data in hierarchical format when the type is set to json
-                          or yaml.
+                        description: The delimiter that is used to output the data
+                          in hierarchical format when the type is set to json or yaml.
                         maxLength: 50
                         minLength: 1
                         type: string

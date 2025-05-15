@@ -14,7 +14,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func createTypedSettings(rawSettings *RawSettings, dataOptions *acpv1.ConfigMapDataOptions) (map[string]string, error) {
+func createTypedSettings(rawSettings *RawSettings, dataOptions *acpv1.DataOptions) (map[string]string, error) {
 	result := make(map[string]string)
 	if len(rawSettings.KeyValueSettings) == 0 && rawSettings.FeatureFlagSettings == nil {
 		return result, nil
@@ -79,6 +79,45 @@ func createTypedSettings(rawSettings *RawSettings, dataOptions *acpv1.ConfigMapD
 	return result, nil
 }
 
+func createTypedSecrets(secretsMap map[string]string, dataOptions *acpv1.DataOptions) (map[string]string, error) {
+	result := make(map[string]string)
+	if len(secretsMap) == 0 {
+		return result, nil
+	}
+
+	if dataOptions == nil || dataOptions.Type == acpv1.Default {
+		return secretsMap, nil
+	}
+
+	if dataOptions.Type == acpv1.Properties {
+		result[dataOptions.Key] = marshalProperties(secretsMap)
+		return result, nil
+	}
+
+	root := &Tree{}
+	parsedSettings := make(map[string]interface{})
+
+	for k, v := range secretsMap {
+		if dataOptions.Separator != nil {
+			root.insert(strings.Split(k, string(*dataOptions.Separator)), v)
+		} else {
+			parsedSettings[k] = v
+		}
+	}
+
+	if dataOptions.Separator != nil {
+		parsedSettings = root.build()
+	}
+
+	if typedStr, err := marshalJsonYaml(parsedSettings, dataOptions); err != nil {
+		return nil, err
+	} else {
+		result[dataOptions.Key] = typedStr
+	}
+
+	return result, nil
+}
+
 func marshalProperties(settings map[string]string) string {
 	stringBuilder := strings.Builder{}
 	separator := "\n"
@@ -107,7 +146,7 @@ func isJsonContentType(contentType *string) bool {
 
 // Used for scenarios related to feature flag refresh.
 // Currently, only supports feature flag settings in JSON/YAML formats.
-func unmarshalConfigMap(existingConfigMapSetting *map[string]string, dataOptions *acpv1.ConfigMapDataOptions) (map[string]interface{}, map[string]interface{}, error) {
+func unmarshalConfigMap(existingConfigMapSetting *map[string]string, dataOptions *acpv1.DataOptions) (map[string]interface{}, map[string]interface{}, error) {
 	var existingConfigMapData string
 	var ok bool
 	if existingConfigMapData, ok = (*existingConfigMapSetting)[dataOptions.Key]; !ok {
@@ -138,7 +177,7 @@ func unmarshalConfigMap(existingConfigMapSetting *map[string]string, dataOptions
 	return featureFlagSection, keyValueSettings, nil
 }
 
-func marshalJsonYaml(settings map[string]interface{}, dataOptions *acpv1.ConfigMapDataOptions) (string, error) {
+func marshalJsonYaml(settings map[string]interface{}, dataOptions *acpv1.DataOptions) (string, error) {
 	switch dataOptions.Type {
 	case acpv1.Yaml:
 		yamlStr, err := yaml.Marshal(settings)

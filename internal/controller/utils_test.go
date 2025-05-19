@@ -7,6 +7,7 @@ import (
 	acpv1 "azappconfig/provider/api/v1"
 	"azappconfig/provider/internal/loader"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -494,4 +495,664 @@ func TestShouldCreateOrUpdateConfigMap(t *testing.T) {
 
 	result11 := shouldCreateOrUpdateConfigMap(existingConfigMap11, latestConfigMapSettings11, dataOptions11)
 	assert.True(t, result11, "Should update ConfigMap when YAML data is different")
+}
+
+func TestVerifyObject(t *testing.T) {
+	EndpointName := "https://fake-endpoint"
+
+	t.Run("Should return error if both endpoint and connectionStringReference are set", func(t *testing.T) {
+		configMapName := "test-configmap"
+		connectionStringReference := "fakeSecret"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint:                  &EndpointName,
+			ConnectionStringReference: &connectionStringReference,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec: both endpoint and connectionStringReference field are set", err.Error())
+	})
+
+	t.Run("Should return error if configMapData key is set when type is default", func(t *testing.T) {
+		configMapName := "test-configmap"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+				ConfigMapData: &acpv1.DataOptions{
+					Type: acpv1.Default,
+					Key:  "testKey",
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.target.configMapData.key: key field is not allowed when type is default", err.Error())
+	})
+
+	t.Run("Should return error if configMapData key is not set when type is not default", func(t *testing.T) {
+		configMapName := "test-configmap"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+				ConfigMapData: &acpv1.DataOptions{
+					Type: acpv1.Json,
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.target.configMapData.key: key field is required when type is json, yaml or properties", err.Error())
+	})
+
+	t.Run("Should return error if configMapData separator is set when type is default", func(t *testing.T) {
+		configMapName := "test-configmap"
+		delimiter := "."
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+				ConfigMapData: &acpv1.DataOptions{
+					Type:      acpv1.Default,
+					Separator: &delimiter,
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.target.configMapData.separator: separator field is not allowed when type is default", err.Error())
+	})
+
+	t.Run("Should return error if configMapData separator is set when type is properties", func(t *testing.T) {
+		configMapName := "test-configmap"
+		delimiter := "."
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+				ConfigMapData: &acpv1.DataOptions{
+					Type:      acpv1.Properties,
+					Key:       "testKey",
+					Separator: &delimiter,
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.target.configMapData.separator: separator field is not allowed when type is properties", err.Error())
+	})
+
+	t.Run("Should return error if selector only uses labelFilter", func(t *testing.T) {
+		configMapName := "test-configmap"
+		testLabelFilter := "testLabelFilter"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Selectors: []acpv1.Selector{
+					{
+						LabelFilter: &testLabelFilter,
+					},
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.configuration.selectors: a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering", err.Error())
+	})
+
+	t.Run("Should return error set both 'labelFilter' and 'snapshotName' in one selector", func(t *testing.T) {
+		configMapName := "test-configmap"
+		testLabelFilter := "testLabelFilter"
+		testSnapshotName := "testSnapshotName"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Selectors: []acpv1.Selector{
+					{
+						LabelFilter:  &testLabelFilter,
+						SnapshotName: &testSnapshotName,
+					},
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.configuration.selectors: 'labelFilter' is not allowed when 'snapshotName' is set", err.Error())
+	})
+
+	t.Run("Should return error if both endpoint and connectionStringReference are not set", func(t *testing.T) {
+		configMapName := "test-configmap"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec: one of endpoint and connectionStringReference field must be set", err.Error())
+	})
+
+	t.Run("Should return error when configuration.refresh.interval is less than 1 second", func(t *testing.T) {
+		configMapName := "test-configmap"
+		testKey := "testKey"
+		testLabel := "testLabel"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Refresh: &acpv1.DynamicConfigurationRefreshParameters{
+					Interval: "500ms",
+					Enabled:  true,
+					Monitoring: &acpv1.RefreshMonitoring{
+						Sentinels: []acpv1.Sentinel{
+							{Key: testKey, Label: &testLabel},
+						},
+					},
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "configuration.refresh.interval: configuration.refresh.interval can not be shorter than 1s", err.Error())
+	})
+
+	t.Run("Should return error when there's non escaped value in labelFilter", func(t *testing.T) {
+		configMapName := "test-configmap"
+		testLabelFilter := ","
+		testKeyFilter := "testKeyFilter"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Selectors: []acpv1.Selector{
+					{
+						LabelFilter: &testLabelFilter,
+						KeyFilter:   &testKeyFilter,
+					},
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.configuration.selectors: non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters", err.Error())
+	})
+
+	t.Run("Should return error if feature flag is set when data type is default", func(t *testing.T) {
+		configMapName := "test-configmap"
+		testKey := "testKey"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+				Selectors: []acpv1.Selector{
+					{
+						KeyFilter: &testKey,
+					},
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.target.configMapData: configMap data type must be json or yaml when FeatureFlag is set", err.Error())
+	})
+
+	t.Run("Should return error if feature flag selector is not set", func(t *testing.T) {
+		configMapName := "test-configmap"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+				ConfigMapData: &acpv1.DataOptions{
+					Type: acpv1.Json,
+					Key:  "testKey",
+				},
+			},
+			FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.featureFlag.selectors: featureFlag.selectors must be specified when FeatureFlag is set", err.Error())
+	})
+
+	t.Run("Should return error when secret.refresh.interval is less than 1 second", func(t *testing.T) {
+		configMapName := "test-configmap"
+		connectionStringReference := "fakeSecret"
+		testKey := "testKey"
+		testLabelOne := "testValue"
+		testLabelTwo := "testValue1"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			ConnectionStringReference: &connectionStringReference,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Refresh: &acpv1.DynamicConfigurationRefreshParameters{
+					Monitoring: &acpv1.RefreshMonitoring{
+						Sentinels: []acpv1.Sentinel{
+							{
+								Key:   testKey,
+								Label: &testLabelOne,
+							},
+							{
+								Key:   testKey,
+								Label: &testLabelTwo,
+							},
+							{
+								Key:   testKey,
+								Label: &testLabelOne,
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.configuration.refresh.monitoring.keyValues: monitoring duplicated key 'testKey'", err.Error())
+	})
+
+	t.Run("Should return no error when all sentinel are unique", func(t *testing.T) {
+		configMapName := "test-configmap"
+		connectionStringReference := "fakeSecret"
+		testKey := "testKey"
+		testKey2 := "testKey2"
+		testKey3 := "testKey3"
+		testKey4 := "testKey4"
+		testLabel := "testValue"
+		emptyLabel := ""
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			ConnectionStringReference: &connectionStringReference,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Refresh: &acpv1.DynamicConfigurationRefreshParameters{
+					Monitoring: &acpv1.RefreshMonitoring{
+						Sentinels: []acpv1.Sentinel{
+							{
+								Key:   testKey,
+								Label: nil,
+							},
+							{
+								Key:   testKey2,
+								Label: &testLabel,
+							},
+							{
+								Key:   testKey3,
+								Label: nil,
+							},
+							{
+								Key:   testKey4,
+								Label: &emptyLabel,
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Nil(t, err)
+	})
+
+	t.Run("Should return error when incorrectly configure the selector", func(t *testing.T) {
+		configMapName := "test-configmap"
+		connectionStringReference := "fakeSecret"
+		testKey := "testKey"
+		testSnapshot := "testSnapshot"
+		testLabel := "testLabel"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			ConnectionStringReference: &connectionStringReference,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Selectors: []acpv1.Selector{
+					{
+						KeyFilter:    &testKey,
+						SnapshotName: &testSnapshot,
+					},
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "spec.configuration.selectors: set both 'keyFilter' and 'snapshotName' in one selector causes ambiguity, only one of them should be set", err.Error())
+
+		configProviderSpec2 := acpv1.AzureAppConfigurationProviderSpec{
+			ConnectionStringReference: &connectionStringReference,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Selectors: []acpv1.Selector{
+					{
+						SnapshotName: &testSnapshot,
+						LabelFilter:  &testLabel,
+					},
+				},
+			},
+		}
+
+		err = verifyObject(configProviderSpec2)
+		assert.Equal(t, "spec.configuration.selectors: 'labelFilter' is not allowed when 'snapshotName' is set", err.Error())
+
+		configProviderSpec3 := acpv1.AzureAppConfigurationProviderSpec{
+			ConnectionStringReference: &connectionStringReference,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Selectors: []acpv1.Selector{
+					{
+						LabelFilter: &testLabel,
+					},
+				},
+			},
+		}
+
+		err = verifyObject(configProviderSpec3)
+		assert.Equal(t, "spec.configuration.selectors: a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering", err.Error())
+	})
+
+	t.Run("Should return error when secret.refresh.interval is less than 1 second", func(t *testing.T) {
+		configMapName := "test-configmap"
+		testKey := "testKey"
+		testLabel := "testLabel"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Refresh: &acpv1.DynamicConfigurationRefreshParameters{
+					Interval: "500ms",
+					Enabled:  true,
+					Monitoring: &acpv1.RefreshMonitoring{
+						Sentinels: []acpv1.Sentinel{
+							{Key: testKey, Label: &testLabel},
+						},
+					},
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "configuration.refresh.interval: configuration.refresh.interval can not be shorter than 1s", err.Error())
+	})
+
+	t.Run("Should return error when secret.refresh.interval is less than 1 minute", func(t *testing.T) {
+		configMapName := "test-configmap"
+		secretName := "test"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+			},
+			Secret: &acpv1.SecretReference{
+				Target: acpv1.SecretGenerationParameters{
+					SecretName: secretName,
+				},
+				Refresh: &acpv1.RefreshSettings{
+					Interval: "1s",
+					Enabled:  true,
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "secret.refresh.interval: secret.refresh.interval can not be shorter than 1m0s", err.Error())
+	})
+
+	t.Run("Should return error when featureFlag.refresh.interval is less than 1 second", func(t *testing.T) {
+		configMapName := "test-configmap"
+		wildcard := "*"
+		configProviderSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint: &EndpointName,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: configMapName,
+				ConfigMapData: &acpv1.DataOptions{
+					Type: acpv1.Json,
+					Key:  "testKey",
+				},
+			},
+			FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+				Selectors: []acpv1.Selector{
+					{
+						KeyFilter: &wildcard,
+					},
+				},
+				Refresh: &acpv1.FeatureFlagRefreshSettings{
+					Interval: "500ms",
+					Enabled:  true,
+				},
+			},
+		}
+
+		err := verifyObject(configProviderSpec)
+		assert.Equal(t, "featureFlag.refresh.interval: featureFlag.refresh.interval can not be shorter than 1s", err.Error())
+	})
+}
+
+func TestVerifyAuthObject(t *testing.T) {
+	// Store original env
+	originalWIEnabled := os.Getenv("WORKLOAD_IDENTITY_ENABLED")
+
+	// Cleanup after tests
+	defer func() {
+		os.Setenv("WORKLOAD_IDENTITY_ENABLED", originalWIEnabled)
+	}()
+
+	t.Run("Should return no error if auth object is valid", func(t *testing.T) {
+		os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true")
+
+		uuid1 := "86c613ca-b977-11ed-afa1-0242ac120002"
+		secretName := "fakeName1"
+		configMapName := "fakeName2"
+		serviceAccountName := "fakeName3"
+		key := "fakeKey"
+
+		authObj := &acpv1.AzureAppConfigurationProviderAuth{}
+
+		authObj2 := &acpv1.AzureAppConfigurationProviderAuth{
+			ManagedIdentityClientId: &uuid1,
+		}
+
+		authObj3 := &acpv1.AzureAppConfigurationProviderAuth{
+			ServicePrincipalReference: &secretName,
+		}
+
+		authObj4 := &acpv1.AzureAppConfigurationProviderAuth{
+			WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
+				ManagedIdentityClientId: &uuid1,
+			},
+		}
+
+		authObj5 := &acpv1.AzureAppConfigurationProviderAuth{
+			WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
+				ManagedIdentityClientIdReference: &acpv1.ManagedIdentityReferenceParameters{
+					ConfigMap: configMapName,
+					Key:       key,
+				},
+			},
+		}
+
+		authObj6 := &acpv1.AzureAppConfigurationProviderAuth{
+			WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
+				ServiceAccountName: &serviceAccountName,
+			},
+		}
+
+		assert.Nil(t, verifyAuthObject(nil))
+		assert.Nil(t, verifyAuthObject(authObj))
+		assert.Nil(t, verifyAuthObject(authObj2))
+		assert.Nil(t, verifyAuthObject(authObj3))
+		assert.Nil(t, verifyAuthObject(authObj4))
+		assert.Nil(t, verifyAuthObject(authObj5))
+		assert.Nil(t, verifyAuthObject(authObj6))
+	})
+
+	t.Run("Should return error if auth object is not valid", func(t *testing.T) {
+		os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true")
+
+		uuid1 := "not-a-uuid"
+		uuid2 := "86c613ca-b977-11ed-afa1-0242ac120002"
+		secretName := "fakeName1"
+		configMapName := "fakeName2"
+		key := "fakeKey"
+
+		authObj := &acpv1.AzureAppConfigurationProviderAuth{
+			ManagedIdentityClientId: &uuid1,
+		}
+
+		authObj2 := &acpv1.AzureAppConfigurationProviderAuth{
+			ManagedIdentityClientId:   &uuid2,
+			ServicePrincipalReference: &secretName,
+		}
+
+		authObj3 := &acpv1.AzureAppConfigurationProviderAuth{
+			WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
+				ManagedIdentityClientId: &uuid2,
+				ManagedIdentityClientIdReference: &acpv1.ManagedIdentityReferenceParameters{
+					ConfigMap: configMapName,
+					Key:       key,
+				},
+			},
+		}
+
+		authObj4 := &acpv1.AzureAppConfigurationProviderAuth{
+			WorkloadIdentity: &acpv1.WorkloadIdentityParameters{
+				ManagedIdentityClientId: &uuid1,
+			},
+		}
+
+		authObj5 := &acpv1.AzureAppConfigurationProviderAuth{
+			WorkloadIdentity: &acpv1.WorkloadIdentityParameters{},
+		}
+
+		assert.Equal(t, "auth: ManagedIdentityClientId \"not-a-uuid\" in auth field is not a valid uuid", verifyAuthObject(authObj).Error())
+		assert.Equal(t, "auth: more than one authentication methods are specified in 'auth' field", verifyAuthObject(authObj2).Error())
+		assert.Equal(t, "auth.workloadIdentity: setting only one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is allowed", verifyAuthObject(authObj3).Error())
+		assert.Equal(t, "auth.workloadIdentity.managedIdentityClientId: managedIdentityClientId \"not-a-uuid\" in auth.workloadIdentity is not a valid uuid", verifyAuthObject(authObj4).Error())
+		assert.Equal(t, "auth.workloadIdentity: setting one of 'managedIdentityClientId', 'managedIdentityClientIdReference' or 'serviceAccountName' field is required", verifyAuthObject(authObj5).Error())
+	})
+}
+
+func TestVerifyExistingTargetObject(t *testing.T) {
+	providerNamespace := "default"
+
+	t.Run("Should return no error if existing configMap is valid", func(t *testing.T) {
+		providerName := "providerName"
+		configMapName := "configMapName"
+
+		// Case 1: ConfigMap owned by the provider
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: providerNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{Kind: "AzureAppConfigurationProvider", Name: providerName},
+				},
+			},
+		}
+
+		// Case 2: ConfigMap with different name
+		configMap2 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "anotherConfigMap",
+				Namespace: providerNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{Kind: "AzureAppConfigurationProvider", Name: providerName},
+				},
+			},
+		}
+
+		// Case 3: Empty ConfigMap
+		emptyConfigMap := &corev1.ConfigMap{}
+
+		assert.Nil(t, verifyExistingTargetObject(emptyConfigMap, configMapName, providerName))
+		assert.Nil(t, verifyExistingTargetObject(configMap, configMapName, providerName))
+		assert.Nil(t, verifyExistingTargetObject(configMap2, configMapName, providerName))
+	})
+
+	t.Run("Should return error if configMap is not valid", func(t *testing.T) {
+		providerName := "providerName"
+		configMapName := "configMapName"
+
+		// Case 1: ConfigMap exists but is not owned by the provider
+		configMap1 := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "ConfigMap",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: providerNamespace,
+			},
+		}
+
+		// Case 2: ConfigMap owned by another provider
+		configMap2 := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "ConfigMap",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: providerNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{Kind: "AzureAppConfigurationProvider", Name: "anotherProvider"},
+				},
+			},
+		}
+
+		err1 := verifyExistingTargetObject(configMap1, configMapName, providerName)
+		assert.Equal(t, "a ConfigMap with name 'configMapName' already exists in namespace 'default'", err1.Error())
+
+		err2 := verifyExistingTargetObject(configMap2, configMapName, providerName)
+		assert.Equal(t, "a ConfigMap with name 'configMapName' already exists in namespace 'default'", err2.Error())
+	})
+}
+
+func TestHasNonEscapedValueInLabel(t *testing.T) {
+	t.Run("Should return false if all character is escaped", func(t *testing.T) {
+		assert.False(t, hasNonEscapedValueInLabel(`some\,valid\,label`))
+		assert.False(t, hasNonEscapedValueInLabel(`somevalidlabel`))
+		assert.False(t, hasNonEscapedValueInLabel(""))
+		assert.False(t, hasNonEscapedValueInLabel(`some\*`))
+		assert.False(t, hasNonEscapedValueInLabel(`\\some\,\*\valid\,\label\*`))
+		assert.False(t, hasNonEscapedValueInLabel(`\,`))
+		assert.False(t, hasNonEscapedValueInLabel(`\\`))
+		assert.False(t, hasNonEscapedValueInLabel(`\`))
+		assert.False(t, hasNonEscapedValueInLabel(`'\`))
+		assert.False(t, hasNonEscapedValueInLabel(`\\\,`))
+		assert.False(t, hasNonEscapedValueInLabel(`\a\\\,`))
+		assert.False(t, hasNonEscapedValueInLabel(`\\\\\\\,`))
+	})
+
+	t.Run("Should return true if any character is not escaped", func(t *testing.T) {
+		assert.True(t, hasNonEscapedValueInLabel(`some\,invalid,label`))
+		assert.True(t, hasNonEscapedValueInLabel(`,`))
+		assert.True(t, hasNonEscapedValueInLabel(`some,,value\\`))
+		assert.True(t, hasNonEscapedValueInLabel(`some\,,value`))
+		assert.True(t, hasNonEscapedValueInLabel(`some\,*value`))
+		assert.True(t, hasNonEscapedValueInLabel(`\\,`))
+		assert.True(t, hasNonEscapedValueInLabel(`\x\,y\\,z`))
+		assert.True(t, hasNonEscapedValueInLabel(`\x\,\y*`))
+		assert.True(t, hasNonEscapedValueInLabel(`\x\*\\\*some\\*value`))
+		assert.True(t, hasNonEscapedValueInLabel(`\,\\\\,`))
+	})
 }

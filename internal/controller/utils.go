@@ -43,20 +43,9 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 	}
 
 	if spec.Target.ConfigMapData != nil {
-		if spec.Target.ConfigMapData.Type == acpv1.Default {
-			if spec.Target.ConfigMapData.Key != "" {
-				return loader.NewArgumentError("spec.target.configMapData.key", fmt.Errorf("key field is not allowed when type is default"))
-			}
-		} else {
-			if spec.Target.ConfigMapData.Key == "" {
-				return loader.NewArgumentError("spec.target.configMapData.key", fmt.Errorf("key field is required when type is json, yaml or properties"))
-			}
-		}
-
-		if spec.Target.ConfigMapData.Separator != nil &&
-			(spec.Target.ConfigMapData.Type == acpv1.Default ||
-				spec.Target.ConfigMapData.Type == acpv1.Properties) {
-			return loader.NewArgumentError("spec.target.configMapData.separator", fmt.Errorf("separator field is not allowed when type is %s", spec.Target.ConfigMapData.Type))
+		err = verifyDataOptions(spec.Target.ConfigMapData, "spec.target.configMapData")
+		if err != nil {
+			return err
 		}
 	}
 
@@ -103,20 +92,37 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 	if err != nil {
 		return err
 	}
-	if spec.Secret != nil && spec.Secret.Auth != nil {
-		err = verifyAuthObject(spec.Secret.Auth.AzureAppConfigurationProviderAuth)
-		if err != nil {
-			return err
-		}
-		for _, v := range spec.Secret.Auth.KeyVaults {
-			err = verifyEndpoint(v.Uri)
+
+	if spec.Secret != nil {
+		if spec.Secret.Auth != nil {
+			err = verifyAuthObject(spec.Secret.Auth.AzureAppConfigurationProviderAuth)
 			if err != nil {
 				return err
 			}
-			if v.AzureAppConfigurationProviderAuth == nil {
-				return loader.NewArgumentError("secret.auth.keyVaults", fmt.Errorf("authentication method must be specified for Key Vault '%s'", v.Uri))
+			for _, v := range spec.Secret.Auth.KeyVaults {
+				err = verifyEndpoint(v.Uri)
+				if err != nil {
+					return err
+				}
+				if v.AzureAppConfigurationProviderAuth == nil {
+					return loader.NewArgumentError("secret.auth.keyVaults", fmt.Errorf("authentication method must be specified for Key Vault '%s'", v.Uri))
+				}
+				err = verifyAuthObject(v.AzureAppConfigurationProviderAuth)
+				if err != nil {
+					return err
+				}
 			}
-			err = verifyAuthObject(v.AzureAppConfigurationProviderAuth)
+		}
+
+		if spec.Secret.Refresh != nil {
+			err = verifyRefreshInterval(spec.Secret.Refresh.Interval, MinimalSecretRefreshInterval, "secret.refresh.interval")
+			if err != nil {
+				return err
+			}
+		}
+
+		if spec.Secret.Target.SecretData != nil {
+			err = verifyDataOptions(spec.Secret.Target.SecretData, "spec.secret.target.secretData")
 			if err != nil {
 				return err
 			}
@@ -139,13 +145,6 @@ func verifyObject(spec acpv1.AzureAppConfigurationProviderSpec) error {
 			if err != nil {
 				return err
 			}
-		}
-	}
-
-	if spec.Secret != nil && spec.Secret.Refresh != nil {
-		err = verifyRefreshInterval(spec.Secret.Refresh.Interval, MinimalSecretRefreshInterval, "secret.refresh.interval")
-		if err != nil {
-			return err
 		}
 	}
 
@@ -304,6 +303,26 @@ func verifySelectorObject(selector acpv1.Selector) error {
 
 	if selector.LabelFilter != nil && hasNonEscapedValueInLabel(*selector.LabelFilter) {
 		return fmt.Errorf("non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters")
+	}
+
+	return nil
+}
+
+func verifyDataOptions(dataOptions *acpv1.DataOptions, path string) error {
+	if dataOptions.Type == acpv1.Default {
+		if dataOptions.Key != "" {
+			return loader.NewArgumentError(fmt.Sprintf("%s.key", path), fmt.Errorf("key field is not allowed when type is default"))
+		}
+	} else {
+		if dataOptions.Key == "" {
+			return loader.NewArgumentError(fmt.Sprintf("%s.key", path), fmt.Errorf("key field is required when type is json, yaml or properties"))
+		}
+	}
+
+	if dataOptions.Separator != nil &&
+		(dataOptions.Type == acpv1.Default ||
+			dataOptions.Type == acpv1.Properties) {
+		return loader.NewArgumentError(fmt.Sprintf("%s.separator", path), fmt.Errorf("separator field is not allowed when type is %s", dataOptions.Type))
 	}
 
 	return nil

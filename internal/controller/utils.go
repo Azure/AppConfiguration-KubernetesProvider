@@ -349,3 +349,8 @@ func shouldCreateOrUpdateConfigMap(existingConfigMap *corev1.ConfigMap, latestCo
 
 	return false
 }
+
+// replaceColonsWithDoubleUnderscores replaces all colons with double underscores in the input string
+func replaceColonsWithDoubleUnderscores(input string) string {
+	return strings.ReplaceAll(input, ":", "__")
+}

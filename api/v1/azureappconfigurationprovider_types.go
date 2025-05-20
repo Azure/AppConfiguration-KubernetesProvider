@@ -190,6 +190,11 @@ type SecretGenerationParameters struct {
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:MinLength=1
 	SecretName string `json:"secretName"`
+	// When enabled, replaces colons (':') in secret names and keys with double underscores ('__').
+	// This helps maintain compatibility with ASP.NET Core KeyPerFile configuration which automatically 
+	// converts double underscores back to colons, allowing hierarchical secret names.
+	// +kubebuilder:default=false
+	ReplaceColonsWithDoubleUnderscores bool `json:"replaceColonsWithDoubleUnderscores,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=default;json;yaml;properties

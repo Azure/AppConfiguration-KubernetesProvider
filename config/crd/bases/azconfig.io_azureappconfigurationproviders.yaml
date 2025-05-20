@@ -268,6 +268,13 @@ spec:
                     description: SecretGenerationParameters defines the name of target
                       Secret
                     properties:
+                      replaceColonsWithDoubleUnderscores:
+                        default: false
+                        description: |-
+                          When enabled, replaces colons (':') in secret names and keys with double underscores ('__').
+                          This helps maintain compatibility with ASP.NET Core KeyPerFile configuration which automatically
+                          converts double underscores back to colons, allowing hierarchical secret names.
+                        type: boolean
                       secretName:
                         maxLength: 253
                         minLength: 1

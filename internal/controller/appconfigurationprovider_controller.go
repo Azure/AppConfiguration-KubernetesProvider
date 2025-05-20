@@ -443,9 +443,17 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 			continue
 		}
 
+		// Use the configured secret name, replacing colons with double underscores if enabled
+		finalSecretName := secretName
+		// Check if colon replacement is enabled in the provider's spec
+		if provider.Spec.Secret != nil && provider.Spec.Secret.Target.ReplaceColonsWithDoubleUnderscores {
+			finalSecretName = replaceColonsWithDoubleUnderscores(secretName)
+			klog.V(5).Infof("Replacing colons with double underscores in secret name: %q -> %q", secretName, finalSecretName)
+		}
+
 		secretObj := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
+				Name:      finalSecretName,
 				Namespace: provider.Namespace,
 			},
 			Type: secret.Type,
@@ -461,7 +469,18 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 		maps.Copy(annotations, provider.Annotations)
 		annotations[LastReconcileTimeAnnotation] = metav1.Now().UTC().String()
 		operationResult, err := ctrl.CreateOrUpdate(ctx, reconciler.Client, secretObj, func() error {
-			secretObj.Data = secret.Data
+			// If colon replacement is enabled, also replace colons in secret data keys
+			if provider.Spec.Secret != nil && provider.Spec.Secret.Target.ReplaceColonsWithDoubleUnderscores {
+				// Create a new data map with replaced keys
+				replacedData := make(map[string][]byte)
+				for k, v := range secret.Data {
+					replacedKey := replaceColonsWithDoubleUnderscores(k)
+					replacedData[replacedKey] = v
+				}
+				secretObj.Data = replacedData
+			} else {
+				secretObj.Data = secret.Data
+			}
 			secretObj.Labels = provider.Labels
 			secretObj.Annotations = annotations
 

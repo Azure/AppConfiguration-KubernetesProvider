@@ -446,6 +446,8 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 		if targetSecretReference.Type == corev1.SecretTypeOpaque {
 			if len(targetSecretReference.SecretsKeyVaultMetadata) > 0 {
 				lock := &sync.Mutex{}
+				secretsMap := make(map[string]string)
+
 				for key, kvReference := range targetSecretReference.SecretsKeyVaultMetadata {
 					currentKey := key
 					currentReference := kvReference
@@ -456,13 +458,25 @@ func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
 						}
 						lock.Lock()
 						defer lock.Unlock()
-						resolvedSecrets[name].Data[currentKey] = []byte(*resolvedSecret.Value)
+						if resolvedSecret.Value != nil {
+							secretsMap[currentKey] = *resolvedSecret.Value
+						}
+
 						return nil
 					})
 				}
 
 				if err := eg.Wait(); err != nil {
 					return nil, err
+				}
+
+				typedResolvedSecrets, err := createTypedSecrets(secretsMap, csl.Spec.Secret.Target.SecretData)
+				if err != nil {
+					return nil, err
+				}
+
+				for k, v := range typedResolvedSecrets {
+					resolvedSecrets[name].Data[k] = []byte(v)
 				}
 			}
 		} else if targetSecretReference.Type == corev1.SecretTypeTLS {
@@ -892,7 +906,6 @@ func MergeSecret(secret map[string]corev1.Secret, newSecret map[string]corev1.Se
 			secret[k] = v
 		} else if secret[k].Type != v.Type {
 			return fmt.Errorf("secret type mismatch for key %q", k)
-
 		} else {
 			maps.Copy(secret[k].Data, v.Data)
 		}

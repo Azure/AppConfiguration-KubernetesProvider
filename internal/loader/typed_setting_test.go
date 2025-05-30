@@ -66,7 +66,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 		IsJsonContentTypeMap: map[string]bool{
 			"key1": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Properties,
 		Key:  "test",
 	})
@@ -81,7 +81,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 		IsJsonContentTypeMap: map[string]bool{
 			"empty": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Properties,
 		Key:  "test",
 	})
@@ -96,7 +96,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 		IsJsonContentTypeMap: map[string]bool{
 			"jsonKey": true,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Properties,
 		Key:  "test",
 	})
@@ -110,7 +110,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 		IsJsonContentTypeMap: map[string]bool{
 			"jsonKey": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Properties,
 		Key:  "test",
 	})
@@ -125,7 +125,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 		IsJsonContentTypeMap: map[string]bool{
 			"doublequotation": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Properties,
 		Key:  "test",
 	})
@@ -140,7 +140,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 		IsJsonContentTypeMap: map[string]bool{
 			"multipleLineJson": true,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Properties,
 		Key:  "test",
 	})
@@ -154,7 +154,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 		IsJsonContentTypeMap: map[string]bool{
 			"key1": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Properties,
 		Key:  "test",
 	})
@@ -163,7 +163,7 @@ func TestCreateFileStyleSettingsWithPropertiesFormat(t *testing.T) {
 }
 
 func TestCreateFileStyleSettings(t *testing.T) {
-	fileStyleSettingString1, err := createTypedSettings(&RawSettings{KeyValueSettings: make(map[string]*string), IsJsonContentTypeMap: make(map[string]bool)}, &acpv1.ConfigMapDataOptions{
+	fileStyleSettingString1, err := createTypedSettings(&RawSettings{KeyValueSettings: make(map[string]*string), IsJsonContentTypeMap: make(map[string]bool)}, &acpv1.DataOptions{
 		Type: acpv1.Yaml,
 		Key:  "test",
 	})
@@ -218,7 +218,7 @@ func TestCreateFileStyleSettingsWithYamlFormat(t *testing.T) {
 			"empty":        false,
 			"key3":         true,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Yaml,
 		Key:  "test",
 	})
@@ -239,7 +239,7 @@ func TestCreateFileStyleSettingsWithYamlFormat(t *testing.T) {
 			"key2": false,
 			"key3": true,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Yaml,
 		Key:  "test",
 	})
@@ -256,7 +256,7 @@ func TestCreateFileStyleSettingsWithYamlFormat(t *testing.T) {
 			"key1": false,
 			"key2": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Yaml,
 		Key:  "test",
 	})
@@ -284,7 +284,7 @@ func TestCreateFileStyleSettingsWithJsonFormat(t *testing.T) {
 			"key3":         true,
 			"key4":         false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Json,
 		Key:  "test",
 	})
@@ -305,7 +305,7 @@ func TestCreateFileStyleSettingsWithJsonFormat(t *testing.T) {
 			"key2": false,
 			"key3": true,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Json,
 		Key:  "test",
 	})
@@ -320,7 +320,7 @@ func TestCreateFileStyleSettingsWithJsonFormat(t *testing.T) {
 		IsJsonContentTypeMap: map[string]bool{
 			"key1": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Json,
 		Key:  "test",
 	})
@@ -335,7 +335,7 @@ func TestCreateFileStyleSettingsWithJsonFormat(t *testing.T) {
 		IsJsonContentTypeMap: map[string]bool{
 			"jsonString": true,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type: acpv1.Json,
 		Key:  "test",
 	})
@@ -370,7 +370,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key3":         true,
 			"key4":         false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &delimiter,
@@ -396,7 +396,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"empty":        false,
 			"key3":         true,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &delimiter,
@@ -421,7 +421,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"empty":        false,
 			"key3":         true,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Yaml,
 		Key:       "test",
 		Separator: &delimiter,
@@ -444,7 +444,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key1.subKey3.0.test1": true,
 			"key1.subKey3.1.test3": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &delimiter,
@@ -465,7 +465,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key1.subKey3.0.test1": true,
 			"key1.subKey3.1.test3": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &anotherDelimiter,
@@ -488,7 +488,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key2___test_":         false,
 			".key3_key4.key5_key6": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &anotherDelimiter,
@@ -506,7 +506,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key1_2": false,
 			"key1_1": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &anotherDelimiter,
@@ -529,7 +529,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key1.subKey3.0.test1": true,
 			"key1.subKey3.1.test3": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &delimiter,
@@ -552,7 +552,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key1.subKey1.vKey1": false,
 			"key1.subKey1.vKey2": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &delimiter,
@@ -578,7 +578,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key1.subKey1.vKey1": false,
 			"key1.subKey1.vKey2": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &delimiter,
@@ -601,7 +601,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key1.subKey1.vKey1": false,
 			"key1.subKey1.vKey2": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &delimiter,
@@ -621,7 +621,7 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 			"key1.subKey1":         true,
 			"key1.subKey1.0.vKey1": false,
 		},
-	}, &acpv1.ConfigMapDataOptions{
+	}, &acpv1.DataOptions{
 		Type:      acpv1.Json,
 		Key:       "test",
 		Separator: &delimiter,
@@ -632,6 +632,112 @@ func TestBuildHierarchicalSetting(t *testing.T) {
 		assert.Equal(t, "{\"key1\":{\"subKey1\":[{\"vKey1\":\"value3\"},{\"vKey2\":\"test2\"}]}}", fileStyleSettingString12["test"])
 	}
 	assert.Nil(t, err)
+}
+
+func TestCreateTypedSecrets(t *testing.T) {
+	// Test with empty secrets map
+	emptySecrets := make(map[string]string)
+	result, err := createTypedSecrets(emptySecrets, nil)
+	assert.Empty(t, result)
+	assert.Nil(t, err)
+
+	// Create test secrets map
+	secretsMap := map[string]string{
+		"secretKey1":  "secretValue1",
+		"secretKey2":  "secretValue2",
+		"jsonSecret":  "{\"key\":\"value\"}",
+		"emptySecret": "",
+	}
+
+	// Test with nil dataOptions (default behavior)
+	result, err = createTypedSecrets(secretsMap, nil)
+	assert.Nil(t, err)
+	assert.Equal(t, len(secretsMap), len(result))
+	assert.Equal(t, "secretValue1", result["secretKey1"])
+	assert.Equal(t, "secretValue2", result["secretKey2"])
+	assert.Equal(t, "{\"key\":\"value\"}", result["jsonSecret"])
+	assert.Equal(t, "", result["emptySecret"])
+
+	// Test with explicit Default type
+	result, err = createTypedSecrets(secretsMap, &acpv1.DataOptions{
+		Type: acpv1.Default,
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, len(secretsMap), len(result))
+	assert.Equal(t, "secretValue1", result["secretKey1"])
+	assert.Equal(t, "secretValue2", result["secretKey2"])
+	assert.Equal(t, "{\"key\":\"value\"}", result["jsonSecret"])
+	assert.Equal(t, "", result["emptySecret"])
+
+	// Test with Properties type
+	result, err = createTypedSecrets(secretsMap, &acpv1.DataOptions{
+		Type: acpv1.Properties,
+		Key:  "secrets.properties",
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(result))
+	// Properties order might vary, so check for each key-value pair
+	assert.Contains(t, result["secrets.properties"], "secretKey1=secretValue1")
+	assert.Contains(t, result["secrets.properties"], "secretKey2=secretValue2")
+
+	// Test with JSON type
+	result, err = createTypedSecrets(secretsMap, &acpv1.DataOptions{
+		Type: acpv1.Json,
+		Key:  "secrets.json",
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(result))
+	// The order of JSON keys is unpredictable, so use JSONEq for comparison
+	assert.JSONEq(t, `{
+		"secretKey1":"secretValue1", 
+		"secretKey2":"secretValue2", 
+		"jsonSecret":"{\"key\":\"value\"}",
+		"emptySecret":""
+	}`, result["secrets.json"])
+
+	// Test with YAML type
+	result, err = createTypedSecrets(secretsMap, &acpv1.DataOptions{
+		Type: acpv1.Yaml,
+		Key:  "secrets.yaml",
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(result))
+	// YAML format is harder to compare exactly, so check for key portions
+	assert.Equal(t, result["secrets.yaml"], "emptySecret: \"\"\njsonSecret: '{\"key\":\"value\"}'\nsecretKey1: secretValue1\nsecretKey2: secretValue2\n")
+
+	// Test with hierarchical structure using separator
+	hierarchicalSecrets := map[string]string{
+		"database.credentials.username": "admin",
+		"database.credentials.password": "secret123",
+		"api.key":                       "api-key-value",
+		"standalone":                    "standalone-value",
+	}
+
+	separator := "."
+	result, err = createTypedSecrets(hierarchicalSecrets, &acpv1.DataOptions{
+		Type:      acpv1.Json,
+		Key:       "config.json",
+		Separator: &separator,
+	})
+
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(result))
+
+	// Expected hierarchical structure in JSON format
+	expectedJson := `{
+		"database": {
+			"credentials": {
+				"username": "admin",
+				"password": "secret123"
+			}
+		},
+		"api": {
+			"key": "api-key-value"
+		},
+		"standalone": "standalone-value"
+	}`
+
+	assert.JSONEq(t, expectedJson, result["config.json"])
 }
 
 func TestIsAIConfigurationContentType(t *testing.T) {

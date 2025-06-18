@@ -375,7 +375,14 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 	existingConfigMap *corev1.ConfigMap,
 	provider *acpv1.AzureAppConfigurationProvider,
 	settings *loader.TargetKeyValueSettings) (reconcile.Result, error) {
+	namespacedName := types.NamespacedName{
+		Name:      provider.Name,
+		Namespace: provider.Namespace,
+	}
+
 	if !shouldCreateOrUpdateConfigMap(existingConfigMap, settings.ConfigMapSettings, provider.Spec.Target.ConfigMapData) {
+		// Set the resource version of the existing configMap to reconcile state in case reconcile state loses after restart
+		reconciler.ProvidersReconcileState[namespacedName].ConfigMapResourceVersion = &existingConfigMap.ResourceVersion
 		klog.V(5).Infof("Skip updating the configMap %q in %q namespace since data is not changed", provider.Spec.Target.ConfigMapName, provider.Namespace)
 		return reconcile.Result{}, nil
 	}
@@ -410,10 +417,6 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 	}
 
-	namespacedName := types.NamespacedName{
-		Name:      provider.Name,
-		Namespace: provider.Namespace,
-	}
 	reconciler.ProvidersReconcileState[namespacedName].ConfigMapResourceVersion = &configMapObj.ResourceVersion
 	klog.V(5).Infof("configMap %q in %q namespace is %s", configMapObj.Name, configMapObj.Namespace, string(operationResult))
 
@@ -429,16 +432,10 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 		klog.V(3).Info("No secret settings are fetched from Azure AppConfiguration")
 	}
 
-	namespacedName := types.NamespacedName{
-		Name:      provider.Name,
-		Namespace: provider.Namespace,
-	}
-
 	for secretName, secret := range processor.Settings.SecretSettings {
 		if !shouldCreateOrUpdateSecret(processor, secretName, existingSecrets) {
-			if _, ok := reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName]; ok {
-				processor.Settings.K8sSecrets[secretName].SecretResourceVersion = reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName].SecretResourceVersion
-			}
+			// Set the resource version of the existing secret to reconcile state in case reconcile state loses after restart
+			processor.Settings.K8sSecrets[secretName].SecretResourceVersion = existingSecrets[secretName].ResourceVersion
 			klog.V(5).Infof("Skip updating the secret %q in %q namespace since data is not changed", secretName, provider.Namespace)
 			continue
 		}

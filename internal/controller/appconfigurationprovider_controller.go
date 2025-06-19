@@ -134,50 +134,13 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	}
 
 	existingConfigMap := corev1.ConfigMap{}
-	isExisting := false
 	_, err = reconciler.verifyTargetObjectExistence(ctx, provider, &existingConfigMap)
 	if err != nil {
 		reconciler.logAndSetFailStatus(provider, err)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 	}
 
-	existingSecrets := make(map[string]corev1.Secret)
-	var existingSecret corev1.Secret
-	if provider.Spec.Secret != nil {
-		existingSecret = corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: provider.Spec.Secret.Target.SecretName,
-			},
-		}
-		isExisting, err = reconciler.verifyTargetObjectExistence(ctx, provider, &existingSecret)
-		if err != nil {
-			reconciler.logAndSetFailStatus(provider, err)
-			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
-		}
-		if isExisting {
-			existingSecrets[provider.Spec.Secret.Target.SecretName] = existingSecret
-		}
-	}
-
-	if reconciler.ProvidersReconcileState[req.NamespacedName] != nil {
-		for name := range reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets {
-			if _, ok := existingSecrets[name]; !ok {
-				existingSecret = corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: name,
-					},
-				}
-				isExisting, err = reconciler.verifyTargetObjectExistence(ctx, provider, &existingSecret)
-				if err != nil {
-					reconciler.logAndSetFailStatus(provider, err)
-					return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
-				}
-				if isExisting {
-					existingSecrets[name] = existingSecret
-				}
-			}
-		}
-	} else {
+	if reconciler.ProvidersReconcileState[req.NamespacedName] == nil {
 		// Initialize the ReconcileState for the provider
 		reconciler.ProvidersReconcileState[req.NamespacedName] = &ReconciliationState{
 			Generation:               -1,
@@ -188,6 +151,27 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 			FeatureFlagETags:         make(map[acpv1.Selector][]*azcore.ETag),
 			ExistingK8sSecrets:       make(map[string]*loader.TargetK8sSecretMetadata),
 			ClientManager:            nil,
+		}
+	}
+
+	existingSecrets := make(map[string]corev1.Secret)
+	if provider.Spec.Secret != nil {
+		secretNames := []string{provider.Spec.Secret.Target.SecretName}
+
+		if reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets != nil {
+			for secretName := range maps.Keys(reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets) {
+				secretNames = append(secretNames, secretName)
+			}
+		}
+
+		for _, secretName := range secretNames {
+			if _, ok := existingSecrets[secretName]; ok {
+				continue
+			}
+
+			if err := reconciler.collectExistingSecret(ctx, provider, secretName, existingSecrets); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
+			}
 		}
 	}
 
@@ -262,17 +246,12 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	if processor.RefreshOptions.SecretSettingPopulated {
 		// Verify the existence of the secret which is not owned by the current provider
 		for name := range processor.Settings.SecretSettings {
-			if _, ok := existingSecrets[name]; !ok {
-				_, err := reconciler.verifyTargetObjectExistence(ctx, provider, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: name,
-					},
-				})
+			if _, ok := existingSecrets[name]; ok {
+				continue
+			}
 
-				if err != nil {
-					reconciler.logAndSetFailStatus(provider, err)
-					return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
-				}
+			if err := reconciler.collectExistingSecret(ctx, provider, name, existingSecrets); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 			}
 		}
 
@@ -318,6 +297,32 @@ func (reconciler *AzureAppConfigurationProviderReconciler) verifyTargetObjectExi
 	}
 
 	return true, verifyExistingTargetObject(obj, targetName, provider.Name)
+}
+
+// collectExistingSecret verifies the existence of a secret and adds it to the existingSecrets map if it exists
+func (reconciler *AzureAppConfigurationProviderReconciler) collectExistingSecret(
+	ctx context.Context,
+	provider *acpv1.AzureAppConfigurationProvider,
+	name string,
+	existingSecrets map[string]corev1.Secret) error {
+
+	existingSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+
+	isExisting, err := reconciler.verifyTargetObjectExistence(ctx, provider, &existingSecret)
+	if err != nil {
+		reconciler.logAndSetFailStatus(provider, err)
+		return err
+	}
+
+	if isExisting {
+		existingSecrets[name] = existingSecret
+	}
+
+	return nil
 }
 
 func (reconciler *AzureAppConfigurationProviderReconciler) logAndSetFailStatus(

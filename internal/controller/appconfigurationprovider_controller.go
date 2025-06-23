@@ -134,50 +134,13 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	}
 
 	existingConfigMap := corev1.ConfigMap{}
-	isExisting := false
 	_, err = reconciler.verifyTargetObjectExistence(ctx, provider, &existingConfigMap)
 	if err != nil {
 		reconciler.logAndSetFailStatus(provider, err)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 	}
 
-	existingSecrets := make(map[string]corev1.Secret)
-	var existingSecret corev1.Secret
-	if provider.Spec.Secret != nil {
-		existingSecret = corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: provider.Spec.Secret.Target.SecretName,
-			},
-		}
-		isExisting, err = reconciler.verifyTargetObjectExistence(ctx, provider, &existingSecret)
-		if err != nil {
-			reconciler.logAndSetFailStatus(provider, err)
-			return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
-		}
-		if isExisting {
-			existingSecrets[provider.Spec.Secret.Target.SecretName] = existingSecret
-		}
-	}
-
-	if reconciler.ProvidersReconcileState[req.NamespacedName] != nil {
-		for name := range reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets {
-			if _, ok := existingSecrets[name]; !ok {
-				existingSecret = corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: name,
-					},
-				}
-				isExisting, err = reconciler.verifyTargetObjectExistence(ctx, provider, &existingSecret)
-				if err != nil {
-					reconciler.logAndSetFailStatus(provider, err)
-					return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
-				}
-				if isExisting {
-					existingSecrets[name] = existingSecret
-				}
-			}
-		}
-	} else {
+	if reconciler.ProvidersReconcileState[req.NamespacedName] == nil {
 		// Initialize the ReconcileState for the provider
 		reconciler.ProvidersReconcileState[req.NamespacedName] = &ReconciliationState{
 			Generation:               -1,
@@ -188,6 +151,27 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 			FeatureFlagETags:         make(map[acpv1.Selector][]*azcore.ETag),
 			ExistingK8sSecrets:       make(map[string]*loader.TargetK8sSecretMetadata),
 			ClientManager:            nil,
+		}
+	}
+
+	existingSecrets := make(map[string]corev1.Secret)
+	if provider.Spec.Secret != nil {
+		secretNames := []string{provider.Spec.Secret.Target.SecretName}
+
+		if reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets != nil {
+			for secretName := range maps.Keys(reconciler.ProvidersReconcileState[req.NamespacedName].ExistingK8sSecrets) {
+				secretNames = append(secretNames, secretName)
+			}
+		}
+
+		for _, secretName := range secretNames {
+			if _, ok := existingSecrets[secretName]; ok {
+				continue
+			}
+
+			if err := reconciler.collectExistingSecret(ctx, provider, secretName, existingSecrets); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
+			}
 		}
 	}
 
@@ -262,17 +246,12 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 	if processor.RefreshOptions.SecretSettingPopulated {
 		// Verify the existence of the secret which is not owned by the current provider
 		for name := range processor.Settings.SecretSettings {
-			if _, ok := existingSecrets[name]; !ok {
-				_, err := reconciler.verifyTargetObjectExistence(ctx, provider, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: name,
-					},
-				})
+			if _, ok := existingSecrets[name]; ok {
+				continue
+			}
 
-				if err != nil {
-					reconciler.logAndSetFailStatus(provider, err)
-					return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
-				}
+			if err := reconciler.collectExistingSecret(ctx, provider, name, existingSecrets); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, nil
 			}
 		}
 
@@ -318,6 +297,32 @@ func (reconciler *AzureAppConfigurationProviderReconciler) verifyTargetObjectExi
 	}
 
 	return true, verifyExistingTargetObject(obj, targetName, provider.Name)
+}
+
+// collectExistingSecret verifies the existence of a secret and adds it to the existingSecrets map if it exists
+func (reconciler *AzureAppConfigurationProviderReconciler) collectExistingSecret(
+	ctx context.Context,
+	provider *acpv1.AzureAppConfigurationProvider,
+	name string,
+	existingSecrets map[string]corev1.Secret) error {
+
+	existingSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+
+	isExisting, err := reconciler.verifyTargetObjectExistence(ctx, provider, &existingSecret)
+	if err != nil {
+		reconciler.logAndSetFailStatus(provider, err)
+		return err
+	}
+
+	if isExisting {
+		existingSecrets[name] = existingSecret
+	}
+
+	return nil
 }
 
 func (reconciler *AzureAppConfigurationProviderReconciler) logAndSetFailStatus(
@@ -375,7 +380,14 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 	existingConfigMap *corev1.ConfigMap,
 	provider *acpv1.AzureAppConfigurationProvider,
 	settings *loader.TargetKeyValueSettings) (reconcile.Result, error) {
+	namespacedName := types.NamespacedName{
+		Name:      provider.Name,
+		Namespace: provider.Namespace,
+	}
+
 	if !shouldCreateOrUpdateConfigMap(existingConfigMap, settings.ConfigMapSettings, provider.Spec.Target.ConfigMapData) {
+		// Set the resource version of the existing configMap to reconcile state in case reconcile state loses after restart
+		reconciler.ProvidersReconcileState[namespacedName].ConfigMapResourceVersion = &existingConfigMap.ResourceVersion
 		klog.V(5).Infof("Skip updating the configMap %q in %q namespace since data is not changed", provider.Spec.Target.ConfigMapName, provider.Namespace)
 		return reconcile.Result{}, nil
 	}
@@ -410,10 +422,6 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateConfigM
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeueReconcileAfter}, err
 	}
 
-	namespacedName := types.NamespacedName{
-		Name:      provider.Name,
-		Namespace: provider.Namespace,
-	}
 	reconciler.ProvidersReconcileState[namespacedName].ConfigMapResourceVersion = &configMapObj.ResourceVersion
 	klog.V(5).Infof("configMap %q in %q namespace is %s", configMapObj.Name, configMapObj.Namespace, string(operationResult))
 
@@ -429,16 +437,10 @@ func (reconciler *AzureAppConfigurationProviderReconciler) createOrUpdateSecrets
 		klog.V(3).Info("No secret settings are fetched from Azure AppConfiguration")
 	}
 
-	namespacedName := types.NamespacedName{
-		Name:      provider.Name,
-		Namespace: provider.Namespace,
-	}
-
 	for secretName, secret := range processor.Settings.SecretSettings {
 		if !shouldCreateOrUpdateSecret(processor, secretName, existingSecrets) {
-			if _, ok := reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName]; ok {
-				processor.Settings.K8sSecrets[secretName].SecretResourceVersion = reconciler.ProvidersReconcileState[namespacedName].ExistingK8sSecrets[secretName].SecretResourceVersion
-			}
+			// Set the resource version of the existing secret to reconcile state in case reconcile state loses after restart
+			processor.Settings.K8sSecrets[secretName].SecretResourceVersion = existingSecrets[secretName].ResourceVersion
 			klog.V(5).Infof("Skip updating the secret %q in %q namespace since data is not changed", secretName, provider.Namespace)
 			continue
 		}

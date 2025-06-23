@@ -339,6 +339,7 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 			processor.Provider.Status.RefreshStatus.LastKeyValueRefreshTime = processor.CurrentTime
 		}
 		if processor.RefreshOptions.keyValuePageETagsChanged {
+			processor.ReconciliationState.KeyValueETags = processor.RefreshOptions.updatedKeyValueETags
 			processor.Provider.Status.RefreshStatus.LastKeyValueRefreshTime = processor.CurrentTime
 		}
 		// Update provider last key vault refresh time

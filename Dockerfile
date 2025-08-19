@@ -14,6 +14,7 @@ RUN go mod download
 COPY cmd/main.go cmd/main.go
 COPY api/ api/
 COPY internal/controller/ internal/controller/
+COPY internal/jsonc/ internal/jsonc/
 COPY internal/loader/ internal/loader/
 COPY internal/properties/ internal/properties/
  

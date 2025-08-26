@@ -5,6 +5,7 @@ package loader
 
 import (
 	acpv1 "azappconfig/provider/api/v1"
+	"azappconfig/provider/internal/jsonc"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -48,9 +49,13 @@ func createTypedSettings(rawSettings *RawSettings, dataOptions *acpv1.DataOption
 				var out interface{}
 				err := json.Unmarshal([]byte(*v), &out)
 				if err != nil {
-					return nil, fmt.Errorf("failed to unmarshal json value for key '%s': %s", k, err.Error())
+					// If the value is not valid JSON, try to strip comments and parse again
+					if err := json.Unmarshal(jsonc.StripComments([]byte(*v)), &out); err != nil {
+						klog.Warningf("failed to parse value of setting '%s' as JSON: %s", k, err.Error())
+					}
+				} else {
+					value = out
 				}
-				value = out
 			}
 		}
 

@@ -955,11 +955,17 @@ func TestVerifyAuthObject(t *testing.T) {
 
 	// Cleanup after tests
 	defer func() {
-		os.Setenv("WORKLOAD_IDENTITY_ENABLED", originalWIEnabled)
+		err := os.Setenv("WORKLOAD_IDENTITY_ENABLED", originalWIEnabled)
+		if err != nil {
+			t.Errorf("Failed to restore environment variable: %v", err)
+		}
 	}()
 
 	t.Run("Should return no error if auth object is valid", func(t *testing.T) {
-		os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true")
+		err := os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true")
+		if err != nil {
+			t.Errorf("Failed to set environment variable: %v", err)
+		}
 
 		uuid1 := "86c613ca-b977-11ed-afa1-0242ac120002"
 		secretName := "fakeName1"

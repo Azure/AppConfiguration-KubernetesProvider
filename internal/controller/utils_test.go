@@ -1014,7 +1014,9 @@ func TestVerifyAuthObject(t *testing.T) {
 	})
 
 	t.Run("Should return error if auth object is not valid", func(t *testing.T) {
-		os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true")
+		if err := os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true"); err != nil {
+			t.Errorf("Failed to set environment variable: %v", err)
+		}
 
 		uuid1 := "not-a-uuid"
 		uuid2 := "86c613ca-b977-11ed-afa1-0242ac120002"

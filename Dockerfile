@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang:1.23-cbl-mariner2.0 AS builder
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang:1.24-cbl-mariner2.0 AS builder
  
 ARG MODULE_VERSION
 WORKDIR /workspace

@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
+	azappconfig "github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig/v2"
 	"k8s.io/klog/v2"
 )
 
@@ -18,11 +18,11 @@ import (
 
 type SettingsResponse struct {
 	Settings []azappconfig.Setting
-	Etags    map[acpv1.Selector][]*azcore.ETag
+	Etags    map[acpv1.ComparableSelector][]*azcore.ETag
 }
 
 type EtagSettingsClient struct {
-	etags           map[acpv1.Selector][]*azcore.ETag
+	etags           map[acpv1.ComparableSelector][]*azcore.ETag
 	refreshInterval string
 }
 
@@ -43,7 +43,8 @@ type SettingsClient interface {
 func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
 	nullString := "\x00"
 	settingsResponse := &SettingsResponse{}
-	for filter, pageEtags := range s.etags {
+	for comparableFilter, pageEtags := range s.etags {
+		filter := acpv1.FromComparable(comparableFilter)
 		if filter.KeyFilter != nil {
 			if filter.LabelFilter == nil {
 				filter.LabelFilter = &nullString // NUL is escaped to \x00 in golang
@@ -51,6 +52,7 @@ func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfi
 			selector := azappconfig.SettingSelector{
 				KeyFilter:   filter.KeyFilter,
 				LabelFilter: filter.LabelFilter,
+				TagsFilter:  filter.TagFilters,
 				Fields:      azappconfig.AllSettingFields(),
 			}
 
@@ -72,13 +74,13 @@ func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfi
 				}
 				// If etag changed, return the non nil etags
 				if page.ETag != nil {
-					settingsResponse.Etags = make(map[acpv1.Selector][]*azcore.ETag)
+					settingsResponse.Etags = make(map[acpv1.ComparableSelector][]*azcore.ETag)
 					return settingsResponse, nil
 				}
 			}
 
 			if pageCount != len(pageEtags) {
-				settingsResponse.Etags = make(map[acpv1.Selector][]*azcore.ETag)
+				settingsResponse.Etags = make(map[acpv1.ComparableSelector][]*azcore.ETag)
 				return settingsResponse, nil
 			}
 		}
@@ -122,13 +124,14 @@ func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappc
 
 func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
 	settings := make([]azappconfig.Setting, 0)
-	pageEtags := make(map[acpv1.Selector][]*azcore.ETag)
+	pageEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 
 	for _, filter := range s.selectors {
 		if filter.KeyFilter != nil {
 			selector := azappconfig.SettingSelector{
 				KeyFilter:   filter.KeyFilter,
 				LabelFilter: filter.LabelFilter,
+				TagsFilter:  filter.TagFilters,
 				Fields:      azappconfig.AllSettingFields(),
 			}
 			pager := client.NewListSettingsPager(selector, nil)
@@ -144,7 +147,7 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 				}
 			}
 			// update the etags for the filter
-			pageEtags[filter] = latestEtags
+			pageEtags[acpv1.MakeComparable(filter)] = latestEtags
 		} else {
 			snapshot, err := client.GetSnapshot(ctx, *filter.SnapshotName, nil)
 			if err != nil {

@@ -603,7 +603,7 @@ func TestVerifyObject(t *testing.T) {
 		}
 
 		err := verifyObject(configProviderSpec)
-		assert.Equal(t, "spec.configuration.selectors: a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering", err.Error())
+		assert.Equal(t, "spec.configuration.selectors: a selector must specify either 'keyFilter' or 'snapshotName'", err.Error())
 	})
 
 	t.Run("Should return error set both 'labelFilter' and 'snapshotName' in one selector", func(t *testing.T) {
@@ -867,7 +867,7 @@ func TestVerifyObject(t *testing.T) {
 		}
 
 		err = verifyObject(configProviderSpec3)
-		assert.Equal(t, "spec.configuration.selectors: a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering", err.Error())
+		assert.Equal(t, "spec.configuration.selectors: a selector must specify either 'keyFilter' or 'snapshotName'", err.Error())
 	})
 
 	t.Run("Should return error when secret.refresh.interval is less than 1 second", func(t *testing.T) {

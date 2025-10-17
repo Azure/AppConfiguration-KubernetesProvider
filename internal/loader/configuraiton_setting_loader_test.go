@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
+	azappconfig "github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig/v2"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
@@ -85,16 +85,16 @@ func mockVariantFeatureFlagSettings(key, label string, telemetryEnabled bool) []
 	return settingsToReturn
 }
 
-func newKeyValueSelector(key string, label *string) acpv1.Selector {
-	return acpv1.Selector{
+func newKeyValueSelector(key string, label *string) acpv1.ComparableSelector {
+	return acpv1.ComparableSelector{
 		KeyFilter:   &key,
 		LabelFilter: label,
 	}
 }
 
-func newFeatureFlagSelector(key string, label *string) acpv1.Selector {
+func newFeatureFlagSelector(key string, label *string) acpv1.ComparableSelector {
 	prefixedKey := FeatureFlagKeyPrefix + key
-	return acpv1.Selector{
+	return acpv1.ComparableSelector{
 		KeyFilter:   &prefixedKey,
 		LabelFilter: label,
 	}
@@ -387,7 +387,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettingsWithKV()
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -454,7 +454,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettingsWithKV()
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -523,7 +523,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettingsWithKV()
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -566,7 +566,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettingsWithKV()
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -1057,7 +1057,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -1105,7 +1105,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -1147,7 +1147,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -1191,7 +1191,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			settingsToReturn := mockConfigurationSettings()
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -1244,7 +1244,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			featureFlagsToReturn := mockFeatureFlagSettings()
-			featureFlagEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			featureFlagEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			featureFlagEtags[newFeatureFlagSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: featureFlagsToReturn,
@@ -1294,7 +1294,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			featureFlagsToReturn := mockVariantFeatureFlagSettings(".appconfig.featureflag/Telemetry_2", "Test", true)
-			featureFlagEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			featureFlagEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			featureFlagEtags[newFeatureFlagSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: featureFlagsToReturn,
@@ -1345,7 +1345,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 
 			featureFlagsToReturn := mockVariantFeatureFlagSettings(".appconfig.featureflag/Telemetry_2", "Test", false)
-			featureFlagEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			featureFlagEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			featureFlagEtags[newFeatureFlagSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: featureFlagsToReturn,
@@ -1432,7 +1432,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				FailedAttempts: 0,
 			}
 
-			keyValueEtags := make(map[acpv1.Selector][]*azcore.ETag)
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 			keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
 			settingsResponse := &SettingsResponse{
 				Settings: settingsToReturn,
@@ -1456,6 +1456,132 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			Expect(allSettings.ConfigMapSettings["app:someSubKey1:1"]).Should(Equal("value4"))
 			Expect(allSettings.ConfigMapSettings["app:test:some"]).Should(Equal("value5"))
 			Expect(allSettings.ConfigMapSettings["app:test:"]).Should(Equal("value6"))
+		})
+	})
+})
+
+var _ = Describe("TagFilters Support", func() {
+	var (
+		EndpointName = "https://fake-endpoint"
+	)
+
+	Context("When using TagFilters in configuration selectors", func() {
+		It("Should filter configuration settings by tags", func() {
+			By("By creating a provider with TagFilters selector")
+			keyFilter := "myapp:*"
+			labelFilter := "production"
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter:   &keyFilter,
+							LabelFilter: &labelFilter,
+							TagFilters:  []string{"environment=prod", "team=backend"},
+						},
+					},
+				},
+			}
+
+			testProvider := acpv1.AzureAppConfigurationProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "azconfig.io/v1",
+					Kind:       "AppConfigurationProvider",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Spec: testSpec,
+			}
+
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
+
+			settingsToReturn := mockConfigurationSettings()
+			keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
+			selector := newSelectorWithTagFilters(keyFilter, &labelFilter, []string{"environment=prod", "team=backend"})
+			keyValueEtags[selector] = []*azcore.ETag{}
+
+			settingsResponse := &SettingsResponse{
+				Settings: settingsToReturn,
+				Etags:    keyValueEtags,
+			}
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
+
+			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), nil)
+
+			Expect(err).Should(BeNil())
+			Expect(len(allSettings.ConfigMapSettings)).Should(Equal(6))
+			Expect(allSettings.KeyValueETags).Should(ContainElement([]*azcore.ETag{}))
+		})
+
+		It("Should handle multiple TagFilters in different selectors", func() {
+			By("By creating a provider with multiple TagFilters selectors")
+			keyFilter1 := "app:config:*"
+			keyFilter2 := "feature:*"
+			labelFilter := "production"
+
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter:   &keyFilter1,
+							LabelFilter: &labelFilter,
+							TagFilters:  []string{"environment=prod", "component=api"},
+						},
+						{
+							KeyFilter:   &keyFilter2,
+							LabelFilter: &labelFilter,
+							TagFilters:  []string{"type=feature-flag", "scope=global"},
+						},
+					},
+				},
+			}
+
+			filters := GetKeyValueFilters(testSpec)
+			Expect(len(filters)).Should(Equal(2))
+			Expect(filters[0].TagFilters).Should(ContainElements("environment=prod", "component=api"))
+			Expect(filters[1].TagFilters).Should(ContainElements("type=feature-flag", "scope=global"))
+		})
+	})
+
+	Context("When using TagFilters in feature flag selectors", func() {
+		It("Should filter feature flags by tags", func() {
+			By("By creating a provider with TagFilters in feature flag selector")
+			keyFilter := "my-feature"
+			labelFilter := "production"
+
+			testSpec := acpv1.AzureAppConfigurationProviderSpec{
+				Endpoint:                &EndpointName,
+				ReplicaDiscoveryEnabled: false,
+				Target: acpv1.ConfigurationGenerationParameters{
+					ConfigMapName: ConfigMapName,
+				},
+				FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+					Selectors: []acpv1.Selector{
+						{
+							KeyFilter:   &keyFilter,
+							LabelFilter: &labelFilter,
+							TagFilters:  []string{"feature=experimental", "audience=internal"},
+						},
+					},
+				},
+			}
+
+			filters := GetFeatureFlagFilters(testSpec)
+			Expect(len(filters)).Should(Equal(1))
+			Expect(*filters[0].KeyFilter).Should(Equal(FeatureFlagKeyPrefix + keyFilter))
+			Expect(filters[0].TagFilters).Should(ContainElements("feature=experimental", "audience=internal"))
 		})
 	})
 })
@@ -1925,4 +2051,148 @@ func createPFXFromPEM(pemPrivateKey, pemCertificate string) (string, error) {
 	}
 
 	return base64.StdEncoding.EncodeToString(pfxData), nil
+}
+
+// TestTagFiltersComparison tests the ComparableSelector with TagFilters
+func TestTagFiltersComparison(t *testing.T) {
+	t.Run("TagFilters with same tags in different order should be equal", func(t *testing.T) {
+		selector1 := acpv1.Selector{
+			TagFilters: []string{"tag1", "tag2", "tag3"},
+		}
+		selector2 := acpv1.Selector{
+			TagFilters: []string{"tag3", "tag1", "tag2"},
+		}
+
+		comparable1 := acpv1.MakeComparable(selector1)
+		comparable2 := acpv1.MakeComparable(selector2)
+
+		assert.Equal(t, comparable1, comparable2, "Selectors with same tags in different order should be equal")
+	})
+
+	t.Run("TagFilters with different tags should not be equal", func(t *testing.T) {
+		selector1 := acpv1.Selector{
+			TagFilters: []string{"tag1", "tag2"},
+		}
+		selector2 := acpv1.Selector{
+			TagFilters: []string{"tag1", "tag3"},
+		}
+
+		comparable1 := acpv1.MakeComparable(selector1)
+		comparable2 := acpv1.MakeComparable(selector2)
+
+		assert.NotEqual(t, comparable1, comparable2, "Selectors with different tags should not be equal")
+	})
+
+	t.Run("Empty TagFilters should be handled correctly", func(t *testing.T) {
+		selector1 := acpv1.Selector{}
+		selector2 := acpv1.Selector{TagFilters: []string{}}
+
+		comparable1 := acpv1.MakeComparable(selector1)
+		comparable2 := acpv1.MakeComparable(selector2)
+
+		assert.Equal(t, comparable1, comparable2, "Empty TagFilters should be equal")
+		assert.Nil(t, comparable1.TagFilters, "Empty TagFilters should result in nil TagFilters field")
+	})
+
+	t.Run("Single tag should be preserved", func(t *testing.T) {
+		selector := acpv1.Selector{
+			TagFilters: []string{"single-tag"},
+		}
+
+		comparable := acpv1.MakeComparable(selector)
+		restored := acpv1.FromComparable(comparable)
+
+		assert.Equal(t, selector.TagFilters, restored.TagFilters, "Single tag should be preserved through conversion")
+	})
+
+	t.Run("Round-trip conversion should preserve TagFilters", func(t *testing.T) {
+		original := acpv1.Selector{
+			TagFilters: []string{"environment:prod", "team:backend", "service:api"},
+		}
+
+		comparable := acpv1.MakeComparable(original)
+		restored := acpv1.FromComparable(comparable)
+
+		// Tags should be preserved, but order might change due to sorting
+		assert.ElementsMatch(t, original.TagFilters, restored.TagFilters, "TagFilters should be preserved through round-trip conversion")
+	})
+}
+
+// TestTagFiltersInSelectors tests TagFilters usage in selector scenarios
+func TestTagFiltersInSelectors(t *testing.T) {
+	t.Run("GetKeyValueFilters should handle TagFilters", func(t *testing.T) {
+		keyFilter := "myapp:*"
+		labelFilter := "production"
+		testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Selectors: []acpv1.Selector{
+					{
+						KeyFilter:   &keyFilter,
+						LabelFilter: &labelFilter,
+						TagFilters:  []string{"environment=prod", "team=backend"},
+					},
+				},
+			},
+		}
+
+		filters := GetKeyValueFilters(testSpec)
+		assert.Len(t, filters, 1)
+		assert.Equal(t, keyFilter, *filters[0].KeyFilter)
+		assert.Equal(t, labelFilter, *filters[0].LabelFilter)
+		assert.ElementsMatch(t, []string{"environment=prod", "team=backend"}, filters[0].TagFilters)
+	})
+
+	t.Run("GetFeatureFlagFilters should handle TagFilters", func(t *testing.T) {
+		keyFilter := "feature-toggle"
+		labelFilter := "production"
+		testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			FeatureFlag: &acpv1.AzureAppConfigurationFeatureFlagOptions{
+				Selectors: []acpv1.Selector{
+					{
+						KeyFilter:   &keyFilter,
+						LabelFilter: &labelFilter,
+						TagFilters:  []string{"feature:experimental", "scope:global"},
+					},
+				},
+			},
+		}
+
+		filters := GetFeatureFlagFilters(testSpec)
+		assert.Len(t, filters, 1)
+		expectedKey := FeatureFlagKeyPrefix + keyFilter
+		assert.Equal(t, expectedKey, *filters[0].KeyFilter)
+		assert.Equal(t, labelFilter, *filters[0].LabelFilter)
+		assert.ElementsMatch(t, []string{"feature:experimental", "scope:global"}, filters[0].TagFilters)
+	})
+
+	t.Run("Duplicate selectors with same TagFilters should be deduplicated", func(t *testing.T) {
+		keyFilter := "myapp"
+		testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+				Selectors: []acpv1.Selector{
+					{
+						KeyFilter:  &keyFilter,
+						TagFilters: []string{"env:prod", "team:backend"},
+					},
+					{
+						KeyFilter:  &keyFilter,
+						TagFilters: []string{"team:backend", "env:prod"}, // Same tags, different order
+					},
+				},
+			},
+		}
+
+		filters := GetKeyValueFilters(testSpec)
+		assert.Len(t, filters, 1, "Duplicate selectors with same TagFilters should be deduplicated")
+	})
+}
+
+// Helper function to create a ComparableSelector with TagFilters for testing
+func newSelectorWithTagFilters(key string, label *string, tagFilters []string) acpv1.ComparableSelector {
+	selector := acpv1.Selector{
+		KeyFilter:   &key,
+		LabelFilter: label,
+		TagFilters:  tagFilters,
+	}
+	return acpv1.MakeComparable(selector)
 }

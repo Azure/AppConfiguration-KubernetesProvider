@@ -121,6 +121,10 @@ spec:
                           type: string
                         snapshotName:
                           type: string
+                        tagFilters:
+                          items:
+                            type: string
+                          type: array
                       type: object
                     type: array
                   trimKeyPrefixes:
@@ -163,6 +167,10 @@ spec:
                           type: string
                         snapshotName:
                           type: string
+                        tagFilters:
+                          items:
+                            type: string
+                          type: array
                       type: object
                     type: array
                 type: object

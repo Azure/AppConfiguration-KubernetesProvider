@@ -19,6 +19,10 @@ limitations under the License.
 package v1
 
 import (
+	"encoding/json"
+	"sort"
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -83,9 +87,10 @@ type AzureAppConfigurationFeatureFlagOptions struct {
 
 // KeyLabelSelector defines the filters when fetching the data from Azure AppConfiguration
 type Selector struct {
-	KeyFilter    *string `json:"keyFilter,omitempty"`
-	LabelFilter  *string `json:"labelFilter,omitempty"`
-	SnapshotName *string `json:"snapshotName,omitempty"`
+	KeyFilter    *string  `json:"keyFilter,omitempty"`
+	LabelFilter  *string  `json:"labelFilter,omitempty"`
+	TagFilters   []string `json:"tagFilters,omitempty"`
+	SnapshotName *string  `json:"snapshotName,omitempty"`
 }
 
 // Defines the settings for dynamic configuration.
@@ -241,6 +246,70 @@ type AzureAppConfigurationProviderList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AzureAppConfigurationProvider `json:"items"`
+}
+
+type ComparableSelector struct {
+	KeyFilter    *string
+	LabelFilter  *string
+	TagFilters   *string
+	SnapshotName *string
+}
+
+func MakeComparable(selector Selector) ComparableSelector {
+	comparable := ComparableSelector{}
+
+	if selector.KeyFilter != nil {
+		comparable.KeyFilter = selector.KeyFilter
+	}
+	if selector.LabelFilter != nil {
+		comparable.LabelFilter = selector.LabelFilter
+	}
+	if selector.SnapshotName != nil {
+		comparable.SnapshotName = selector.SnapshotName
+	}
+	if len(selector.TagFilters) > 0 {
+		sortedTags := make([]string, len(selector.TagFilters))
+		copy(sortedTags, selector.TagFilters)
+		sort.Strings(sortedTags)
+		// Use JSON encoding to safely handle tags
+		tagFiltersBytes, err := json.Marshal(sortedTags)
+		if err != nil {
+			// Fallback to comma-separated string if JSON marshaling fails
+			tagFiltersStr := strings.Join(sortedTags, ",")
+			comparable.TagFilters = &tagFiltersStr
+		} else {
+			tagFiltersStr := string(tagFiltersBytes)
+			comparable.TagFilters = &tagFiltersStr
+		}
+	}
+
+	return comparable
+}
+
+func FromComparable(comparable ComparableSelector) Selector {
+	selector := Selector{}
+
+	if comparable.KeyFilter != nil {
+		selector.KeyFilter = comparable.KeyFilter
+	}
+	if comparable.LabelFilter != nil {
+		selector.LabelFilter = comparable.LabelFilter
+	}
+	if comparable.SnapshotName != nil {
+		selector.SnapshotName = comparable.SnapshotName
+	}
+	if comparable.TagFilters != nil && *comparable.TagFilters != "" {
+		// Try JSON decoding first to safely deserialize tags
+		var tagFilters []string
+		err := json.Unmarshal([]byte(*comparable.TagFilters), &tagFilters)
+		if err != nil {
+			// Fallback to comma-separated parsing if JSON fails
+			tagFilters = strings.Split(*comparable.TagFilters, ",")
+		}
+		selector.TagFilters = tagFilters
+	}
+
+	return selector
 }
 
 func init() {

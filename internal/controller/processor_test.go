@@ -345,14 +345,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				ReconciliationState: &ReconciliationState{
 					NextFeatureFlagRefreshReconcileTime: metav1.Now(),
 					NextKeyValueRefreshReconcileTime:    metav1.Now(),
-					KeyValueETags: map[acpv1.Selector][]*azcore.ETag{
+					KeyValueETags: map[acpv1.ComparableSelector][]*azcore.ETag{
 						{
 							KeyFilter: &testKey,
 						}: {
 							&fakeEtag,
 						},
 					},
-					FeatureFlagETags: map[acpv1.Selector][]*azcore.ETag{
+					FeatureFlagETags: map[acpv1.ComparableSelector][]*azcore.ETag{
 						{
 							KeyFilter: &testFeatureFlagSelector,
 						}: {
@@ -370,14 +370,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			expectedNextFeatureFlagRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(2 * time.Second))
 			newFakeEtag := azcore.ETag("fake-etag-1")
 			newFakeEtag2 := azcore.ETag("fake-etag-2")
-			updatedKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
+			updatedKeyValueEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,
 				}: {
 					&newFakeEtag,
 				},
 			}
-			updatedFeatureFlagEtags := map[acpv1.Selector][]*azcore.ETag{
+			updatedFeatureFlagEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testFeatureFlagSelector,
 				}: {
@@ -406,21 +406,21 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			_, _ = processor.Finish()
 
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(true))
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &testFeatureFlagSelector,
-			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.Selector{
+			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.ComparableSelector{
 				KeyFilter: &testFeatureFlagSelector,
 			}]))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
+			}]).Should(Equal(updatedKeyValueEtags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
 			Expect(processor.ReconciliationState.NextFeatureFlagRefreshReconcileTime).Should(Equal(expectedNextFeatureFlagRefreshReconcileTime))
 
 			newKeyValueEtag := azcore.ETag("fake-keyValue-etag")
-			updatedKeyValueEtags2 := map[acpv1.Selector][]*azcore.ETag{
+			updatedKeyValueEtags2 := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,
 				}: {
@@ -449,19 +449,19 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			_, _ = processor.Finish()
 
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(true))
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &testFeatureFlagSelector,
-			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.Selector{
+			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.ComparableSelector{
 				KeyFilter: &testFeatureFlagSelector,
 			}]))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags2[acpv1.Selector{
+			}]).Should(Equal(updatedKeyValueEtags2[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
 
 			newFeatureFlagEtag := azcore.ETag("fake-ff-etag")
-			updatedFeatureFlagEtags2 := map[acpv1.Selector][]*azcore.ETag{
+			updatedFeatureFlagEtags2 := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testFeatureFlagSelector,
 				}: {
@@ -490,14 +490,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			_, _ = processor.Finish()
 
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(true))
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &testFeatureFlagSelector,
-			}]).Should(Equal(updatedFeatureFlagEtags2[acpv1.Selector{
+			}]).Should(Equal(updatedFeatureFlagEtags2[acpv1.ComparableSelector{
 				KeyFilter: &testFeatureFlagSelector,
 			}]))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags2[acpv1.Selector{
+			}]).Should(Equal(updatedKeyValueEtags2[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
 
@@ -515,14 +515,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			_, _ = processor.Finish()
 
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(false))
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &testFeatureFlagSelector,
-			}]).Should(Equal(updatedFeatureFlagEtags2[acpv1.Selector{
+			}]).Should(Equal(updatedFeatureFlagEtags2[acpv1.ComparableSelector{
 				KeyFilter: &testFeatureFlagSelector,
 			}]))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags2[acpv1.Selector{
+			}]).Should(Equal(updatedKeyValueEtags2[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
 		})
@@ -558,7 +558,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			newFakeEtag := azcore.ETag("fake-etag-1")
-			updatedKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
+			updatedKeyValueEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,
 				}: {
@@ -637,7 +637,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				ReconciliationState: &ReconciliationState{
 					NextSecretReferenceRefreshReconcileTime: nowTime,
 					NextKeyValueRefreshReconcileTime:        nowTime,
-					KeyValueETags: map[acpv1.Selector][]*azcore.ETag{
+					KeyValueETags: map[acpv1.ComparableSelector][]*azcore.ETag{
 						{
 							KeyFilter: &testKey,
 						}: {
@@ -666,9 +666,9 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(true))
 			Expect(processor.RefreshOptions.SecretSettingPopulated).Should(Equal(true))
 			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(allSettings.K8sSecrets))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
+			}]).Should(Equal(updatedKeyValueEtags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
@@ -700,7 +700,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			fakeFeatureFlagEtag := azcore.ETag("fake-etag-1")
-			existingFeatureFlagEtags := map[acpv1.Selector][]*azcore.ETag{
+			existingFeatureFlagEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &wildcard,
 				}: {
@@ -718,7 +718,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			newFakeEtag := azcore.ETag("fake-etag-1")
-			updatedKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
+			updatedKeyValueEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,
 				}: {
@@ -809,7 +809,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 					NextSecretReferenceRefreshReconcileTime: metav1.NewTime(nowTime.Time.Add(1 * time.Hour)),
 					NextKeyValueRefreshReconcileTime:        nowTime,
 					NextFeatureFlagRefreshReconcileTime:     metav1.NewTime(nowTime.Time.Add(2 * time.Minute)),
-					KeyValueETags: map[acpv1.Selector][]*azcore.ETag{
+					KeyValueETags: map[acpv1.ComparableSelector][]*azcore.ETag{
 						{
 							KeyFilter: &testKey,
 						}: {
@@ -840,15 +840,15 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(true))
 			Expect(processor.RefreshOptions.SecretSettingPopulated).Should(Equal(true))
 			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(allSettings.K8sSecrets))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
+			}]).Should(Equal(updatedKeyValueEtags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
 			// FeatureFlag Etag should not be updated
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
-			}]).Should(Equal(existingFeatureFlagEtags[acpv1.Selector{
+			}]).Should(Equal(existingFeatureFlagEtags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
 			}]))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
@@ -879,7 +879,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			fakeKeyValueEtag := azcore.ETag("fake-etag-1")
-			existingKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
+			existingKeyValueEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,
 				}: {
@@ -897,7 +897,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			newFakeEtag := azcore.ETag("fake-etag-1")
-			updatedFeatureFlagEtags := map[acpv1.Selector][]*azcore.ETag{
+			updatedFeatureFlagEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &wildcard,
 				}: {
@@ -991,7 +991,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 					NextSecretReferenceRefreshReconcileTime: nowTime,
 					NextKeyValueRefreshReconcileTime:        metav1.NewTime(nowTime.Time.Add(2 * time.Minute)),
 					NextFeatureFlagRefreshReconcileTime:     nowTime,
-					FeatureFlagETags: map[acpv1.Selector][]*azcore.ETag{
+					FeatureFlagETags: map[acpv1.ComparableSelector][]*azcore.ETag{
 						{
 							KeyFilter: &wildcard,
 						}: {
@@ -1023,14 +1023,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(true))
 			Expect(processor.RefreshOptions.SecretSettingPopulated).Should(Equal(true))
 			// KeyValue Etag should not be updated
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(existingKeyValueEtags[acpv1.Selector{
+			}]).Should(Equal(existingKeyValueEtags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
-			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.Selector{
+			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
 			}]))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(cachedNextKeyValueRefreshReconcileTime))
@@ -1061,7 +1061,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			}
 
 			fakeKeyValueEtag := azcore.ETag("fake-etag-1")
-			existingKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
+			existingKeyValueEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,
 				}: {
@@ -1080,14 +1080,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			newFakeEtag := azcore.ETag("fake-etag-1")
 			newFakeEtag2 := azcore.ETag("fake-etag-2")
-			updatedFeatureFlagEtags := map[acpv1.Selector][]*azcore.ETag{
+			updatedFeatureFlagEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &wildcard,
 				}: {
 					&newFakeEtag,
 				},
 			}
-			updatedKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
+			updatedKeyValueEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,
 				}: {
@@ -1183,7 +1183,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 					NextSecretReferenceRefreshReconcileTime: metav1.NewTime(nowTime.Time.Add(1 * time.Hour)),
 					NextKeyValueRefreshReconcileTime:        nowTime,
 					NextFeatureFlagRefreshReconcileTime:     nowTime,
-					FeatureFlagETags: map[acpv1.Selector][]*azcore.ETag{
+					FeatureFlagETags: map[acpv1.ComparableSelector][]*azcore.ETag{
 						{
 							KeyFilter: &wildcard,
 						}: {
@@ -1215,14 +1215,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(true))
 			Expect(processor.RefreshOptions.SecretSettingPopulated).Should(Equal(true))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
+			}]).Should(Equal(updatedKeyValueEtags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
-			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.Selector{
+			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
 			}]))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
@@ -1262,7 +1262,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				SecretResourceVersion:   fakeSecretResourceVersion,
 			}
 			fakeKeyValueEtag := azcore.ETag("fake-etag-1")
-			existingKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
+			existingKeyValueEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,
 				}: {
@@ -1270,7 +1270,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 				},
 			}
 			fakeFeatureFlagEtag := azcore.ETag("fake-etag-2")
-			existingFeatureFlagEtags := map[acpv1.Selector][]*azcore.ETag{
+			existingFeatureFlagEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &wildcard,
 				}: {
@@ -1280,14 +1280,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			newFakeEtag := azcore.ETag("fake-etag-1")
 			newFakeEtag2 := azcore.ETag("fake-etag-2")
-			updatedKeyValueEtags := map[acpv1.Selector][]*azcore.ETag{
+			updatedKeyValueEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,
 				}: {
 					&newFakeEtag,
 				},
 			}
-			updatedFeatureFlagEtags := map[acpv1.Selector][]*azcore.ETag{
+			updatedFeatureFlagEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &wildcard,
 				}: {
@@ -1422,14 +1422,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(true))
 			Expect(processor.RefreshOptions.SecretSettingPopulated).Should(Equal(false))
 			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(cachedK8sSecrets))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(existingKeyValueEtags[acpv1.Selector{
+			}]).Should(Equal(existingKeyValueEtags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
-			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.Selector{
+			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
 			}]))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(cachedNextKeyValueRefreshReconcileTime))
@@ -1453,14 +1453,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(true))
 			Expect(processor.RefreshOptions.SecretSettingPopulated).Should(Equal(true))
 			Expect(processor.ReconciliationState.ExistingK8sSecrets).Should(Equal(allSettingsReturnedByKeyValueRefresh.K8sSecrets))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
+			}]).Should(Equal(updatedKeyValueEtags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
-			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.Selector{
+			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
 			}]))
 			Expect(processor.ReconciliationState.NextKeyValueRefreshReconcileTime).Should(Equal(expectedNextKeyValueRefreshReconcileTime))
@@ -1499,14 +1499,14 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 
 			Expect(processor.RefreshOptions.ConfigMapSettingPopulated).Should(Equal(false))
 			Expect(processor.RefreshOptions.SecretSettingPopulated).Should(Equal(true))
-			Expect(processor.ReconciliationState.KeyValueETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.KeyValueETags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
-			}]).Should(Equal(updatedKeyValueEtags[acpv1.Selector{
+			}]).Should(Equal(updatedKeyValueEtags[acpv1.ComparableSelector{
 				KeyFilter: &testKey,
 			}]))
-			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.Selector{
+			Expect(processor.ReconciliationState.FeatureFlagETags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
-			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.Selector{
+			}]).Should(Equal(updatedFeatureFlagEtags[acpv1.ComparableSelector{
 				KeyFilter: &wildcard,
 			}]))
 			Expect(processor.ReconciliationState.NextSecretReferenceRefreshReconcileTime).Should(Equal(expectedNextSecretReferenceRefreshReconcileTime))

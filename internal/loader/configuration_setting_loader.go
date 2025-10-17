@@ -13,13 +13,14 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig"
+	azappconfig "github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig/v2"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"golang.org/x/crypto/pkcs12"
 	"golang.org/x/exp/maps"
@@ -47,8 +48,8 @@ type TargetKeyValueSettings struct {
 	// Multiple secrets could be managed
 	SecretSettings   map[string]corev1.Secret
 	K8sSecrets       map[string]*TargetK8sSecretMetadata
-	KeyValueETags    map[acpv1.Selector][]*azcore.ETag
-	FeatureFlagETags map[acpv1.Selector][]*azcore.ETag
+	KeyValueETags    map[acpv1.ComparableSelector][]*azcore.ETag
+	FeatureFlagETags map[acpv1.ComparableSelector][]*azcore.ETag
 	SentinelETags    map[acpv1.Sentinel]*azcore.ETag
 }
 
@@ -64,14 +65,14 @@ type RawSettings struct {
 	FeatureFlagSettings  map[string]interface{}
 	SecretSettings       map[string]corev1.Secret
 	K8sSecrets           map[string]*TargetK8sSecretMetadata
-	KeyValueETags        map[acpv1.Selector][]*azcore.ETag
-	FeatureFlagETags     map[acpv1.Selector][]*azcore.ETag
+	KeyValueETags        map[acpv1.ComparableSelector][]*azcore.ETag
+	FeatureFlagETags     map[acpv1.ComparableSelector][]*azcore.ETag
 }
 
 type ConfigurationSettingsRetriever interface {
 	CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
-	CheckPageETags(ctx context.Context, eTags map[acpv1.Selector][]*azcore.ETag) (bool, error)
+	CheckPageETags(ctx context.Context, eTags map[acpv1.ComparableSelector][]*azcore.ETag) (bool, error)
 	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetK8sSecretMetadata, kvResolver SecretReferenceResolver) (*TargetKeyValueSettings, error)
@@ -260,7 +261,11 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 			var secretType corev1.SecretType = corev1.SecretTypeOpaque
 			var err error
 			if secretTypeTag, ok := setting.Tags[PreservedSecretTypeTag]; ok {
-				secretType, err = parseSecretType(secretTypeTag)
+				if secretTypeTag == nil {
+					return nil, fmt.Errorf("the secret type tag '%s' for setting '%s' is invalid", PreservedSecretTypeTag, *setting.Key)
+				}
+
+				secretType, err = parseSecretType(*secretTypeTag)
 				if err != nil {
 					return nil, err
 				}
@@ -355,11 +360,11 @@ func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(
 	return sentinelChanged, refreshedETags, nil
 }
 
-func (csl *ConfigurationSettingLoader) CheckPageETags(ctx context.Context, eTags map[acpv1.Selector][]*azcore.ETag) (bool, error) {
+func (csl *ConfigurationSettingLoader) CheckPageETags(ctx context.Context, eTags map[acpv1.ComparableSelector][]*azcore.ETag) (bool, error) {
 	settingsClient := csl.SettingsClient
 	if settingsClient == nil {
 		settingsClient = &EtagSettingsClient{
-			etags: eTags,
+			etags:           eTags,
 			refreshInterval: csl.Spec.Configuration.Refresh.Interval,
 		}
 	}
@@ -373,7 +378,7 @@ func (csl *ConfigurationSettingLoader) CheckPageETags(ctx context.Context, eTags
 	return settingsResponse.Etags != nil, nil
 }
 
-func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, map[acpv1.Selector][]*azcore.ETag, error) {
+func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, map[acpv1.ComparableSelector][]*azcore.ETag, error) {
 	featureFlagFilters := GetFeatureFlagFilters(csl.Spec)
 	settingsClient := csl.SettingsClient
 	if settingsClient == nil {
@@ -726,6 +731,7 @@ func normalizeLabelFilter(filters []acpv1.Selector) []acpv1.Selector {
 			KeyFilter:    filters[i].KeyFilter,
 			LabelFilter:  labelFilter,
 			SnapshotName: filters[i].SnapshotName,
+			TagFilters:   filters[i].TagFilters,
 		})
 	}
 
@@ -739,15 +745,17 @@ func deduplicateFilters(filters []acpv1.Selector) []acpv1.Selector {
 	if len(filters) > 0 {
 		//
 		// Deduplicate the filters in a way that in honor of what user tell us
-		// If user populate the selectors with  `{KeyFilter: "one*", LabelFilter: "prod"}, {KeyFilter: "two*", LabelFilter: "dev"}, {KeyFilter: "one*", LabelFilter: "prod"}`
-		// We deduplicate it into `{KeyFilter: "two*", LabelFilter: "dev"}, {KeyFilter: "one*", LabelFilter: "prod"}`
-		// not `{KeyFilter: "one*", LabelFilter: "prod"}, {KeyFilter: "two*", LabelFilter: "dev"}`
+		// If user populate the selectors with  `{KeyFilter: "one*", LabelFilter: "prod", TagFilters: ["tag1"]}, {KeyFilter: "two*", LabelFilter: "dev"}, {KeyFilter: "one*", LabelFilter: "prod", TagFilters: ["tag1"]}`
+		// We deduplicate it into `{KeyFilter: "two*", LabelFilter: "dev"}, {KeyFilter: "one*", LabelFilter: "prod", TagFilters: ["tag1"]}`
+		// not `{KeyFilter: "one*", LabelFilter: "prod", TagFilters: ["tag1"]}, {KeyFilter: "two*", LabelFilter: "dev"}`
+		// Comparison includes KeyFilter, LabelFilter, SnapshotName, and TagFilters
 		for i := len(filters) - 1; i >= 0; i-- {
 			findDuplicate = false
 			for j := 0; j < len(result); j++ {
 				if compare(result[j].KeyFilter, filters[i].KeyFilter) &&
 					compare(result[j].LabelFilter, filters[i].LabelFilter) &&
-					compare(result[j].SnapshotName, filters[i].SnapshotName) {
+					compare(result[j].SnapshotName, filters[i].SnapshotName) &&
+					compareTagFilters(result[j].TagFilters, filters[i].TagFilters) {
 					findDuplicate = true
 					break
 				}
@@ -776,6 +784,37 @@ func compare(a *string, b *string) bool {
 		return false
 	}
 	return strings.Compare(*a, *b) == 0
+}
+
+func compareTagFilters(a []string, b []string) bool {
+	// If both are nil or both are empty, they are equal
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+
+	// If lengths are different, they are not equal
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Create sorted copies to compare
+	aSorted := make([]string, len(a))
+	bSorted := make([]string, len(b))
+	copy(aSorted, a)
+	copy(bSorted, b)
+
+	// Sort both slices for comparison
+	sort.Strings(aSorted)
+	sort.Strings(bSorted)
+
+	// Compare sorted slices element by element
+	for i := 0; i < len(aSorted); i++ {
+		if aSorted[i] != bSorted[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 func reverse(arr []acpv1.Selector) {

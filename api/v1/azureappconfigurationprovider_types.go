@@ -87,8 +87,9 @@ type AzureAppConfigurationFeatureFlagOptions struct {
 
 // KeyLabelSelector defines the filters when fetching the data from Azure AppConfiguration
 type Selector struct {
-	KeyFilter    *string  `json:"keyFilter,omitempty"`
-	LabelFilter  *string  `json:"labelFilter,omitempty"`
+	KeyFilter   *string `json:"keyFilter,omitempty"`
+	LabelFilter *string `json:"labelFilter,omitempty"`
+	// +kubebuilder:validation:MaxItems=5
 	TagFilters   []string `json:"tagFilters,omitempty"`
 	SnapshotName *string  `json:"snapshotName,omitempty"`
 }

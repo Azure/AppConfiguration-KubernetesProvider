@@ -124,6 +124,7 @@ spec:
                         tagFilters:
                           items:
                             type: string
+                          maxItems: 5
                           type: array
                       type: object
                     type: array
@@ -170,6 +171,7 @@ spec:
                         tagFilters:
                           items:
                             type: string
+                          maxItems: 5
                           type: array
                       type: object
                     type: array

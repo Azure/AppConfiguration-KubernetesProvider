@@ -308,19 +308,6 @@ func verifySelectorObject(selector acpv1.Selector) error {
 		return fmt.Errorf("non-escaped reserved wildcard character '*' and multiple labels separator ',' are not supported in label filters")
 	}
 
-	if selector.TagFilters != nil {
-		for _, tagFilter := range selector.TagFilters {
-			if tagFilter == "" {
-				return fmt.Errorf("tag filter cannot be empty")
-			}
-
-			parts := strings.Split(tagFilter, "=")
-			if len(parts) != 2 || parts[0] == "" {
-				return fmt.Errorf("invalid tag filter: %s, must follow the format: \"tagName=tagValue\"", tagFilter)
-			}
-		}
-	}
-
 	return nil
 }
 

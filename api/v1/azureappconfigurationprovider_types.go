@@ -90,6 +90,8 @@ type Selector struct {
 	KeyFilter   *string `json:"keyFilter,omitempty"`
 	LabelFilter *string `json:"labelFilter,omitempty"`
 	// +kubebuilder:validation:MaxItems=5
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:Pattern=^[^=]+=[^=]*$
 	TagFilters   []string `json:"tagFilters,omitempty"`
 	SnapshotName *string  `json:"snapshotName,omitempty"`
 }

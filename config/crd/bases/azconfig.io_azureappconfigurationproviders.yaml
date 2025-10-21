@@ -123,6 +123,8 @@ spec:
                           type: string
                         tagFilters:
                           items:
+                            minLength: 1
+                            pattern: ^[^=]+=[^=]*$
                             type: string
                           maxItems: 5
                           type: array
@@ -170,6 +172,8 @@ spec:
                           type: string
                         tagFilters:
                           items:
+                            minLength: 1
+                            pattern: ^[^=]+=[^=]*$
                             type: string
                           maxItems: 5
                           type: array

@@ -1809,6 +1809,25 @@ func TestGetFilters(t *testing.T) {
 	assert.Equal(t, ".appconfig.featureflag/one", *filters10[0].KeyFilter)
 	assert.Equal(t, "\x00", *filters10[0].LabelFilter)
 	assert.Equal(t, "snapshot", *filters10[1].SnapshotName)
+
+	testSpec11 := acpv1.AzureAppConfigurationProviderSpec{
+		Configuration: acpv1.AzureAppConfigurationKeyValueOptions{
+			Selectors: []acpv1.Selector{
+				{KeyFilter: &one, LabelFilter: &emptyLabel, TagFilters: []string{
+					"tag1=value1",
+					"tag2=value2",
+					"tag1=value1",
+					"tag2=value2",
+				}},
+			},
+		},
+	}
+
+	filters11 := GetKeyValueFilters(testSpec11)
+	assert.Len(t, filters11, 1)
+	assert.Equal(t, "one", *filters11[0].KeyFilter)
+	assert.Equal(t, "\x00", *filters11[0].LabelFilter)
+	assert.Len(t, filters11[0].TagFilters, 2)
 }
 
 func TestCompare(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -681,14 +682,14 @@ func GetSecret(ctx context.Context,
 }
 
 func GetKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
-	return deduplicateFilters(normalizeLabelFilter(acpSpec.Configuration.Selectors))
+	return deduplicateFilters(normalizeFilter(acpSpec.Configuration.Selectors))
 }
 
 func GetFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
 	featureFlagFilters := make([]acpv1.Selector, 0)
 
 	if acpSpec.FeatureFlag != nil {
-		featureFlagFilters = deduplicateFilters(normalizeLabelFilter(acpSpec.FeatureFlag.Selectors))
+		featureFlagFilters = deduplicateFilters(normalizeFilter(acpSpec.FeatureFlag.Selectors))
 		for i := 0; i < len(featureFlagFilters); i++ {
 			if featureFlagFilters[i].KeyFilter != nil {
 				prefixedFeatureFlagFilter := FeatureFlagKeyPrefix + *featureFlagFilters[i].KeyFilter
@@ -718,7 +719,7 @@ func normalizeSentinels(sentinels []acpv1.Sentinel) []acpv1.Sentinel {
 	return results
 }
 
-func normalizeLabelFilter(filters []acpv1.Selector) []acpv1.Selector {
+func normalizeFilter(filters []acpv1.Selector) []acpv1.Selector {
 	var result []acpv1.Selector
 	nullString := "\x00"
 	for i := 0; i < len(filters); i++ {
@@ -727,11 +728,20 @@ func normalizeLabelFilter(filters []acpv1.Selector) []acpv1.Selector {
 			labelFilter = &nullString
 		}
 
+		tagFilters := []string{}
+		for _, tag := range filters[i].TagFilters {
+			// if not in tagFilters, push it to tagFilters
+			if !slices.Contains(tagFilters, tag) {
+				tagFilters = append(tagFilters, tag)
+			}
+
+		}
+
 		result = append(result, acpv1.Selector{
 			KeyFilter:    filters[i].KeyFilter,
 			LabelFilter:  labelFilter,
 			SnapshotName: filters[i].SnapshotName,
-			TagFilters:   filters[i].TagFilters,
+			TagFilters:   tagFilters,
 		})
 	}
 

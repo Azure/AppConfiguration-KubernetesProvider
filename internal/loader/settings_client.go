@@ -22,8 +22,7 @@ type SettingsResponse struct {
 }
 
 type EtagSettingsClient struct {
-	etags           map[acpv1.ComparableSelector][]*azcore.ETag
-	refreshInterval string
+	etags map[acpv1.ComparableSelector][]*azcore.ETag
 }
 
 type SentinelSettingsClient struct {
@@ -86,7 +85,7 @@ func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfi
 		}
 	}
 
-	klog.V(3).Infof("There's no change to the selected key values, just exit and revisit them after %s", s.refreshInterval)
+	klog.V(3).Infof("There's no change to the selected key values, just exit and revisit them after refresh interval")
 	// no change in the settings, return nil etags
 	return settingsResponse, nil
 }

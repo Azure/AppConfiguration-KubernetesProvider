@@ -365,8 +365,7 @@ func (csl *ConfigurationSettingLoader) CheckPageETags(ctx context.Context, eTags
 	settingsClient := csl.SettingsClient
 	if settingsClient == nil {
 		settingsClient = &EtagSettingsClient{
-			etags:           eTags,
-			refreshInterval: csl.Spec.Configuration.Refresh.Interval,
+			etags: eTags,
 		}
 	}
 

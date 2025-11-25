@@ -370,6 +370,7 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 			expectedNextFeatureFlagRefreshReconcileTime := metav1.NewTime(processor.CurrentTime.Time.Add(2 * time.Second))
 			newFakeEtag := azcore.ETag("fake-etag-1")
 			newFakeEtag2 := azcore.ETag("fake-etag-2")
+
 			updatedKeyValueEtags := map[acpv1.ComparableSelector][]*azcore.ETag{
 				{
 					KeyFilter: &testKey,

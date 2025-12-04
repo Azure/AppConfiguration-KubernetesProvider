@@ -41,8 +41,8 @@ type RefreshOptions struct {
 	sentinelChanged               bool
 	keyValuePageETagsChanged      bool
 	updatedSentinelETags          map[acpv1.Sentinel]*azcore.ETag
-	updatedKeyValueETags          map[acpv1.Selector][]*azcore.ETag
-	updatedFeatureFlagETags       map[acpv1.Selector][]*azcore.ETag
+	updatedKeyValueETags          map[acpv1.ComparableSelector][]*azcore.ETag
+	updatedFeatureFlagETags       map[acpv1.ComparableSelector][]*azcore.ETag
 }
 
 func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingConfigMap *corev1.ConfigMap, existingSecrets map[string]corev1.Secret) error {

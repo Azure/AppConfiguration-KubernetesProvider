@@ -289,7 +289,7 @@ func verifyWorkloadIdentityParameters(workloadIdentity *acpv1.WorkloadIdentityPa
 
 func verifySelectorObject(selector acpv1.Selector) error {
 	if selector.KeyFilter == nil && selector.SnapshotName == nil {
-		return fmt.Errorf("a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering")
+		return fmt.Errorf("a selector must specify either 'keyFilter' or 'snapshotName'")
 	}
 
 	if selector.SnapshotName != nil {
@@ -298,6 +298,9 @@ func verifySelectorObject(selector acpv1.Selector) error {
 		}
 		if selector.LabelFilter != nil {
 			return fmt.Errorf("'labelFilter' is not allowed when 'snapshotName' is set")
+		}
+		if selector.TagFilters != nil || len(selector.TagFilters) > 0 {
+			return fmt.Errorf("'tagFilters' is not allowed when 'snapshotName' is set")
 		}
 	}
 

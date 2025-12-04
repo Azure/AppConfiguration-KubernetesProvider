@@ -54,7 +54,7 @@ func (mr *MockConfigurationSettingsRetrieverMockRecorder) CheckAndRefreshSentine
 }
 
 // CheckPageETags mocks base method.
-func (m *MockConfigurationSettingsRetriever) CheckPageETags(arg0 context.Context, arg1 map[v1.Selector][]*azcore.ETag) (bool, error) {
+func (m *MockConfigurationSettingsRetriever) CheckPageETags(arg0 context.Context, arg1 map[v1.ComparableSelector][]*azcore.ETag) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckPageETags", arg0, arg1)
 	ret0, _ := ret[0].(bool)

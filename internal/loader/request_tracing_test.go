@@ -138,8 +138,14 @@ func TestCreateCorrelationContextHeader(t *testing.T) {
 			// Setup environment variables
 			if tt.envVars != nil {
 				for k, v := range tt.envVars {
-					os.Setenv(k, v)
-					defer os.Unsetenv(k)
+					if err := os.Setenv(k, v); err != nil {
+						t.Errorf("Failed to set environment variable: %v", err)
+					}
+					defer func() {
+						if err := os.Unsetenv(k); err != nil {
+							t.Errorf("Failed to unset environment variable: %v", err)
+						}
+					}()
 				}
 			}
 

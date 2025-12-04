@@ -603,7 +603,7 @@ func TestVerifyObject(t *testing.T) {
 		}
 
 		err := verifyObject(configProviderSpec)
-		assert.Equal(t, "spec.configuration.selectors: a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering", err.Error())
+		assert.Equal(t, "spec.configuration.selectors: a selector must specify either 'keyFilter' or 'snapshotName'", err.Error())
 	})
 
 	t.Run("Should return error set both 'labelFilter' and 'snapshotName' in one selector", func(t *testing.T) {
@@ -867,7 +867,7 @@ func TestVerifyObject(t *testing.T) {
 		}
 
 		err = verifyObject(configProviderSpec3)
-		assert.Equal(t, "spec.configuration.selectors: a selector uses 'labelFilter' but misses the 'keyFilter', 'keyFilter' is required for key-label pair filtering", err.Error())
+		assert.Equal(t, "spec.configuration.selectors: a selector must specify either 'keyFilter' or 'snapshotName'", err.Error())
 	})
 
 	t.Run("Should return error when secret.refresh.interval is less than 1 second", func(t *testing.T) {
@@ -955,11 +955,17 @@ func TestVerifyAuthObject(t *testing.T) {
 
 	// Cleanup after tests
 	defer func() {
-		os.Setenv("WORKLOAD_IDENTITY_ENABLED", originalWIEnabled)
+		err := os.Setenv("WORKLOAD_IDENTITY_ENABLED", originalWIEnabled)
+		if err != nil {
+			t.Errorf("Failed to restore environment variable: %v", err)
+		}
 	}()
 
 	t.Run("Should return no error if auth object is valid", func(t *testing.T) {
-		os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true")
+		err := os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true")
+		if err != nil {
+			t.Errorf("Failed to set environment variable: %v", err)
+		}
 
 		uuid1 := "86c613ca-b977-11ed-afa1-0242ac120002"
 		secretName := "fakeName1"
@@ -1008,7 +1014,9 @@ func TestVerifyAuthObject(t *testing.T) {
 	})
 
 	t.Run("Should return error if auth object is not valid", func(t *testing.T) {
-		os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true")
+		if err := os.Setenv("WORKLOAD_IDENTITY_ENABLED", "true"); err != nil {
+			t.Errorf("Failed to set environment variable: %v", err)
+		}
 
 		uuid1 := "not-a-uuid"
 		uuid2 := "86c613ca-b977-11ed-afa1-0242ac120002"

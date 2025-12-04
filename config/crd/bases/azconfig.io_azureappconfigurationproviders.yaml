@@ -121,6 +121,13 @@ spec:
                           type: string
                         snapshotName:
                           type: string
+                        tagFilters:
+                          items:
+                            minLength: 1
+                            pattern: ^[^=]+=[^=]*$
+                            type: string
+                          maxItems: 5
+                          type: array
                       type: object
                     type: array
                   trimKeyPrefixes:
@@ -163,6 +170,13 @@ spec:
                           type: string
                         snapshotName:
                           type: string
+                        tagFilters:
+                          items:
+                            minLength: 1
+                            pattern: ^[^=]+=[^=]*$
+                            type: string
+                          maxItems: 5
+                          type: array
                       type: object
                     type: array
                 type: object

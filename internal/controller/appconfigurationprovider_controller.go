@@ -54,8 +54,8 @@ type ReconciliationState struct {
 	ConfigMapResourceVersion                *string
 	Annotations                             map[string]string
 	SentinelETags                           map[acpv1.Sentinel]*azcore.ETag
-	KeyValueETags                           map[acpv1.Selector][]*azcore.ETag
-	FeatureFlagETags                        map[acpv1.Selector][]*azcore.ETag
+	KeyValueETags                           map[acpv1.ComparableSelector][]*azcore.ETag
+	FeatureFlagETags                        map[acpv1.ComparableSelector][]*azcore.ETag
 	ExistingK8sSecrets                      map[string]*loader.TargetK8sSecretMetadata
 	NextKeyValueRefreshReconcileTime        metav1.Time
 	NextSecretReferenceRefreshReconcileTime metav1.Time
@@ -147,8 +147,8 @@ func (reconciler *AzureAppConfigurationProviderReconciler) Reconcile(ctx context
 			ConfigMapResourceVersion: nil,
 			Annotations:              make(map[string]string),
 			SentinelETags:            make(map[acpv1.Sentinel]*azcore.ETag),
-			KeyValueETags:            make(map[acpv1.Selector][]*azcore.ETag),
-			FeatureFlagETags:         make(map[acpv1.Selector][]*azcore.ETag),
+			KeyValueETags:            make(map[acpv1.ComparableSelector][]*azcore.ETag),
+			FeatureFlagETags:         make(map[acpv1.ComparableSelector][]*azcore.ETag),
 			ExistingK8sSecrets:       make(map[string]*loader.TargetK8sSecretMetadata),
 			ClientManager:            nil,
 		}

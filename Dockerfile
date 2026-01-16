@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang:1.24-fips-azurelinux3.0 AS builder
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang:1.25-azurelinux3.0 AS builder
  
 ARG MODULE_VERSION
 WORKDIR /workspace
@@ -24,7 +24,7 @@ ARG TARGETARCH
 RUN GOOS=linux GOARCH=$TARGETARCH GOEXPERIMENT=systemcrypto go build -ldflags "-X azappconfig/provider/internal/properties.ModuleVersion=$MODULE_VERSION" -a -o manager cmd/main.go
  
 # Use distroless as minimal base image to package the manager binary
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/azurelinux/distroless/minimal:3.0
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/azurelinux/base/core:3.0
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532

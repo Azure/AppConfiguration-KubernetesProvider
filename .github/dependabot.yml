@@ -1,0 +1,45 @@
+version: 2
+updates:
+  # Go modules dependency updates
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    # Open pull requests for security updates only
+    open-pull-requests-limit: 5
+    # PR labels
+    labels:
+      - "dependencies"
+      - "security"
+      - "go"
+    # Commit message prefix
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    # Assignees for review
+    # assignees:
+    #   - "your-username"
+    # Reviewers
+    # reviewers:
+    #   - "your-team"
+    # Allow only security updates (remove to allow all updates)
+    # For manual control, you can disable Dependabot and use the manual workflow only
+    # Uncomment the line below to enable security-only updates
+    # open-pull-requests-limit: 0
+
+  # GitHub Actions updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"

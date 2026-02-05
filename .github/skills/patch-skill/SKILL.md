@@ -34,6 +34,10 @@ go mod tidy
 
 If the `go get` command returns any package requiring newer go versions, update to the required Go version in `go.mod` file. Also update the Go version in the pipeline YAML file if necessary.
 
+### Update version.json
+
+Update the `version.json` file to reflect the new version after the dependency updates. Increment the patch version by 1. For example, if the current version is `1.2.3`, update it to `1.2.4`.
+
 ### Commit and Push Changes
 
 Commit and push the changes to the new branch created earlier

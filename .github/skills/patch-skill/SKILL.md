@@ -19,9 +19,11 @@ Use this skill when you need to:
 
 ### Create new branch
 
-Create and switch to a new branch for the dependency update, the branch name should be in the format `release/v<major>.<minor>.<patch>`.
+Create a new release branch for the dependency update, the branch name should be in the format `release/v<major>.<minor>.<patch>`. 
 
-Read the current version from the `version.json` file, the branch name should correspond to the next patch version. For example, if the current version is `1.2.3`, the branch name should be `release/v1.2.4`.
+Read the current version from the `version.json` file in `main` branch, the branch name should correspond to the next patch version. For example, if the current version is `1.2.3`, the branch name should be `release/v1.2.4`. If this branch is already existing, no need to create a new.
+ 
+Then need to create a feature branch from this release branch, the feature branch name should be in the format `auto-vuln-patch-<timestamp>`, e.g., `auto-vuln-patch-20240915-1230`. Switch to this new feature branch for the following steps.
 
 ### Trigger a Dependency Update
 
@@ -40,7 +42,7 @@ Update the `version.json` file to reflect the new version after the dependency u
 
 ### Commit and Push Changes
 
-Commit and push the changes to the new branch created earlier
+Commit and push the changes to the new feature branch created earlier. Create a pull request (PR) from this feature branch to the release branch.
 
 ### Review the Pull Request
 

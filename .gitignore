@@ -337,3 +337,7 @@ ASALocalRun/
 coveragetool
 reports/
 *.cobertura.xml
+
+# Go build artifacts
+cover.out
+out/

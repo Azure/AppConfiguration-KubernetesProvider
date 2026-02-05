@@ -19,7 +19,7 @@ Use this skill when you need to:
 
 ### Create new branch
 
-Create a new release branch for the dependency update, the branch name should be in the format `release/v<major>.<minor>.<patch>`. 
+Create a new release branch for the further release, the branch name should be in the format `release/v<major>.<minor>.<patch>`. 
 
 Read the current version from the `version.json` file in `main` branch, the branch name should correspond to the next patch version. For example, if the current version is `1.2.3`, the branch name should be `release/v1.2.4`. If this branch is already existing, no need to create a new.
  

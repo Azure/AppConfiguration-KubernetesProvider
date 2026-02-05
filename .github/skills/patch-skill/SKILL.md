@@ -17,6 +17,12 @@ Use this skill when you need to:
 
 ## Quick Start
 
+### Create new branch
+
+Create and switch to a new branch for the dependency update, the branch name should be in the format `release/v<major>.<minor>.<patch>`.
+
+Read the current version from the `version.json` file, the branch name should correspond to the next patch version. For example, if the current version is `1.2.3`, the branch name should be `release/v1.2.4`.
+
 ### Trigger a Dependency Update
 
 Run the following command in your local repository:
@@ -30,7 +36,7 @@ If the `go get` command returns any package requiring newer go versions, update 
 
 ### Commit and Push Changes
 
-Commit and push the changes
+Commit and push the changes to the new branch created earlier
 
 ### Review the Pull Request
 

@@ -1,25 +1,24 @@
 ---
 name: auto-vulnerability-patch
-description: Automatically update Go dependencies with security patches for Azure App Configuration Kubernetes Provider. Use when user mentions dependency updates, security patches, vulnerability fixes, or automated dependency management for this project. 
+description: Guide for updating Go dependencies with security patches for Azure App Configuration Kubernetes Provider. Use when user mentions dependency updates, security patches, vulnerability fixes, or dependency management for this project. 
 ---
 
-# Auto Vulnerability Patch
+# Dependency Vulnerability Patching
 
-This skill automates dependency vulnerability patching for the Azure App Configuration Kubernetes Provider project with GitHub source code.
+This skill provides guidance for dependency vulnerability patching for the Azure App Configuration Kubernetes Provider project.
 
 ## When to Use This Skill
 
 Use this skill when you need to:
 - Update Go dependencies with security patches
 - Manage vulnerability fixes in go.mod
-- Create automated dependency update workflows
 - Review and manage dependency update pull requests
 
 ## Quick Start
 
-### Trigger a Dependency Update
+### Update Dependencies Locally
 
-Run the following command in your local repository:
+Run the following commands in your local repository:
 
 ```bash
 go get -u ./...

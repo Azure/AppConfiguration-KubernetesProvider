@@ -337,3 +337,6 @@ ASALocalRun/
 coveragetool
 reports/
 *.cobertura.xml
+
+# Go test coverage
+cover.out

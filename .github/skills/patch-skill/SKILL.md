@@ -47,7 +47,6 @@ Update the `version.json` file to reflect the new version after the dependency u
 
 Commit and push the changes to the new feature branch `auto-vuln-patch-<timestamp>` created earlier. 
 
-
 ### Review the Pull Request
 
 Each PR includes:

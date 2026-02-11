@@ -17,7 +17,7 @@ Use this skill when you need to:
 
 ## Quick Start
 
-### Create new branch
+### Create new branches
 
 Create a new release branch for the further release, the branch name should be in the format `release/v<major>.<minor>.<patch>`. 
 
@@ -42,7 +42,11 @@ Update the `version.json` file to reflect the new version after the dependency u
 
 ### Commit and Push Changes
 
-Commit and push the changes to the new feature branch created earlier. Create a pull request (PR) from this feature branch to the release branch.
+Commit and push the changes to the new feature branch `auto-vuln-patch-<timestamp>` created earlier. 
+
+### Create a Pull Request
+
+Create a pull request from the feature branch `auto-vuln-patch-<timestamp>` to the release branch `release/v<major>.<minor>.<patch>`. 
 
 ### Review the Pull Request
 

@@ -5,7 +5,7 @@ description: Automatically update Go dependencies with security patches for Azur
 
 # Auto Vulnerability Patch
 
-This skill automates dependency vulnerability patching for the Azure App Configuration Kubernetes Provider project with GitHub source code.
+This skill automates dependency vulnerability patching for the Azure App Configuration Kubernetes Provider project with GitHub source code. This skill describes how to create PullRequest, follow the exact steps to create branches, and select the right source and target branches while creating the PullRequest.
 
 ## When to Use This Skill
 
@@ -15,9 +15,7 @@ Use this skill when you need to:
 - Create automated dependency update workflows
 - Review and manage dependency update pull requests
 
-## Quick Start
-
-### Create new branches
+## Branching Strategy and Naming Conventions
 
 Create a new release branch for the further release, the branch name should be in the format `release/v<major>.<minor>.<patch>`. 
 
@@ -25,9 +23,14 @@ Read the current version from the `version.json` file in `main` branch, the bran
  
 Then need to create a feature branch from this release branch, the feature branch name should be in the format `auto-vuln-patch-<timestamp>`, e.g., `auto-vuln-patch-20240915-1230`. Switch to this new feature branch for the following steps.
 
+
+The PullRequest should be created from the feature branch `auto-vuln-patch-<timestamp>` to the release branch `release/v<major>.<minor>.<patch>`. 
+
+## Quick Start
+
 ### Trigger a Dependency Update
 
-Run the following command in your local repository:
+Run the following command on the feature branch to update all Go dependencies to their latest versions, including security patches:
 
 ```bash
 go get -u ./...
@@ -44,9 +47,6 @@ Update the `version.json` file to reflect the new version after the dependency u
 
 Commit and push the changes to the new feature branch `auto-vuln-patch-<timestamp>` created earlier. 
 
-### Create a Pull Request
-
-Create a pull request from the feature branch `auto-vuln-patch-<timestamp>` to the release branch `release/v<major>.<minor>.<patch>`. 
 
 ### Review the Pull Request
 

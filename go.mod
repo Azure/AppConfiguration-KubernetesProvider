@@ -2,8 +2,6 @@ module azappconfig/provider
 
 go 1.25.0
 
-toolchain go1.25.7
-
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0
 	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig/v2 v2.1.0

@@ -25,7 +25,7 @@ jobs:
     - name: Run Test
       run:  |
         echo 'Install evntest tool'
-        ENVTEST_VERSION=release-0.18
+        ENVTEST_VERSION=release-0.22
         GOBIN=$GITHUB_WORKSPACE go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$ENVTEST_VERSION
         echo 'Run tests'
-        KUBEBUILDER_ASSETS=$($GITHUB_WORKSPACE/setup-envtest use 1.30.0 -p path) CGO_ENABLED=0 go test ./... -coverprofile cover.out    
+        KUBEBUILDER_ASSETS=$($GITHUB_WORKSPACE/setup-envtest use 1.30.0 -p path) CGO_ENABLED=0 go test ./... -coverprofile cover.out

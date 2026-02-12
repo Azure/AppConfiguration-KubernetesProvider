@@ -337,3 +337,4 @@ ASALocalRun/
 coveragetool
 reports/
 *.cobertura.xml
+cover.out

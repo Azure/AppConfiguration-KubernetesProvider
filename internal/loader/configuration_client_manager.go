@@ -19,6 +19,7 @@ import (
 	acpv1 "azappconfig/provider/api/v1"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	azappconfig "github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig/v2"
@@ -80,17 +81,30 @@ const (
 	ApiTokenExchangeAudience            string        = "api://AzureADTokenExchange"
 	AnnotationClientID                  string        = "azure.workload.identity/client-id"
 	AnnotationTenantID                  string        = "azure.workload.identity/tenant-id"
+	AzureAppConfigAudience              string        = "AZURE_APPCONFIG_AUDIENCE"
 )
 
-var (
-	clientOptionWithModuleInfo *azappconfig.ClientOptions = &azappconfig.ClientOptions{
+func newClientOptions() *azappconfig.ClientOptions {
+	options := &azappconfig.ClientOptions{
 		ClientOptions: policy.ClientOptions{
 			Telemetry: policy.TelemetryOptions{
 				ApplicationID: fmt.Sprintf("%s/%s", properties.ModuleName, properties.ModuleVersion),
 			},
 		},
 	}
-)
+
+	if audience, ok := os.LookupEnv(AzureAppConfigAudience); ok && audience != "" {
+		options.ClientOptions.Cloud = cloud.Configuration{
+			Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
+				azappconfig.ServiceName: {
+					Audience: audience,
+				},
+			},
+		}
+	}
+
+	return options
+}
 
 func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppConfigurationProvider) (ClientManager, error) {
 	manager := &ConfigurationClientManager{
@@ -118,14 +132,14 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 		if manager.id, err = parseConnectionString(connectionString, IdSection); err != nil {
 			return nil, err
 		}
-		if staticClient, err = azappconfig.NewClientFromConnectionString(connectionString, clientOptionWithModuleInfo); err != nil {
+		if staticClient, err = azappconfig.NewClientFromConnectionString(connectionString, newClientOptions()); err != nil {
 			return nil, err
 		}
 	} else {
 		if manager.credential, err = CreateTokenCredential(ctx, provider.Spec.Auth, provider.Namespace); err != nil {
 			return nil, err
 		}
-		if staticClient, err = azappconfig.NewClient(*provider.Spec.Endpoint, manager.credential, clientOptionWithModuleInfo); err != nil {
+		if staticClient, err = azappconfig.NewClient(*provider.Spec.Endpoint, manager.credential, newClientOptions()); err != nil {
 			return nil, err
 		}
 		manager.endpoint = *provider.Spec.Endpoint
@@ -286,7 +300,7 @@ func QuerySrvTargetHost(ctx context.Context, host string) ([]string, error) {
 
 func (manager *ConfigurationClientManager) newConfigurationClient(endpoint string) (*azappconfig.Client, error) {
 	if manager.credential != nil {
-		return azappconfig.NewClient(endpoint, manager.credential, clientOptionWithModuleInfo)
+		return azappconfig.NewClient(endpoint, manager.credential, newClientOptions())
 	}
 
 	connectionStr := buildConnectionString(endpoint, manager.secret, manager.id)
@@ -294,7 +308,7 @@ func (manager *ConfigurationClientManager) newConfigurationClient(endpoint strin
 		return nil, fmt.Errorf("failed to build connection string for fallback client")
 	}
 
-	return azappconfig.NewClientFromConnectionString(connectionStr, clientOptionWithModuleInfo)
+	return azappconfig.NewClientFromConnectionString(connectionStr, newClientOptions())
 }
 
 func isValidEndpoint(host string, validDomain string) bool {

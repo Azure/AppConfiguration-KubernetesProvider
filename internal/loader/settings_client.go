@@ -148,25 +148,11 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 			// update the etags for the filter
 			pageEtags[acpv1.MakeComparable(filter)] = latestEtags
 		} else {
-			snapshot, err := client.GetSnapshot(ctx, *filter.SnapshotName, nil)
+			snapshotSettings, err := loadSnapshotSettings(ctx, client, *filter.SnapshotName)
 			if err != nil {
 				return nil, err
 			}
-
-			if *snapshot.CompositionType != azappconfig.CompositionTypeKey {
-				return nil, fmt.Errorf("compositionType for the selected snapshot '%s' must be 'key', found '%s'", *filter.SnapshotName, *snapshot.CompositionType)
-			}
-
-			pager := client.NewListSettingsForSnapshotPager(*filter.SnapshotName, nil)
-
-			for pager.More() {
-				page, err := pager.NextPage(ctx)
-				if err != nil {
-					return nil, err
-				} else if page.Settings != nil {
-					settings = append(settings, page.Settings...)
-				}
-			}
+			settings = append(settings, snapshotSettings...)
 		}
 	}
 
@@ -174,4 +160,32 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 		Settings: settings,
 		Etags:    pageEtags,
 	}, nil
+}
+
+func loadSnapshotSettings(ctx context.Context, client *azappconfig.Client, snapshotName string) ([]azappconfig.Setting, error) {
+	settings := make([]azappconfig.Setting, 0)
+	snapshot, err := client.GetSnapshot(ctx, snapshotName, nil)
+	if err != nil {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) && respErr.StatusCode == 404 {
+			return settings, nil // treat non-existing snapshot as empty
+		}
+		return nil, err
+	}
+
+	if snapshot.CompositionType == nil || *snapshot.CompositionType != azappconfig.CompositionTypeKey {
+		return nil, fmt.Errorf("compositionType for the selected snapshot '%s' must be 'key'", snapshotName)
+	}
+
+	pager := client.NewListSettingsForSnapshotPager(snapshotName, nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		} else if page.Settings != nil {
+			settings = append(settings, page.Settings...)
+		}
+	}
+
+	return settings, nil
 }

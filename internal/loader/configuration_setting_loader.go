@@ -87,6 +87,7 @@ type ServicePrincipleAuthenticationParameters struct {
 
 const (
 	SecretReferenceContentType            string = "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8"
+	SnapshotReferenceContentType          string = "application/json; profile=\"https://azconfig.io/mime-profiles/snapshot-ref\"; charset=utf-8"
 	FeatureFlagContentType                string = "application/vnd.microsoft.appconfig.ff+json;charset=utf-8"
 	AzureClientId                         string = "azure_client_id"
 	AzureClientSecret                     string = "azure_client_secret"
@@ -235,6 +236,7 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 	resolver := secretReferenceResolver
 	useAIConfiguration := false
 	useAIChatCompletionConfiguration := false
+	snapshotRefs := make(map[string]string)
 	for _, setting := range settingsResponse.Settings {
 		trimmedKey := trimPrefix(*setting.Key, csl.Spec.Configuration.TrimKeyPrefixes)
 		if len(trimmedKey) == 0 {
@@ -299,6 +301,11 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 				}
 			}
 			rawSettings.K8sSecrets[secretName].SecretsKeyVaultMetadata[trimmedKey] = *secretMetadata
+		case SnapshotReferenceContentType:
+			if setting.Value != nil {
+				snapshotRefs[trimmedKey] = *setting.Value
+				csl.TracingFeatures.UseSnapshotReference = true
+			}
 		default:
 			rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 			rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
@@ -317,6 +324,15 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 	csl.TracingFeatures.UseAIConfiguration = useAIConfiguration
 	csl.TracingFeatures.UseAIChatCompletionConfiguration = useAIChatCompletionConfiguration
 
+	// Resolve snapshot references
+	if len(snapshotRefs) > 0 {
+		if err := csl.resolveSnapshotReferences(ctx, snapshotRefs, rawSettings, &resolver, &useAIConfiguration, &useAIChatCompletionConfiguration); err != nil {
+			return nil, err
+		}
+		csl.TracingFeatures.UseAIConfiguration = csl.TracingFeatures.UseAIConfiguration || useAIConfiguration
+		csl.TracingFeatures.UseAIChatCompletionConfiguration = csl.TracingFeatures.UseAIChatCompletionConfiguration || useAIChatCompletionConfiguration
+	}
+
 	// resolve the secret reference settings
 	if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.K8sSecrets, resolver); err != nil {
 		return nil, err
@@ -329,6 +345,136 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 	}
 
 	return rawSettings, nil
+}
+
+func (csl *ConfigurationSettingLoader) resolveSnapshotReferences(
+	ctx context.Context,
+	snapshotRefs map[string]string,
+	rawSettings *RawSettings,
+	resolver *SecretReferenceResolver,
+	useAIConfiguration *bool,
+	useAIChatCompletionConfiguration *bool,
+) error {
+	clients, err := csl.ClientManager.GetClients(ctx)
+	if err != nil {
+		return err
+	}
+	if len(clients) == 0 {
+		return fmt.Errorf("no client is available to resolve snapshot references")
+	}
+
+	for key, snapshotRefValue := range snapshotRefs {
+		snapshotName, err := parseSnapshotReference(snapshotRefValue)
+		if err != nil {
+			return fmt.Errorf("invalid format for snapshot reference setting '%s': %s", key, err.Error())
+		}
+
+		snapshotSettings, err := loadSnapshotSettings(ctx, clients[0].Client, snapshotName)
+		if err != nil {
+			return fmt.Errorf("failed to load snapshot settings: key=%s, error=%s", key, err.Error())
+		}
+
+		for _, setting := range snapshotSettings {
+			if setting.Key == nil {
+				continue
+			}
+
+			trimmedKey := trimPrefix(*setting.Key, csl.Spec.Configuration.TrimKeyPrefixes)
+			if len(trimmedKey) == 0 {
+				klog.Warningf("key of the setting '%s' from snapshot reference is trimmed to the empty string, just ignore it", *setting.Key)
+				continue
+			}
+
+			if setting.ContentType == nil {
+				rawSettings.KeyValueSettings[trimmedKey] = setting.Value
+				rawSettings.IsJsonContentTypeMap[trimmedKey] = false
+				continue
+			}
+
+			contentType := strings.TrimSpace(strings.ToLower(*setting.ContentType))
+			switch contentType {
+			case FeatureFlagContentType:
+				continue // ignore feature flag from snapshot reference
+			case SecretReferenceContentType:
+				if setting.Value == nil {
+					return fmt.Errorf("the value of Key Vault reference '%s' from snapshot reference is null", *setting.Key)
+				}
+
+				if csl.Spec.Secret == nil {
+					return fmt.Errorf("a Key Vault reference is found in snapshot reference, but 'spec.secret' was not configured in the Azure App Configuration provider '%s' in namespace '%s'", csl.Name, csl.Namespace)
+				}
+
+				var secretType corev1.SecretType = corev1.SecretTypeOpaque
+				if secretTypeTag, ok := setting.Tags[PreservedSecretTypeTag]; ok {
+					if secretTypeTag == nil {
+						return fmt.Errorf("the secret type tag '%s' for setting '%s' from snapshot reference is invalid", PreservedSecretTypeTag, *setting.Key)
+					}
+					secretType, err = parseSecretType(*secretTypeTag)
+					if err != nil {
+						return err
+					}
+				}
+
+				if *resolver == nil {
+					if newResolver, resolverErr := csl.createSecretReferenceResolver(ctx); resolverErr != nil {
+						return resolverErr
+					} else {
+						*resolver = newResolver
+					}
+				}
+
+				currentUrl := *setting.Value
+				secretMetadata, err := parse(currentUrl)
+				if err != nil {
+					return err
+				}
+
+				secretName := trimmedKey
+				if secretType == corev1.SecretTypeOpaque {
+					secretName = csl.Spec.Secret.Target.SecretName
+				}
+
+				if _, ok := rawSettings.K8sSecrets[secretName]; !ok {
+					rawSettings.K8sSecrets[secretName] = &TargetK8sSecretMetadata{
+						Type:                    secretType,
+						SecretsKeyVaultMetadata: make(map[string]KeyVaultSecretMetadata),
+					}
+				}
+				rawSettings.K8sSecrets[secretName].SecretsKeyVaultMetadata[trimmedKey] = *secretMetadata
+			default:
+				rawSettings.KeyValueSettings[trimmedKey] = setting.Value
+				rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
+				if rawSettings.IsJsonContentTypeMap[trimmedKey] {
+					if isAIConfigurationContentType(setting.ContentType) {
+						*useAIConfiguration = true
+					}
+					if isAIChatCompletionContentType(setting.ContentType) {
+						*useAIChatCompletionConfiguration = true
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// parseSnapshotReference parses a snapshot reference JSON value and returns the snapshot name.
+// The expected format is: {"snapshot_name":"<name>"}
+func parseSnapshotReference(ref string) (string, error) {
+	var snapshotRef struct {
+		SnapshotName string `json:"snapshot_name"`
+	}
+
+	if err := json.Unmarshal([]byte(ref), &snapshotRef); err != nil {
+		return "", fmt.Errorf("failed to parse snapshot reference: %s", err.Error())
+	}
+
+	if snapshotRef.SnapshotName == "" {
+		return "", fmt.Errorf("snapshot_name is empty in snapshot reference")
+	}
+
+	return snapshotRef.SnapshotName, nil
 }
 
 func (csl *ConfigurationSettingLoader) CheckAndRefreshSentinels(

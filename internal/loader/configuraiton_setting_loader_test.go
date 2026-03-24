@@ -2435,4 +2435,3 @@ func TestSnapshotReferenceInCreateKeyValueSettings(t *testing.T) {
 		assert.Equal(t, "vault-ref-snapshot", name)
 	})
 }
-

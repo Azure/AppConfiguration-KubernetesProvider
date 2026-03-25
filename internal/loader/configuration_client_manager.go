@@ -81,7 +81,7 @@ const (
 	ApiTokenExchangeAudience            string        = "api://AzureADTokenExchange"
 	AnnotationClientID                  string        = "azure.workload.identity/client-id"
 	AnnotationTenantID                  string        = "azure.workload.identity/tenant-id"
-	AzureAppConfigAudience              string        = "AZURE_APPCONFIG_AUDIENCE"
+	AzureAppConfigurationAudience       string        = "AZURE_APPCONFIGURATION_AUDIENCE"
 )
 
 func newClientOptions() *azappconfig.ClientOptions {
@@ -93,7 +93,7 @@ func newClientOptions() *azappconfig.ClientOptions {
 		},
 	}
 
-	if audience, ok := os.LookupEnv(AzureAppConfigAudience); ok && audience != "" {
+	if audience, ok := os.LookupEnv(AzureAppConfigurationAudience); ok && audience != "" {
 		options.ClientOptions.Cloud = cloud.Configuration{
 			Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
 				azappconfig.ServiceName: {

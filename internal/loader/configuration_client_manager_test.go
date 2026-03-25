@@ -30,7 +30,7 @@ func TestNewClientOptions(t *testing.T) {
 		{
 			name: "audience set to Azure Government",
 			envVars: map[string]string{
-				AzureAppConfigAudience: "https://appconfig.azure.us",
+				AzureAppConfigurationAudience: "https://appconfig.azure.us",
 			},
 			expectedAudience: "https://appconfig.azure.us",
 			hasCloudConfig:   true,
@@ -38,7 +38,7 @@ func TestNewClientOptions(t *testing.T) {
 		{
 			name: "audience set to Azure China",
 			envVars: map[string]string{
-				AzureAppConfigAudience: "https://appconfig.azure.cn",
+				AzureAppConfigurationAudience: "https://appconfig.azure.cn",
 			},
 			expectedAudience: "https://appconfig.azure.cn",
 			hasCloudConfig:   true,
@@ -46,7 +46,7 @@ func TestNewClientOptions(t *testing.T) {
 		{
 			name: "audience set to empty string",
 			envVars: map[string]string{
-				AzureAppConfigAudience: "",
+				AzureAppConfigurationAudience: "",
 			},
 			expectedAudience: "",
 			hasCloudConfig:   false,
@@ -54,7 +54,7 @@ func TestNewClientOptions(t *testing.T) {
 		{
 			name: "audience set to custom value",
 			envVars: map[string]string{
-				AzureAppConfigAudience: "https://custom.audience.example",
+				AzureAppConfigurationAudience: "https://custom.audience.example",
 			},
 			expectedAudience: "https://custom.audience.example",
 			hasCloudConfig:   true,
@@ -64,7 +64,7 @@ func TestNewClientOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clean up the env var before each test
-			if err := os.Unsetenv(AzureAppConfigAudience); err != nil {
+			if err := os.Unsetenv(AzureAppConfigurationAudience); err != nil {
 				t.Fatalf("Failed to unset environment variable: %v", err)
 			}
 

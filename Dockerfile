@@ -21,7 +21,7 @@ COPY internal/properties/ internal/properties/
 ARG TARGETARCH
  
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags "-X azappconfig/provider/internal/properties.ModuleVersion=$MODULE_VERSION" -a -o manager cmd/main.go
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -ldflags "-X azappconfig/provider/internal/properties.ModuleVersion=$MODULE_VERSION" -a -o manager cmd/main.go
  
 # Use distroless as minimal base image to package the manager binary
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/cbl-mariner/distroless/minimal:2.0-nonroot

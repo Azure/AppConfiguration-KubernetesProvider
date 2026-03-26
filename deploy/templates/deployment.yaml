@@ -88,6 +88,10 @@ spec:
         {{- end }}
         - name: REQUEST_TRACING_ENABLED
           value: "{{ .Values.requestTracing.enabled }}"
+        {{- if .Values.env.azureAppConfigurationAudience }}
+        - name: AZURE_APPCONFIG_AUDIENCE
+          value: {{ .Values.env.azureAppConfigurationAudience | quote }}
+        {{- end }}
         livenessProbe:
           httpGet:
             path: /healthz

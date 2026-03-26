@@ -70,6 +70,7 @@ autoscaling:
 env:
   azureClientId: ""
   azureTenantId: ""
+  azureAppConfigurationAudience: ""
 
 # Pod scheduling preferences
 # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity

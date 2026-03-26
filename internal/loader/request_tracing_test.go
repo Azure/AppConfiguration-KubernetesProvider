@@ -131,6 +131,35 @@ func TestCreateCorrelationContextHeader(t *testing.T) {
 				"InstalledBy=Extension",
 			},
 		},
+		{
+			name:     "with snapshot reference",
+			provider: acpv1.AzureAppConfigurationProvider{},
+			tracingFeatures: TracingFeatures{
+				UseSnapshotReference: true,
+			},
+			expected: []string{
+				"Host=Kubernetes",
+				"Features=SnapshotRef",
+				"InstalledBy=Helm",
+			},
+		},
+		{
+			name: "with snapshot reference and other features",
+			provider: acpv1.AzureAppConfigurationProvider{
+				Spec: acpv1.AzureAppConfigurationProviderSpec{
+					LoadBalancingEnabled: true,
+				},
+			},
+			tracingFeatures: TracingFeatures{
+				UseAIConfiguration:   true,
+				UseSnapshotReference: true,
+			},
+			expected: []string{
+				"Host=Kubernetes",
+				"Features=LB+AI+SnapshotRef",
+				"InstalledBy=Helm",
+			},
+		},
 	}
 
 	for _, tt := range tests {

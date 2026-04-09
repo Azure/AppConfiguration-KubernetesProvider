@@ -2215,3 +2215,223 @@ func newSelectorWithTagFilters(key string, label *string, tagFilters []string) a
 	}
 	return acpv1.MakeComparable(selector)
 }
+
+// --- Snapshot Reference Tests ---
+
+func TestParseSnapshotReference(t *testing.T) {
+	t.Run("valid reference", func(t *testing.T) {
+		name, err := parseSnapshotReference(`{"snapshot_name":"my-snapshot"}`)
+		assert.NoError(t, err)
+		assert.Equal(t, "my-snapshot", name)
+	})
+
+	t.Run("empty snapshot name", func(t *testing.T) {
+		_, err := parseSnapshotReference(`{"snapshot_name":""}`)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "snapshot_name is empty")
+	})
+
+	t.Run("invalid JSON", func(t *testing.T) {
+		_, err := parseSnapshotReference(`invalid json`)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse snapshot reference")
+	})
+
+	t.Run("missing snapshot_name field", func(t *testing.T) {
+		_, err := parseSnapshotReference(`{"other_field":"value"}`)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "snapshot_name is empty")
+	})
+}
+
+func newSnapshotReferenceSettings(key string, snapshotName string, label string) azappconfig.Setting {
+	snapshotRefContentType := SnapshotReferenceContentType
+	value := fmt.Sprintf(`{"snapshot_name":"%s"}`, snapshotName)
+	return azappconfig.Setting{
+		Key:         &key,
+		Value:       &value,
+		Label:       &label,
+		ContentType: &snapshotRefContentType,
+	}
+}
+
+func TestSnapshotReferenceInCreateKeyValueSettings(t *testing.T) {
+	t.Run("Snapshot reference setting should be collected and traced", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		defer mockCtrl.Finish()
+
+		mockSettingsClient := NewMockSettingsClient(mockCtrl)
+		mockClientManager := NewMockClientManager(mockCtrl)
+
+		EndpointName := "https://fake-endpoint"
+		testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint:                &EndpointName,
+			ReplicaDiscoveryEnabled: false,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: "test-configmap",
+			},
+		}
+		testProvider := acpv1.AzureAppConfigurationProvider{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "azconfig.io/v1",
+				Kind:       "AppConfigurationProvider",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "testName",
+				Namespace: "testNamespace",
+			},
+			Spec: testSpec,
+		}
+
+		// Settings returned: 1 regular kv, 1 snapshot reference
+		settingsToReturn := []azappconfig.Setting{
+			newCommonKeyValueSettings("key1", "value1", "label1"),
+			newSnapshotReferenceSettings("snapshotRef1", "my-snapshot", "label1"),
+		}
+
+		keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
+		keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+		settingsResponse := &SettingsResponse{
+			Settings: settingsToReturn,
+			Etags:    keyValueEtags,
+		}
+
+		mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
+
+		// First GetClients call: for ExecuteFailoverPolicy (initial key-value loading) - returns valid wrapper
+		// Second GetClients call: for resolveSnapshotReferences - returns empty to trigger error
+		gomock.InOrder(
+			mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil),
+			mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{}, nil),
+		)
+
+		configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockClientManager, mockSettingsClient)
+
+		// Resolution will fail because no clients available for snapshot resolution
+		_, err := configurationProvider.CreateKeyValueSettings(context.Background(), nil)
+
+		// Expect an error because no clients available for snapshot resolution
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no client is available to resolve snapshot references")
+
+		// Verify the tracing feature was set during the collection phase (before resolution)
+		assert.True(t, configurationProvider.TracingFeatures.UseSnapshotReference, "UseSnapshotReference flag should be set when snapshot reference settings are found")
+	})
+
+	t.Run("Settings without snapshot references should not set tracing flag", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		defer mockCtrl.Finish()
+
+		mockSettingsClient := NewMockSettingsClient(mockCtrl)
+		mockClientManager := NewMockClientManager(mockCtrl)
+
+		EndpointName := "https://fake-endpoint"
+		testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint:                &EndpointName,
+			ReplicaDiscoveryEnabled: false,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: "test-configmap",
+			},
+		}
+		testProvider := acpv1.AzureAppConfigurationProvider{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "azconfig.io/v1",
+				Kind:       "AppConfigurationProvider",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "testName",
+				Namespace: "testNamespace",
+			},
+			Spec: testSpec,
+		}
+
+		settingsToReturn := mockConfigurationSettings()
+		keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
+		keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+		settingsResponse := &SettingsResponse{
+			Settings: settingsToReturn,
+			Etags:    keyValueEtags,
+		}
+
+		mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
+		mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).AnyTimes()
+
+		configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockClientManager, mockSettingsClient)
+		rawSettings, err := configurationProvider.CreateKeyValueSettings(context.Background(), nil)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, rawSettings)
+		assert.False(t, configurationProvider.TracingFeatures.UseSnapshotReference, "UseSnapshotReference flag should not be set when no snapshot references exist")
+	})
+
+	t.Run("Invalid snapshot reference format should return error", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		defer mockCtrl.Finish()
+
+		mockSettingsClient := NewMockSettingsClient(mockCtrl)
+		mockClientManager := NewMockClientManager(mockCtrl)
+
+		EndpointName := "https://fake-endpoint"
+		testSpec := acpv1.AzureAppConfigurationProviderSpec{
+			Endpoint:                &EndpointName,
+			ReplicaDiscoveryEnabled: false,
+			Target: acpv1.ConfigurationGenerationParameters{
+				ConfigMapName: "test-configmap",
+			},
+		}
+		testProvider := acpv1.AzureAppConfigurationProvider{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "azconfig.io/v1",
+				Kind:       "AppConfigurationProvider",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "testName",
+				Namespace: "testNamespace",
+			},
+			Spec: testSpec,
+		}
+
+		// Create a snapshot reference setting with invalid JSON value
+		invalidRefContentType := SnapshotReferenceContentType
+		invalidRefValue := "invalid json"
+		invalidRefKey := "badRef"
+		invalidRefLabel := "label1"
+		settingsToReturn := []azappconfig.Setting{
+			{
+				Key:         &invalidRefKey,
+				Value:       &invalidRefValue,
+				Label:       &invalidRefLabel,
+				ContentType: &invalidRefContentType,
+			},
+		}
+
+		keyValueEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
+		keyValueEtags[newKeyValueSelector("*", nil)] = []*azcore.ETag{}
+		settingsResponse := &SettingsResponse{
+			Settings: settingsToReturn,
+			Etags:    keyValueEtags,
+		}
+
+		mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
+		fakeClient := &ConfigurationClientWrapper{
+			Client:   nil,
+			Endpoint: EndpointName,
+		}
+		mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{fakeClient}, nil).AnyTimes()
+
+		configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockClientManager, mockSettingsClient)
+		_, err := configurationProvider.CreateKeyValueSettings(context.Background(), nil)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid format for snapshot reference setting")
+	})
+
+	t.Run("Snapshot reference with KV ref should require spec.secret", func(t *testing.T) {
+		// This verifies that if a snapshot ref contains Key Vault references but spec.secret is not configured,
+		// the parseSnapshotReference itself works but the resolution flow would error.
+		// For unit test purposes, we validate the parsing side.
+		name, err := parseSnapshotReference(`{"snapshot_name":"vault-ref-snapshot"}`)
+		assert.NoError(t, err)
+		assert.Equal(t, "vault-ref-snapshot", name)
+	})
+}

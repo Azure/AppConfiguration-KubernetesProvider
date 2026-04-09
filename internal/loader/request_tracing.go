@@ -23,6 +23,7 @@ type TracingFeatures struct {
 	IsFailoverRequest                bool
 	UseAIConfiguration               bool
 	UseAIChatCompletionConfiguration bool
+	UseSnapshotReference             bool
 }
 
 // Feature flag telemetry
@@ -47,6 +48,7 @@ const (
 	LoadBalancingKey           string     = "LB"
 	AIConfigurationKey         string     = "AI"
 	AIChatCompletionKey        string     = "AICC"
+	SnapshotReferenceKey       string     = "SnapshotRef"
 )
 
 func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureAppConfigurationProvider, tracingFeatures TracingFeatures) http.Header {
@@ -95,6 +97,10 @@ func createCorrelationContextHeader(ctx context.Context, provider acpv1.AzureApp
 
 	if tracingFeatures.UseAIChatCompletionConfiguration {
 		features = append(features, AIChatCompletionKey)
+	}
+
+	if tracingFeatures.UseSnapshotReference {
+		features = append(features, SnapshotReferenceKey)
 	}
 
 	if len(features) > 0 {

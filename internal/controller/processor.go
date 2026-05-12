@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"golang.org/x/exp/maps"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
@@ -254,7 +253,9 @@ func (processor *AppConfigurationProviderProcessor) processSecretReferenceRefres
 	for secretName, resolvedSecret := range resolvedSecrets.SecretSettings {
 		existingSecret, ok := secrets[secretName]
 		if ok {
-			maps.Copy(existingSecret.Data, resolvedSecret.Data)
+			for k, v := range resolvedSecret.Data {
+				existingSecret.Data[k] = v
+			}
 		}
 	}
 

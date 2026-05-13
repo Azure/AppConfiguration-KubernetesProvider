@@ -24,7 +24,6 @@ import (
 	azappconfig "github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig/v2"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"golang.org/x/crypto/pkcs12"
-	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/syncmap"
 	corev1 "k8s.io/api/core/v1"
@@ -1061,7 +1060,11 @@ func MergeSecret(secret map[string]corev1.Secret, newSecret map[string]corev1.Se
 		} else if secret[k].Type != v.Type {
 			return fmt.Errorf("secret type mismatch for key %q", k)
 		} else {
-			maps.Copy(secret[k].Data, v.Data)
+			existing := secret[k]
+			for dk, dv := range v.Data {
+				existing.Data[dk] = dv
+			}
+			secret[k] = existing
 		}
 	}
 

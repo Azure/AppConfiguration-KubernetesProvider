@@ -10,19 +10,19 @@ require (
 	github.com/onsi/gomega v1.39.1
 	golang.org/x/crypto v0.50.0
 	golang.org/x/sync v0.20.0
-	k8s.io/apimachinery v0.35.4
-	k8s.io/client-go v0.35.4
+	k8s.io/apimachinery v0.35.5
+	k8s.io/client-go v0.35.5
 	sigs.k8s.io/controller-runtime v0.23.3
 )
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal v1.2.0 // indirect
-	github.com/AzureAD/microsoft-authentication-library-for-go v1.7.1 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v1.7.2 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-openapi/jsonpointer v0.23.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.5 // indirect
 	github.com/go-openapi/swag v0.26.0 // indirect
@@ -79,7 +79,6 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
@@ -91,11 +90,11 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.35.4
-	k8s.io/apiextensions-apiserver v0.35.4 // indirect
+	k8s.io/api v0.35.5
+	k8s.io/apiextensions-apiserver v0.35.5 // indirect
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/kube-openapi v0.0.0-20260414162039-ec9c827d403f // indirect
-	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
+	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
+	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 	software.sslmate.com/src/go-pkcs12 v0.7.0

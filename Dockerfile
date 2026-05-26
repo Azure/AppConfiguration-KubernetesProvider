@@ -23,8 +23,8 @@ ARG TARGETARCH
 # Build
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -ldflags "-X azappconfig/provider/internal/properties.ModuleVersion=$MODULE_VERSION" -a -o manager cmd/main.go
  
-# Use distroless as minimal base image to package the manager binary
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/azurelinux/distroless/base:3.0
+# Use FIPS-compliant Azure Linux core image as minimal base image to package the manager binary
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/azurelinux/base/core:3.0
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532

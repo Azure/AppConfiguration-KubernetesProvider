@@ -208,7 +208,8 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 type settingProcessContext struct {
 	rawSettings                      *RawSettings
 	resolver                         *SecretReferenceResolver
-	snapshotRefs                     map[string]string // nil to skip snapshot reference collection (e.g. inside snapshot resolution)
+	allowSnapshotRef                 bool                // false inside a snapshot's resolved settings to prevent nested resolution
+	snapshotClient                   *azappconfig.Client // lazily initialized when the first snapshot reference is resolved
 	useAIConfiguration               bool
 	useAIChatCompletionConfiguration bool
 }
@@ -243,9 +244,9 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 	resolver := secretReferenceResolver
 	processCtx := &settingProcessContext{
-		rawSettings:  rawSettings,
-		resolver:     &resolver,
-		snapshotRefs: make(map[string]string), // collect snapshot references
+		rawSettings:      rawSettings,
+		resolver:         &resolver,
+		allowSnapshotRef: true,
 	}
 
 	if err := csl.processSettings(ctx, settingsResponse.Settings, processCtx); err != nil {
@@ -254,15 +255,6 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 	csl.TracingFeatures.UseAIConfiguration = processCtx.useAIConfiguration
 	csl.TracingFeatures.UseAIChatCompletionConfiguration = processCtx.useAIChatCompletionConfiguration
-
-	// Resolve snapshot references
-	if len(processCtx.snapshotRefs) > 0 {
-		if err := csl.resolveSnapshotReferences(ctx, processCtx.snapshotRefs, processCtx); err != nil {
-			return nil, err
-		}
-		csl.TracingFeatures.UseAIConfiguration = csl.TracingFeatures.UseAIConfiguration || processCtx.useAIConfiguration
-		csl.TracingFeatures.UseAIChatCompletionConfiguration = csl.TracingFeatures.UseAIChatCompletionConfiguration || processCtx.useAIChatCompletionConfiguration
-	}
 
 	// resolve the secret reference settings
 	if resolvedSecret, err := csl.ResolveSecretReferences(ctx, rawSettings.K8sSecrets, resolver); err != nil {
@@ -280,7 +272,9 @@ func (csl *ConfigurationSettingLoader) CreateKeyValueSettings(ctx context.Contex
 
 // processSettings classifies each setting by content type and populates the process context accordingly.
 // Feature flags are skipped, secret references are collected into K8sSecrets, snapshot references
-// are collected when processCtx.snapshotRefs is non-nil, and all other settings go into KeyValueSettings.
+// are resolved inline (when processCtx.allowSnapshotRef is true) so that their settings participate
+// in the selector precedence chain at the position the reference appears, and all other settings
+// go into KeyValueSettings.
 func (csl *ConfigurationSettingLoader) processSettings(ctx context.Context, settings []azappconfig.Setting, processCtx *settingProcessContext) error {
 	for _, setting := range settings {
 		if setting.Key == nil {
@@ -352,12 +346,45 @@ func (csl *ConfigurationSettingLoader) processSettings(ctx context.Context, sett
 			}
 			processCtx.rawSettings.K8sSecrets[secretName].SecretsKeyVaultMetadata[trimmedKey] = *secretMetadata
 		case SnapshotReferenceContentType:
-			// Only collect snapshot references when snapshotRefs is non-nil (top-level loading).
-			// During snapshot reference resolution, snapshotRefs is nil to prevent nested resolution.
-			if processCtx.snapshotRefs != nil && setting.Value != nil {
-				processCtx.snapshotRefs[trimmedKey] = *setting.Value
-				csl.TracingFeatures.UseSnapshotReference = true
+			// Only resolve snapshot references at the top level. Inside an already-resolved snapshot we
+			// ignore further snapshot references to prevent nested resolution.
+			if !processCtx.allowSnapshotRef || setting.Value == nil {
+				continue
 			}
+			csl.TracingFeatures.UseSnapshotReference = true
+
+			snapshotName, err := parseSnapshotReference(*setting.Value)
+			if err != nil {
+				return fmt.Errorf("invalid format for snapshot reference setting '%s': %s", trimmedKey, err.Error())
+			}
+
+			if processCtx.snapshotClient == nil {
+				clients, err := csl.ClientManager.GetClients(ctx)
+				if err != nil {
+					return err
+				}
+				if len(clients) == 0 {
+					return fmt.Errorf("no client is available to resolve snapshot references")
+				}
+				processCtx.snapshotClient = clients[0].Client
+			}
+
+			snapshotSettings, err := loadSnapshotSettings(ctx, processCtx.snapshotClient, snapshotName)
+			if err != nil {
+				return fmt.Errorf("failed to load snapshot settings: key=%s, error=%s", trimmedKey, err.Error())
+			}
+
+			nestedCtx := &settingProcessContext{
+				rawSettings:      processCtx.rawSettings,
+				resolver:         processCtx.resolver,
+				allowSnapshotRef: false,
+				snapshotClient:   processCtx.snapshotClient,
+			}
+			if err := csl.processSettings(ctx, snapshotSettings, nestedCtx); err != nil {
+				return err
+			}
+			processCtx.useAIConfiguration = processCtx.useAIConfiguration || nestedCtx.useAIConfiguration
+			processCtx.useAIChatCompletionConfiguration = processCtx.useAIChatCompletionConfiguration || nestedCtx.useAIChatCompletionConfiguration
 		default:
 			processCtx.rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 			processCtx.rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
@@ -371,47 +398,6 @@ func (csl *ConfigurationSettingLoader) processSettings(ctx context.Context, sett
 				processCtx.useAIChatCompletionConfiguration = true
 			}
 		}
-	}
-
-	return nil
-}
-
-func (csl *ConfigurationSettingLoader) resolveSnapshotReferences(
-	ctx context.Context,
-	snapshotRefs map[string]string,
-	processCtx *settingProcessContext,
-) error {
-	clients, err := csl.ClientManager.GetClients(ctx)
-	if err != nil {
-		return err
-	}
-	if len(clients) == 0 {
-		return fmt.Errorf("no client is available to resolve snapshot references")
-	}
-
-	for key, snapshotRefValue := range snapshotRefs {
-		snapshotName, err := parseSnapshotReference(snapshotRefValue)
-		if err != nil {
-			return fmt.Errorf("invalid format for snapshot reference setting '%s': %s", key, err.Error())
-		}
-
-		snapshotSettings, err := loadSnapshotSettings(ctx, clients[0].Client, snapshotName)
-		if err != nil {
-			return fmt.Errorf("failed to load snapshot settings: key=%s, error=%s", key, err.Error())
-		}
-
-		// Process snapshot settings with snapshotRefs=nil to prevent nested snapshot reference resolution
-		snapshotProcessCtx := &settingProcessContext{
-			rawSettings:  processCtx.rawSettings,
-			resolver:     processCtx.resolver,
-			snapshotRefs: nil, // do not collect nested snapshot references
-		}
-		if err := csl.processSettings(ctx, snapshotSettings, snapshotProcessCtx); err != nil {
-			return err
-		}
-
-		processCtx.useAIConfiguration = processCtx.useAIConfiguration || snapshotProcessCtx.useAIConfiguration
-		processCtx.useAIChatCompletionConfiguration = processCtx.useAIChatCompletionConfiguration || snapshotProcessCtx.useAIChatCompletionConfiguration
 	}
 
 	return nil

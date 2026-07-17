@@ -199,15 +199,23 @@ func verifyAuthObject(auth *acpv1.AzureAppConfigurationProviderAuth) error {
 	return nil
 }
 
-func verifyExistingTargetObject[T client.Object](targetObj T, targetName string, providerName string) error {
+func verifyExistingTargetObject[T client.Object](targetObj T, targetName string, provider *acpv1.AzureAppConfigurationProvider) error {
 	objectKind := targetObj.GetObjectKind().GroupVersionKind().Kind
 	if targetObj.GetName() != targetName {
 		return nil
 	}
 
-	// If existing object is created by current provider, just skip it.
+	// If existing object is owned by the current provider, just skip it.
+	// A valid ownership must identify the same AzureAppConfigurationProvider by
+	// API version, kind, name and UID. Comparing the name alone is not sufficient:
+	// a foreign owner reference that happens to share the provider's name (for
+	// example, a different resource kind) must not authorize adoption or update.
+	expectedAPIVersion := acpv1.GroupVersion.String()
 	for _, ownerRef := range targetObj.GetOwnerReferences() {
-		if ownerRef.Name == providerName {
+		if ownerRef.APIVersion == expectedAPIVersion &&
+			ownerRef.Kind == ProviderName &&
+			ownerRef.Name == provider.Name &&
+			ownerRef.UID == provider.UID {
 			return nil
 		}
 	}

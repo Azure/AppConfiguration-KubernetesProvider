@@ -1063,10 +1063,18 @@ func TestVerifyAuthObject(t *testing.T) {
 
 func TestVerifyExistingTargetObject(t *testing.T) {
 	providerNamespace := "default"
+	expectedAPIVersion := acpv1.GroupVersion.String()
 
 	t.Run("Should return no error if existing configMap is valid", func(t *testing.T) {
 		providerName := "providerName"
 		configMapName := "configMapName"
+		provider := &acpv1.AzureAppConfigurationProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      providerName,
+				Namespace: providerNamespace,
+				UID:       "provider-uid",
+			},
+		}
 
 		// Case 1: ConfigMap owned by the provider
 		configMap := &corev1.ConfigMap{
@@ -1074,7 +1082,7 @@ func TestVerifyExistingTargetObject(t *testing.T) {
 				Name:      configMapName,
 				Namespace: providerNamespace,
 				OwnerReferences: []metav1.OwnerReference{
-					{Kind: "AzureAppConfigurationProvider", Name: providerName},
+					{APIVersion: expectedAPIVersion, Kind: "AzureAppConfigurationProvider", Name: providerName, UID: "provider-uid"},
 				},
 			},
 		}
@@ -1085,7 +1093,7 @@ func TestVerifyExistingTargetObject(t *testing.T) {
 				Name:      "anotherConfigMap",
 				Namespace: providerNamespace,
 				OwnerReferences: []metav1.OwnerReference{
-					{Kind: "AzureAppConfigurationProvider", Name: providerName},
+					{APIVersion: expectedAPIVersion, Kind: "AzureAppConfigurationProvider", Name: providerName, UID: "provider-uid"},
 				},
 			},
 		}
@@ -1093,14 +1101,21 @@ func TestVerifyExistingTargetObject(t *testing.T) {
 		// Case 3: Empty ConfigMap
 		emptyConfigMap := &corev1.ConfigMap{}
 
-		assert.Nil(t, verifyExistingTargetObject(emptyConfigMap, configMapName, providerName))
-		assert.Nil(t, verifyExistingTargetObject(configMap, configMapName, providerName))
-		assert.Nil(t, verifyExistingTargetObject(configMap2, configMapName, providerName))
+		assert.Nil(t, verifyExistingTargetObject(emptyConfigMap, configMapName, provider))
+		assert.Nil(t, verifyExistingTargetObject(configMap, configMapName, provider))
+		assert.Nil(t, verifyExistingTargetObject(configMap2, configMapName, provider))
 	})
 
 	t.Run("Should return error if configMap is not valid", func(t *testing.T) {
 		providerName := "providerName"
 		configMapName := "configMapName"
+		provider := &acpv1.AzureAppConfigurationProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      providerName,
+				Namespace: providerNamespace,
+				UID:       "provider-uid",
+			},
+		}
 
 		// Case 1: ConfigMap exists but is not owned by the provider
 		configMap1 := &corev1.ConfigMap{
@@ -1122,16 +1137,52 @@ func TestVerifyExistingTargetObject(t *testing.T) {
 				Name:      configMapName,
 				Namespace: providerNamespace,
 				OwnerReferences: []metav1.OwnerReference{
-					{Kind: "AzureAppConfigurationProvider", Name: "anotherProvider"},
+					{APIVersion: expectedAPIVersion, Kind: "AzureAppConfigurationProvider", Name: "anotherProvider", UID: "another-uid"},
 				},
 			},
 		}
 
-		err1 := verifyExistingTargetObject(configMap1, configMapName, providerName)
+		// Case 3: ConfigMap owned by a foreign resource that shares the provider's name.
+		// The name matches but the API version, kind and UID do not, so it must be rejected.
+		configMap3 := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "ConfigMap",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: providerNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{APIVersion: "apps/v1", Kind: "Deployment", Name: providerName, UID: "foreign-uid"},
+				},
+			},
+		}
+
+		// Case 4: ConfigMap owned by an AzureAppConfigurationProvider with the same
+		// name but a different UID (for example, a deleted and recreated provider).
+		configMap4 := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "ConfigMap",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: providerNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{APIVersion: expectedAPIVersion, Kind: "AzureAppConfigurationProvider", Name: providerName, UID: "stale-uid"},
+				},
+			},
+		}
+
+		err1 := verifyExistingTargetObject(configMap1, configMapName, provider)
 		assert.Equal(t, "a ConfigMap with name 'configMapName' already exists in namespace 'default'", err1.Error())
 
-		err2 := verifyExistingTargetObject(configMap2, configMapName, providerName)
+		err2 := verifyExistingTargetObject(configMap2, configMapName, provider)
 		assert.Equal(t, "a ConfigMap with name 'configMapName' already exists in namespace 'default'", err2.Error())
+
+		err3 := verifyExistingTargetObject(configMap3, configMapName, provider)
+		assert.Equal(t, "a ConfigMap with name 'configMapName' already exists in namespace 'default'", err3.Error())
+
+		err4 := verifyExistingTargetObject(configMap4, configMapName, provider)
+		assert.Equal(t, "a ConfigMap with name 'configMapName' already exists in namespace 'default'", err4.Error())
 	})
 }
 

@@ -296,7 +296,7 @@ func (reconciler *AzureAppConfigurationProviderReconciler) verifyTargetObjectExi
 		return false, err
 	}
 
-	return true, verifyExistingTargetObject(obj, targetName, provider.Name)
+	return true, verifyExistingTargetObject(obj, targetName, provider)
 }
 
 // collectExistingSecret verifies the existence of a secret and adds it to the existingSecrets map if it exists

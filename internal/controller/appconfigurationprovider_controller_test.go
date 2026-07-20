@@ -1427,4 +1427,134 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 			_ = k8sClient.Delete(ctx, configProvider)
 		})
 	})
+
+	Describe("When target Secret already exists with a foreign owner reference", func() {
+		It("Should refuse to overwrite a plain pre-existing Secret it does not own", func() {
+			By("pre-creating a Secret with no owner references")
+			ctx := context.Background()
+			victimName := "victim-plain-secret"
+			attackerProvider := "attacker-provider-plain"
+
+			victim := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: victimName, Namespace: ProviderNamespace},
+				Type:       corev1.SecretTypeOpaque,
+				Data:       map[string][]byte{"protected": []byte("ORIGINAL-VALUE")},
+			}
+			Expect(k8sClient.Create(ctx, victim)).Should(Succeed())
+
+			attackerSettings := &loader.TargetKeyValueSettings{
+				SecretSettings: map[string]corev1.Secret{
+					victimName: {
+						Data: map[string][]byte{"protected": []byte("ATTACKER-INJECTED")},
+						Type: corev1.SecretTypeOpaque,
+					},
+				},
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
+					victimName: {
+						Type:                    corev1.SecretTypeOpaque,
+						SecretsKeyVaultMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+					},
+				},
+			}
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(attackerSettings, nil).AnyTimes()
+
+			provider := &acpv1.AzureAppConfigurationProvider{
+				ObjectMeta: metav1.ObjectMeta{Name: attackerProvider, Namespace: ProviderNamespace},
+				Spec: acpv1.AzureAppConfigurationProviderSpec{
+					Endpoint: &EndpointName,
+					Target:   acpv1.ConfigurationGenerationParameters{ConfigMapName: "cm-plain"},
+					Secret: &acpv1.SecretReference{
+						Target: acpv1.SecretGenerationParameters{SecretName: victimName},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, provider)).Should(Succeed())
+
+			By("verifying the victim Secret data remains unchanged")
+			Consistently(func() string {
+				s := &corev1.Secret{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: victimName, Namespace: ProviderNamespace}, s)
+				return string(s.Data["protected"])
+			}, duration, interval).Should(Equal("ORIGINAL-VALUE"))
+
+			_ = k8sClient.Delete(ctx, provider)
+			_ = k8sClient.Delete(ctx, victim)
+		})
+
+		It("Should refuse to overwrite a Secret whose non-provider owner reference name matches the provider name", func() {
+			By("pre-creating a Secret owned by a Deployment sharing the attacker provider's name")
+			ctx := context.Background()
+			victimName := "victim-owned-secret"
+			// The attacker names their provider CR to match an ownerReference already
+			// present on the victim Secret. Here the Secret is owned by a Deployment
+			// named "frontend" (models cert-manager Certificate / workload / operator CR).
+			attackerProvider := "frontend"
+
+			victim := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      victimName,
+					Namespace: ProviderNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "apps/v1",
+							Kind:       "Deployment",
+							Name:       "frontend", // non-provider owner, different Kind and UID
+							UID:        types.UID("11111111-1111-1111-1111-111111111111"),
+						},
+					},
+				},
+				Type: corev1.SecretTypeOpaque,
+				Data: map[string][]byte{"protected": []byte("ORIGINAL-VALUE")},
+			}
+			Expect(k8sClient.Create(ctx, victim)).Should(Succeed())
+
+			attackerSettings := &loader.TargetKeyValueSettings{
+				SecretSettings: map[string]corev1.Secret{
+					victimName: {
+						Data: map[string][]byte{
+							"protected": []byte("ATTACKER-INJECTED"),
+							"extra":     []byte("PWNED"),
+						},
+						Type: corev1.SecretTypeOpaque,
+					},
+				},
+				K8sSecrets: map[string]*loader.TargetK8sSecretMetadata{
+					victimName: {
+						Type:                    corev1.SecretTypeOpaque,
+						SecretsKeyVaultMetadata: make(map[string]loader.KeyVaultSecretMetadata),
+					},
+				},
+			}
+			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(attackerSettings, nil).AnyTimes()
+
+			provider := &acpv1.AzureAppConfigurationProvider{
+				ObjectMeta: metav1.ObjectMeta{Name: attackerProvider, Namespace: ProviderNamespace},
+				Spec: acpv1.AzureAppConfigurationProviderSpec{
+					Endpoint: &EndpointName,
+					Target:   acpv1.ConfigurationGenerationParameters{ConfigMapName: "cm-owned"},
+					Secret: &acpv1.SecretReference{
+						Target: acpv1.SecretGenerationParameters{SecretName: victimName},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, provider)).Should(Succeed())
+
+			By("verifying the victim Secret data and owner reference remain unchanged")
+			Consistently(func() string {
+				s := &corev1.Secret{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: victimName, Namespace: ProviderNamespace}, s)
+				return string(s.Data["protected"])
+			}, duration, interval).Should(Equal("ORIGINAL-VALUE"))
+
+			s := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: victimName, Namespace: ProviderNamespace}, s)).Should(Succeed())
+			Expect(s.Data).ShouldNot(HaveKey("extra"))
+			Expect(len(s.OwnerReferences)).Should(Equal(1))
+			Expect(s.OwnerReferences[0].Kind).Should(Equal("Deployment"))
+			Expect(s.OwnerReferences[0].Name).Should(Equal("frontend"))
+
+			_ = k8sClient.Delete(ctx, provider)
+			_ = k8sClient.Delete(ctx, victim)
+		})
+	})
 })

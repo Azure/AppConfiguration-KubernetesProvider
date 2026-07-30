@@ -41,7 +41,7 @@ var (
 	mockCtrl                      *gomock.Controller
 	mockCongiurationClientManager *MockClientManager
 	endpointName                  string = "https://fake-endpoint"
-	fakeClientWrapper                    = ConfigurationClientWrapper{
+	fakeClientWrapper                    = AppConfigurationClientWrapper{
 		Client:         nil,
 		Endpoint:       endpointName,
 		BackOffEndTime: metav1.Time{},
@@ -244,10 +244,10 @@ func (m *MockClientManager) EXPECT() *MockClientManagerMockRecorder {
 }
 
 // GetClients mocks base method.
-func (m *MockClientManager) GetClients(arg0 context.Context) ([]*ConfigurationClientWrapper, error) {
+func (m *MockClientManager) GetClients(arg0 context.Context) ([]*AppConfigurationClientWrapper, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClients", arg0)
-	ret0, _ := ret[0].([]*ConfigurationClientWrapper)
+	ret0, _ := ret[0].([]*AppConfigurationClientWrapper)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -294,7 +294,7 @@ func (m *MockSettingsClient) EXPECT() *MockSettingsClientMockRecorder {
 }
 
 // GetSettings mocks base method.
-func (m *MockSettingsClient) GetSettings(arg0 context.Context, arg1 *azappconfig.Client) (*SettingsResponse, error) {
+func (m *MockSettingsClient) GetSettings(arg0 context.Context, arg1 AppConfigurationClient) (*SettingsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSettings", arg0, arg1)
 	ret0, _ := ret[0].(*SettingsResponse)
@@ -377,7 +377,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue := "fakeSecretValue"
 			secret1 := azsecrets.GetSecretResponse{
@@ -444,7 +444,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue := "fakeSecretValue"
 			secret1 := azsecrets.GetSecretResponse{
@@ -513,7 +513,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Spec: testSpec,
 			}
 
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			secretValue := "fakeSecretValue"
 			secret1 := azsecrets.GetSecretResponse{
@@ -573,7 +573,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Etags:    keyValueEtags,
 			}
 			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1064,7 +1064,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Etags:    keyValueEtags,
 			}
 			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1112,7 +1112,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Etags:    keyValueEtags,
 			}
 			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1154,7 +1154,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Etags:    keyValueEtags,
 			}
 			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1198,7 +1198,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Etags:    keyValueEtags,
 			}
 			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1250,8 +1250,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Settings: featureFlagsToReturn,
 				Etags:    featureFlagEtags,
 			}
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(2)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(2)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(3)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(3)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1300,8 +1300,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Settings: featureFlagsToReturn,
 				Etags:    featureFlagEtags,
 			}
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(2)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(2)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(3)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(3)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1351,8 +1351,8 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 				Settings: featureFlagsToReturn,
 				Etags:    featureFlagEtags,
 			}
-			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(2)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(2)
+			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(3)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil).Times(3)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1385,7 +1385,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 			err := errors.New("fake error")
 			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(nil, err)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1418,14 +1418,14 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 
 			netErr := &net.OpError{Err: errors.New("fake network error")}
 			settingsToReturn := mockConfigurationSettings()
-			failedClient := ConfigurationClientWrapper{
+			failedClient := AppConfigurationClientWrapper{
 				Client:         nil,
 				Endpoint:       endpointName,
 				BackOffEndTime: metav1.Time{},
 				FailedAttempts: 0,
 			}
 
-			succeededClient := ConfigurationClientWrapper{
+			succeededClient := AppConfigurationClientWrapper{
 				Client:         nil,
 				Endpoint:       endpointName,
 				BackOffEndTime: metav1.Time{},
@@ -1440,7 +1440,7 @@ var _ = Describe("AppConfiguationProvider Get All Settings", func() {
 			}
 			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(nil, netErr).Times(1)
 			mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil).Times(1)
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&failedClient, &succeededClient}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&failedClient, &succeededClient}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 			allSettings, err := configurationProvider.CreateTargetSettings(context.Background(), mockResolveSecretReference)
 
@@ -1499,7 +1499,7 @@ var _ = Describe("TagFilters Support", func() {
 				Spec: testSpec,
 			}
 
-			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil)
+			mockCongiurationClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil)
 			configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockCongiurationClientManager, mockSettingsClient)
 
 			settingsToReturn := mockConfigurationSettings()
@@ -2301,8 +2301,8 @@ func TestSnapshotReferenceInCreateKeyValueSettings(t *testing.T) {
 		// First GetClients call: for ExecuteFailoverPolicy (initial key-value loading) - returns valid wrapper
 		// Second GetClients call: for resolveSnapshotReferences - returns empty to trigger error
 		gomock.InOrder(
-			mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil),
-			mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{}, nil),
+			mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil),
+			mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{}, nil),
 		)
 
 		configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockClientManager, mockSettingsClient)
@@ -2354,7 +2354,7 @@ func TestSnapshotReferenceInCreateKeyValueSettings(t *testing.T) {
 		}
 
 		mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
-		mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{&fakeClientWrapper}, nil).AnyTimes()
+		mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{&fakeClientWrapper}, nil).AnyTimes()
 
 		configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockClientManager, mockSettingsClient)
 		rawSettings, err := configurationProvider.CreateKeyValueSettings(context.Background(), nil)
@@ -2413,11 +2413,11 @@ func TestSnapshotReferenceInCreateKeyValueSettings(t *testing.T) {
 		}
 
 		mockSettingsClient.EXPECT().GetSettings(gomock.Any(), gomock.Any()).Return(settingsResponse, nil)
-		fakeClient := &ConfigurationClientWrapper{
+		fakeClient := &AppConfigurationClientWrapper{
 			Client:   nil,
 			Endpoint: EndpointName,
 		}
-		mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*ConfigurationClientWrapper{fakeClient}, nil).AnyTimes()
+		mockClientManager.EXPECT().GetClients(gomock.Any()).Return([]*AppConfigurationClientWrapper{fakeClient}, nil).AnyTimes()
 
 		configurationProvider, _ := NewConfigurationSettingLoader(testProvider, mockClientManager, mockSettingsClient)
 		_, err := configurationProvider.CreateKeyValueSettings(context.Background(), nil)

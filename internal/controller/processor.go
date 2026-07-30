@@ -30,18 +30,20 @@ type AppConfigurationProviderProcessor struct {
 }
 
 type RefreshOptions struct {
-	keyValueRefreshEnabled        bool
-	secretReferenceRefreshEnabled bool
-	secretReferenceRefreshNeeded  bool
-	featureFlagRefreshEnabled     bool
-	featureFlagRefreshNeeded      bool
-	ConfigMapSettingPopulated     bool
-	SecretSettingPopulated        bool
-	sentinelChanged               bool
-	keyValuePageETagsChanged      bool
-	updatedSentinelETags          map[acpv1.Sentinel]*azcore.ETag
-	updatedKeyValueETags          map[acpv1.ComparableSelector][]*azcore.ETag
-	updatedFeatureFlagETags       map[acpv1.ComparableSelector][]*azcore.ETag
+	keyValueRefreshEnabled           bool
+	secretReferenceRefreshEnabled    bool
+	secretReferenceRefreshNeeded     bool
+	featureFlagRefreshEnabled        bool
+	featureFlagRefreshNeeded         bool
+	enhancedFeatureFlagRefreshNeeded bool
+	ConfigMapSettingPopulated        bool
+	SecretSettingPopulated           bool
+	sentinelChanged                  bool
+	keyValuePageETagsChanged         bool
+	updatedSentinelETags             map[acpv1.Sentinel]*azcore.ETag
+	updatedKeyValueETags             map[acpv1.ComparableSelector][]*azcore.ETag
+	updatedFeatureFlagETags          map[acpv1.ComparableSelector][]*azcore.ETag
+	updatedEnhancedFeatureFlagETags  map[acpv1.ComparableSelector][]*azcore.ETag
 }
 
 func (processor *AppConfigurationProviderProcessor) PopulateSettings(existingConfigMap *corev1.ConfigMap, existingSecrets map[string]corev1.Secret) error {
@@ -75,6 +77,7 @@ func (processor *AppConfigurationProviderProcessor) processFullReconciliation() 
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	processor.RefreshOptions.updatedKeyValueETags = updatedSettings.KeyValueETags
 	processor.RefreshOptions.updatedFeatureFlagETags = updatedSettings.FeatureFlagETags
+	processor.RefreshOptions.updatedEnhancedFeatureFlagETags = updatedSettings.EnhancedFeatureFlagETags
 	processor.RefreshOptions.updatedSentinelETags = updatedSettings.SentinelETags
 	if processor.Provider.Spec.Secret != nil {
 		processor.RefreshOptions.SecretSettingPopulated = true
@@ -112,7 +115,11 @@ func (processor *AppConfigurationProviderProcessor) processFeatureFlagRefresh(ex
 		return err
 	}
 
-	if !processor.RefreshOptions.featureFlagRefreshNeeded {
+	if processor.RefreshOptions.enhancedFeatureFlagRefreshNeeded, err = (processor.Retriever).CheckIfEnhancedFeatureFlagsChanged(processor.Context, reconcileState.EnhancedFeatureFlagETags); err != nil {
+		return err
+	}
+
+	if !(processor.RefreshOptions.featureFlagRefreshNeeded || processor.RefreshOptions.enhancedFeatureFlagRefreshNeeded) {
 		reconcileState.NextFeatureFlagRefreshReconcileTime = nextFeatureFlagRefreshReconcileTime
 		return nil
 	}
@@ -123,6 +130,7 @@ func (processor *AppConfigurationProviderProcessor) processFeatureFlagRefresh(ex
 	}
 
 	processor.RefreshOptions.updatedFeatureFlagETags = featureFlagRefreshedSettings.FeatureFlagETags
+	processor.RefreshOptions.updatedEnhancedFeatureFlagETags = featureFlagRefreshedSettings.EnhancedFeatureFlagETags
 	processor.Settings = featureFlagRefreshedSettings
 	processor.RefreshOptions.ConfigMapSettingPopulated = true
 	// Update next refresh time only if settings updated successfully
@@ -323,6 +331,10 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 		processor.ReconciliationState.FeatureFlagETags = processor.RefreshOptions.updatedFeatureFlagETags
 	}
 
+	if processor.RefreshOptions.updatedEnhancedFeatureFlagETags != nil {
+		processor.ReconciliationState.EnhancedFeatureFlagETags = processor.RefreshOptions.updatedEnhancedFeatureFlagETags
+	}
+
 	if processor.ShouldReconcile {
 		processor.ReconciliationState.SentinelETags = processor.RefreshOptions.updatedSentinelETags
 	}
@@ -348,7 +360,7 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 			processor.Provider.Status.RefreshStatus.LastKeyVaultReferenceRefreshTime = processor.CurrentTime
 		}
 		// Update provider last feature flag refresh time
-		if processor.RefreshOptions.featureFlagRefreshNeeded {
+		if processor.RefreshOptions.featureFlagRefreshNeeded || processor.RefreshOptions.enhancedFeatureFlagRefreshNeeded {
 			processor.Provider.Status.RefreshStatus.LastFeatureFlagRefreshTime = processor.CurrentTime
 		}
 		// At least one dynamic feature is enabled, requeueAfterInterval need be recalculated
@@ -361,16 +373,17 @@ func (processor *AppConfigurationProviderProcessor) Finish() (ctrl.Result, error
 
 func NewRefreshOptions() *RefreshOptions {
 	return &RefreshOptions{
-		keyValueRefreshEnabled:        false,
-		secretReferenceRefreshEnabled: false,
-		secretReferenceRefreshNeeded:  false,
-		featureFlagRefreshEnabled:     false,
-		featureFlagRefreshNeeded:      false,
-		ConfigMapSettingPopulated:     false,
-		SecretSettingPopulated:        false,
-		sentinelChanged:               false,
-		keyValuePageETagsChanged:      false,
-		updatedSentinelETags:          make(map[acpv1.Sentinel]*azcore.ETag),
+		keyValueRefreshEnabled:           false,
+		secretReferenceRefreshEnabled:    false,
+		secretReferenceRefreshNeeded:     false,
+		featureFlagRefreshEnabled:        false,
+		featureFlagRefreshNeeded:         false,
+		enhancedFeatureFlagRefreshNeeded: false,
+		ConfigMapSettingPopulated:        false,
+		SecretSettingPopulated:           false,
+		sentinelChanged:                  false,
+		keyValuePageETagsChanged:         false,
+		updatedSentinelETags:             make(map[acpv1.Sentinel]*azcore.ETag),
 	}
 }
 

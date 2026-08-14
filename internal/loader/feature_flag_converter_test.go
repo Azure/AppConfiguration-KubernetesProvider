@@ -19,8 +19,9 @@ import (
 // pages from in-memory slices. Only the list operations exercised by the feature flag loading path
 // are backed by data; the remaining methods return empty results.
 type fakeAppConfigurationClient struct {
-	keyValuePages    [][]azappconfig.Setting
-	featureFlagPages [][]azappconfig.FeatureFlag
+	keyValuePages          [][]azappconfig.Setting
+	featureFlagPages       [][]azappconfig.FeatureFlag
+	featureFlagListOptions *azappconfig.ListFeatureFlagsOptions
 }
 
 func (c *fakeAppConfigurationClient) NewListSettingsPager(_ azappconfig.SettingSelector, _ *azappconfig.ListSettingsOptions) *runtime.Pager[azappconfig.ListSettingsPageResponse] {
@@ -57,7 +58,8 @@ func (c *fakeAppConfigurationClient) NewListSettingsForSnapshotPager(_ string, _
 	})
 }
 
-func (c *fakeAppConfigurationClient) NewListFeatureFlagsPager(_ azappconfig.FeatureFlagSelector, _ *azappconfig.ListFeatureFlagsOptions) *runtime.Pager[azappconfig.ListFeatureFlagsPageResponse] {
+func (c *fakeAppConfigurationClient) NewListFeatureFlagsPager(_ azappconfig.FeatureFlagSelector, options *azappconfig.ListFeatureFlagsOptions) *runtime.Pager[azappconfig.ListFeatureFlagsPageResponse] {
+	c.featureFlagListOptions = options
 	pages := c.featureFlagPages
 	if len(pages) == 0 {
 		pages = [][]azappconfig.FeatureFlag{{}}
@@ -69,6 +71,12 @@ func (c *fakeAppConfigurationClient) NewListFeatureFlagsPager(_ azappconfig.Feat
 			page := pages[index]
 			index++
 			etag := azcore.ETag(fmt.Sprintf("ff-page-%d", index))
+			if options != nil && index <= len(options.MatchConditions) {
+				condition := options.MatchConditions[index-1]
+				if condition.IfNoneMatch != nil && *condition.IfNoneMatch == etag {
+					return azappconfig.ListFeatureFlagsPageResponse{}, nil
+				}
+			}
 			return azappconfig.ListFeatureFlagsPageResponse{FeatureFlags: page, ETag: &etag}, nil
 		},
 	})
@@ -165,7 +173,7 @@ func TestEnhancedFeatureFlagSettingsClientLoadsEnhancedFlags(t *testing.T) {
 	}
 }
 
-func TestFeatureFlagEndpointEtagSettingsClientDetectsChanges(t *testing.T) {
+func TestEnhancedFeatureFlagEtagsClientUsesConditionalRequests(t *testing.T) {
 	nameFilter := "*"
 	nullLabel := "\x00"
 	comparable := acpv1.MakeComparable(acpv1.Selector{KeyFilter: &nameFilter, LabelFilter: &nullLabel})
@@ -186,6 +194,13 @@ func TestFeatureFlagEndpointEtagSettingsClientDetectsChanges(t *testing.T) {
 	if unchangedResponse.Etags != nil {
 		t.Errorf("expected no change to be detected when page ETags match")
 	}
+	if client.featureFlagListOptions == nil || len(client.featureFlagListOptions.MatchConditions) != 1 {
+		t.Fatalf("expected one match condition, got %#v", client.featureFlagListOptions)
+	}
+	if client.featureFlagListOptions.MatchConditions[0].IfNoneMatch == nil ||
+		*client.featureFlagListOptions.MatchConditions[0].IfNoneMatch != unchangedETag {
+		t.Errorf("expected If-None-Match %q", unchangedETag)
+	}
 
 	staleETag := azcore.ETag("stale-etag")
 	changedClient := &EnhancedFeatureFlagEtagsClient{
@@ -197,5 +212,18 @@ func TestFeatureFlagEndpointEtagSettingsClientDetectsChanges(t *testing.T) {
 	}
 	if changedResponse.Etags == nil {
 		t.Errorf("expected a change to be detected when page ETags differ")
+	}
+
+	missingPageClient := &EnhancedFeatureFlagEtagsClient{
+		etags: map[acpv1.ComparableSelector][]*azcore.ETag{
+			comparable: {&unchangedETag, &staleETag},
+		},
+	}
+	missingPageResponse, err := missingPageClient.GetSettings(context.Background(), client)
+	if err != nil {
+		t.Fatalf("GetSettings returned error: %s", err)
+	}
+	if missingPageResponse.Etags == nil {
+		t.Errorf("expected a change to be detected when the page count differs")
 	}
 }

@@ -238,7 +238,7 @@ func (s *EnhancedFeatureFlagSettingsClient) GetSettings(ctx context.Context, cli
 
 func (s *EnhancedFeatureFlagEtagsClient) GetSettings(ctx context.Context, client AppConfigurationClient) (*SettingsResponse, error) {
 	settingsResponse := &SettingsResponse{}
-	for comparableFilter, storedETags := range s.etags {
+	for comparableFilter, pageEtags := range s.etags {
 		filter := acpv1.FromComparable(comparableFilter)
 		if filter.KeyFilter != nil {
 			selector := azappconfig.FeatureFlagSelector{
@@ -248,17 +248,30 @@ func (s *EnhancedFeatureFlagEtagsClient) GetSettings(ctx context.Context, client
 				Fields:      azappconfig.AllFeatureFlagFields(),
 			}
 
-			pager := client.NewListFeatureFlagsPager(selector, nil)
-			latestETags := make([]*azcore.ETag, 0)
+			conditions := make([]azcore.MatchConditions, 0, len(pageEtags))
+			for _, etag := range pageEtags {
+				conditions = append(conditions, azcore.MatchConditions{IfNoneMatch: etag})
+			}
+
+			pager := client.NewListFeatureFlagsPager(selector, &azappconfig.ListFeatureFlagsOptions{
+				MatchConditions: conditions,
+			})
+
+			pageCount := 0
 			for pager.More() {
+				pageCount++
 				page, err := pager.NextPage(ctx)
 				if err != nil {
 					return nil, err
 				}
-				latestETags = append(latestETags, page.ETag)
+				// A conditional request returns a nil ETag for an unchanged (304) page.
+				if page.ETag != nil {
+					settingsResponse.Etags = make(map[acpv1.ComparableSelector][]*azcore.ETag)
+					return settingsResponse, nil
+				}
 			}
 
-			if !equalETagSlices(storedETags, latestETags) {
+			if pageCount != len(pageEtags) {
 				settingsResponse.Etags = make(map[acpv1.ComparableSelector][]*azcore.ETag)
 				return settingsResponse, nil
 			}
@@ -266,23 +279,4 @@ func (s *EnhancedFeatureFlagEtagsClient) GetSettings(ctx context.Context, client
 	}
 
 	return settingsResponse, nil
-}
-
-// equalETagSlices reports whether two ordered slices of page ETags are equivalent.
-func equalETagSlices(a, b []*azcore.ETag) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] == nil || b[i] == nil {
-			if a[i] != b[i] {
-				return false
-			}
-			continue
-		}
-		if *a[i] != *b[i] {
-			return false
-		}
-	}
-	return true
 }

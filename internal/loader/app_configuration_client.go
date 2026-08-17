@@ -19,7 +19,7 @@ type AppConfigurationClient interface {
 	GetSnapshot(ctx context.Context, snapshotName string, options *azappconfig.GetSnapshotOptions) (azappconfig.GetSnapshotResponse, error)
 	NewListSettingsForSnapshotPager(snapshotName string, options *azappconfig.ListSettingsForSnapshotOptions) *runtime.Pager[azappconfig.ListSettingsForSnapshotResponse]
 
-	// Feature flag operations served by the dedicated feature flag endpoint.
+	// Feature flag operations served by the enhanced feature flag endpoint.
 	NewListFeatureFlagsPager(selector azappconfig.FeatureFlagSelector, options *azappconfig.ListFeatureFlagsOptions) *runtime.Pager[azappconfig.ListFeatureFlagsPageResponse]
 }
 

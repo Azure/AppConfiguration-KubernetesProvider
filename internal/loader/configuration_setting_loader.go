@@ -510,7 +510,7 @@ func (csl *ConfigurationSettingLoader) CheckIfEnhancedFeatureFlagsChanged(ctx co
 		return false, err
 	}
 
-	// a non-nil Etags map signals that the feature flag endpoint page ETags changed
+	// a non-nil Etags map signals that the enhanced feature flag endpoint page ETags changed
 	return settingsResponse.Etags != nil, nil
 }
 

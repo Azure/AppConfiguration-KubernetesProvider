@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -100,6 +102,7 @@ func TestConvertFeatureFlagToMap(t *testing.T) {
 	requirementType := azappconfig.RequirementTypeAll
 	offName, offValue := "Off", "false"
 	onName, onValue := "On", "true"
+	jsonContentType := "application/json"
 	statusOverride := azappconfig.StatusOverrideDisabled
 	defaultVariant := "Off"
 	percentileVariant := "On"
@@ -117,8 +120,8 @@ func TestConvertFeatureFlagToMap(t *testing.T) {
 			},
 		},
 		Variants: []azappconfig.FeatureFlagVariantDefinition{
-			{Name: &offName, Value: &offValue, StatusOverride: &statusOverride},
-			{Name: &onName, Value: &onValue},
+			{Name: &offName, Value: &offValue, ContentType: &jsonContentType, StatusOverride: &statusOverride},
+			{Name: &onName, Value: &onValue, ContentType: &jsonContentType},
 		},
 		Allocation: &azappconfig.FeatureFlagAllocation{
 			DefaultWhenEnabled:  &defaultVariant,
@@ -129,7 +132,12 @@ func TestConvertFeatureFlagToMap(t *testing.T) {
 		Telemetry: &azappconfig.FeatureFlagTelemetryConfiguration{Enabled: &telemetryEnabled},
 	}
 
-	actual, err := json.Marshal(convertToMicrosoftSchema(featureFlag))
+	converted, err := convertToMicrosoftSchema(featureFlag)
+	if err != nil {
+		t.Fatalf("failed to convert feature flag: %s", err)
+	}
+
+	actual, err := json.Marshal(converted)
 	if err != nil {
 		t.Fatalf("failed to marshal converted feature flag: %s", err)
 	}
@@ -137,6 +145,113 @@ func TestConvertFeatureFlagToMap(t *testing.T) {
 	expected := `{"allocation":{"default_when_disabled":"Off","default_when_enabled":"Off","percentile":[{"from":0,"to":50,"variant":"On"}],"seed":"seed-value"},"conditions":{"client_filters":[{"name":"Microsoft.TimeWindow","parameters":{"Start":"Mon, 01 Jan 2024 00:00:00 GMT"}}],"requirement_type":"All"},"enabled":true,"id":"Variant","telemetry":{"enabled":true},"variants":[{"configuration_value":false,"name":"Off","status_override":"Disabled"},{"configuration_value":true,"name":"On"}]}`
 	if string(actual) != expected {
 		t.Errorf("unexpected converted feature flag.\n got: %s\nwant: %s", actual, expected)
+	}
+}
+
+func TestConvertFeatureFlagFilterParameterValues(t *testing.T) {
+	featureFlagName := "ParameterFlag"
+	filterName := "CustomFilter"
+	objectValue := `  {"key":"value"}`
+	arrayValue := "\t[1,true]"
+	invalidObjectValue := "  {invalid"
+	numberValue := "50"
+	booleanValue := "true"
+	jsonStringValue := `"quoted"`
+	emptyValue := ""
+
+	featureFlag := azappconfig.FeatureFlag{
+		Name: &featureFlagName,
+		Conditions: &azappconfig.FeatureFlagConditions{
+			Filters: []azappconfig.FeatureFlagFilter{{
+				Name: &filterName,
+				Parameters: map[string]*string{
+					"object":      &objectValue,
+					"array":       &arrayValue,
+					"invalid":     &invalidObjectValue,
+					"number":      &numberValue,
+					"boolean":     &booleanValue,
+					"json_string": &jsonStringValue,
+					"empty":       &emptyValue,
+					"nil":         nil,
+				},
+			}},
+		},
+	}
+
+	converted, err := convertToMicrosoftSchema(featureFlag)
+	if err != nil {
+		t.Fatalf("failed to convert feature flag: %s", err)
+	}
+
+	conditions := converted[featureFlagConditionsKey].(map[string]interface{})
+	clientFilters := conditions[featureFlagClientFiltersKey].([]interface{})
+	parameters := clientFilters[0].(map[string]interface{})[featureFlagParametersKey].(map[string]interface{})
+	expected := map[string]interface{}{
+		"object":      map[string]interface{}{"key": "value"},
+		"array":       []interface{}{float64(1), true},
+		"invalid":     invalidObjectValue,
+		"number":      numberValue,
+		"boolean":     booleanValue,
+		"json_string": jsonStringValue,
+		"empty":       emptyValue,
+		"nil":         nil,
+	}
+
+	if !reflect.DeepEqual(parameters, expected) {
+		t.Errorf("unexpected converted parameters.\n got: %#v\nwant: %#v", parameters, expected)
+	}
+}
+
+func TestProcessFeatureFlagsReturnsEnhancedConversionError(t *testing.T) {
+	featureFlagName := "BrokenFlag"
+	variantName := "BrokenVariant"
+	invalidValue := "{invalid"
+	jsonContentType := "application/json"
+	featureFlag := azappconfig.FeatureFlag{
+		Name: &featureFlagName,
+		Variants: []azappconfig.FeatureFlagVariantDefinition{
+			{Name: &variantName, Value: &invalidValue, ContentType: &jsonContentType},
+		},
+	}
+
+	loader := &ConfigurationSettingLoader{}
+	_, err := loader.ProcessFeatureFlags(nil, []azappconfig.FeatureFlag{featureFlag})
+	if err == nil {
+		t.Fatal("expected enhanced feature flag conversion to fail")
+	}
+
+	if !strings.Contains(err.Error(), "Enhanced feature flag 'BrokenFlag':") {
+		t.Errorf("expected error to include the enhanced feature flag name, got %q", err)
+	}
+	if !strings.Contains(err.Error(), `failed to parse variant "BrokenVariant" value`) {
+		t.Errorf("expected error to include the conversion failure, got %q", err)
+	}
+}
+
+func TestConvertFeatureFlagVariantValueFallsBackToString(t *testing.T) {
+	featureFlagName := "StringFlag"
+	variantName := "StringVariant"
+	value := "{not-json"
+	textContentType := "text/plain"
+
+	for _, contentType := range []*string{nil, &textContentType} {
+		featureFlag := azappconfig.FeatureFlag{
+			Name: &featureFlagName,
+			Variants: []azappconfig.FeatureFlagVariantDefinition{
+				{Name: &variantName, Value: &value, ContentType: contentType},
+			},
+		}
+
+		converted, err := convertToMicrosoftSchema(featureFlag)
+		if err != nil {
+			t.Fatalf("expected non-JSON variant value to remain a string: %s", err)
+		}
+
+		variants := converted[featureFlagVariantsKey].([]interface{})
+		variant := variants[0].(map[string]interface{})
+		if variant[featureFlagConfigurationValueKey] != value {
+			t.Errorf("expected configuration value %q, got %#v", value, variant[featureFlagConfigurationValueKey])
+		}
 	}
 }
 

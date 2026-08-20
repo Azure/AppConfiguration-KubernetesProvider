@@ -5,28 +5,55 @@ package loader
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
+	"unicode"
 
 	azappconfig "github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig/v2"
+)
+
+const (
+	featureFlagDescriptionKey         = "description"
+	featureFlagConditionsKey          = "conditions"
+	featureFlagClientFiltersKey       = "client_filters"
+	featureFlagRequirementTypeKey     = "requirement_type"
+	featureFlagNameKey                = "name"
+	featureFlagParametersKey          = "parameters"
+	featureFlagVariantsKey            = "variants"
+	featureFlagConfigurationValueKey  = "configuration_value"
+	featureFlagStatusOverrideKey      = "status_override"
+	featureFlagAllocationKey          = "allocation"
+	featureFlagDefaultWhenDisabledKey = "default_when_disabled"
+	featureFlagDefaultWhenEnabledKey  = "default_when_enabled"
+	featureFlagPercentileKey          = "percentile"
+	featureFlagVariantKey             = "variant"
+	featureFlagFromKey                = "from"
+	featureFlagToKey                  = "to"
+	featureFlagGroupKey               = "group"
+	featureFlagGroupsKey              = "groups"
+	featureFlagUserKey                = "user"
+	featureFlagUsersKey               = "users"
+	featureFlagSeedKey                = "seed"
 )
 
 // convertToMicrosoftSchema converts an enhanced FeatureFlag returned by new feature flag
 // endpoint into the Microsoft Feature Management schema object (snake_case) used within the
 // `feature_management.feature_flags` array.
-func convertToMicrosoftSchema(featureFlag azappconfig.FeatureFlag) map[string]interface{} {
+func convertToMicrosoftSchema(featureFlag azappconfig.FeatureFlag) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
 	if featureFlag.Name != nil {
-		result["id"] = *featureFlag.Name
+		result[FeatureFlagIdKey] = *featureFlag.Name
 	}
 
 	if featureFlag.Enabled != nil {
-		result["enabled"] = *featureFlag.Enabled
+		result[EnabledKey] = *featureFlag.Enabled
 	} else {
-		result["enabled"] = false
+		result[EnabledKey] = false
 	}
 
 	if featureFlag.Description != nil {
-		result["description"] = *featureFlag.Description
+		result[featureFlagDescriptionKey] = *featureFlag.Description
 	}
 
 	// conditions: filters -> client_filters, requirementType -> requirement_type
@@ -36,23 +63,23 @@ func convertToMicrosoftSchema(featureFlag azappconfig.FeatureFlag) map[string]in
 		for _, filter := range featureFlag.Conditions.Filters {
 			clientFilter := make(map[string]interface{})
 			if filter.Name != nil {
-				clientFilter["name"] = *filter.Name
+				clientFilter[featureFlagNameKey] = *filter.Name
 			}
 			if filter.Parameters != nil {
 				parameters := make(map[string]interface{}, len(filter.Parameters))
 				for key, value := range filter.Parameters {
-					parameters[key] = parseFeatureFlagValue(value)
+					parameters[key] = parseFeatureFlagParameterValue(value)
 				}
-				clientFilter["parameters"] = parameters
+				clientFilter[featureFlagParametersKey] = parameters
 			}
 			clientFilters = append(clientFilters, clientFilter)
 		}
 	}
-	conditions["client_filters"] = clientFilters
+	conditions[featureFlagClientFiltersKey] = clientFilters
 	if featureFlag.Conditions != nil && featureFlag.Conditions.RequirementType != nil {
-		conditions["requirement_type"] = string(*featureFlag.Conditions.RequirementType)
+		conditions[featureFlagRequirementTypeKey] = string(*featureFlag.Conditions.RequirementType)
 	}
-	result["conditions"] = conditions
+	result[featureFlagConditionsKey] = conditions
 
 	// variants: value -> configuration_value, statusOverride -> status_override
 	if featureFlag.Variants != nil {
@@ -60,17 +87,29 @@ func convertToMicrosoftSchema(featureFlag azappconfig.FeatureFlag) map[string]in
 		for _, variant := range featureFlag.Variants {
 			variantMap := make(map[string]interface{})
 			if variant.Name != nil {
-				variantMap["name"] = *variant.Name
+				variantMap[featureFlagNameKey] = *variant.Name
 			}
 			if variant.Value != nil {
-				variantMap["configuration_value"] = parseFeatureFlagValue(variant.Value)
+				if isJsonContentType(variant.ContentType) {
+					parsedValue, err := parseFeatureFlagVariantValue(variant.Value)
+					if err != nil {
+						variantName := ""
+						if variant.Name != nil {
+							variantName = *variant.Name
+						}
+						return nil, fmt.Errorf("failed to parse variant %q value: %w", variantName, err)
+					}
+					variantMap[featureFlagConfigurationValueKey] = parsedValue
+				} else {
+					variantMap[featureFlagConfigurationValueKey] = *variant.Value
+				}
 			}
 			if variant.StatusOverride != nil {
-				variantMap["status_override"] = string(*variant.StatusOverride)
+				variantMap[featureFlagStatusOverrideKey] = string(*variant.StatusOverride)
 			}
 			variants = append(variants, variantMap)
 		}
-		result["variants"] = variants
+		result[featureFlagVariantsKey] = variants
 	}
 
 	// allocation: camelCase -> snake_case
@@ -78,69 +117,69 @@ func convertToMicrosoftSchema(featureFlag azappconfig.FeatureFlag) map[string]in
 		allocation := make(map[string]interface{})
 		source := featureFlag.Allocation
 		if source.DefaultWhenDisabled != nil {
-			allocation["default_when_disabled"] = *source.DefaultWhenDisabled
+			allocation[featureFlagDefaultWhenDisabledKey] = *source.DefaultWhenDisabled
 		}
 		if source.DefaultWhenEnabled != nil {
-			allocation["default_when_enabled"] = *source.DefaultWhenEnabled
+			allocation[featureFlagDefaultWhenEnabledKey] = *source.DefaultWhenEnabled
 		}
 		if source.Percentile != nil {
 			percentiles := make([]interface{}, 0, len(source.Percentile))
 			for _, percentile := range source.Percentile {
 				percentileMap := make(map[string]interface{})
 				if percentile.Variant != nil {
-					percentileMap["variant"] = *percentile.Variant
+					percentileMap[featureFlagVariantKey] = *percentile.Variant
 				}
 				if percentile.From != nil {
-					percentileMap["from"] = *percentile.From
+					percentileMap[featureFlagFromKey] = *percentile.From
 				}
 				if percentile.To != nil {
-					percentileMap["to"] = *percentile.To
+					percentileMap[featureFlagToKey] = *percentile.To
 				}
 				percentiles = append(percentiles, percentileMap)
 			}
-			allocation["percentile"] = percentiles
+			allocation[featureFlagPercentileKey] = percentiles
 		}
 		if source.Group != nil {
 			groups := make([]interface{}, 0, len(source.Group))
 			for _, group := range source.Group {
 				groupMap := make(map[string]interface{})
 				if group.Variant != nil {
-					groupMap["variant"] = *group.Variant
+					groupMap[featureFlagVariantKey] = *group.Variant
 				}
 				if group.Groups != nil {
-					groupMap["groups"] = toInterfaceSlice(group.Groups)
+					groupMap[featureFlagGroupsKey] = toInterfaceSlice(group.Groups)
 				}
 				groups = append(groups, groupMap)
 			}
-			allocation["group"] = groups
+			allocation[featureFlagGroupKey] = groups
 		}
 		if source.User != nil {
 			users := make([]interface{}, 0, len(source.User))
 			for _, user := range source.User {
 				userMap := make(map[string]interface{})
 				if user.Variant != nil {
-					userMap["variant"] = *user.Variant
+					userMap[featureFlagVariantKey] = *user.Variant
 				}
 				if user.Users != nil {
-					userMap["users"] = toInterfaceSlice(user.Users)
+					userMap[featureFlagUsersKey] = toInterfaceSlice(user.Users)
 				}
 				users = append(users, userMap)
 			}
-			allocation["user"] = users
+			allocation[featureFlagUserKey] = users
 		}
 		if source.Seed != nil {
-			allocation["seed"] = *source.Seed
+			allocation[featureFlagSeedKey] = *source.Seed
 		}
-		result["allocation"] = allocation
+		result[featureFlagAllocationKey] = allocation
 	}
 
 	// telemetry: metadata is (re)populated later by populateTelemetryMetadata with ETag/FeatureFlagReference
 	if featureFlag.Telemetry != nil {
 		telemetry := make(map[string]interface{})
 		if featureFlag.Telemetry.Enabled != nil {
-			telemetry["enabled"] = *featureFlag.Telemetry.Enabled
+			telemetry[EnabledKey] = *featureFlag.Telemetry.Enabled
 		} else {
-			telemetry["enabled"] = false
+			telemetry[EnabledKey] = false
 		}
 		if featureFlag.Telemetry.Metadata != nil {
 			metadata := make(map[string]interface{}, len(featureFlag.Telemetry.Metadata))
@@ -149,26 +188,44 @@ func convertToMicrosoftSchema(featureFlag azappconfig.FeatureFlag) map[string]in
 					metadata[key] = *value
 				}
 			}
-			telemetry["metadata"] = metadata
+			telemetry[MetadataKey] = metadata
 		}
-		result["telemetry"] = telemetry
+		result[TelemetryKey] = telemetry
 	}
 
-	return result
+	return result, nil
 }
 
-// Attempting to parse the string as JSON recovers booleans, numbers, and nested objects; non-JSON strings are returned as-is.
-func parseFeatureFlagValue(raw *string) interface{} {
+// parseFeatureFlagParameterValue parses object and array parameters as JSON. 
+// Other values and malformed JSON are preserved as literal strings.
+func parseFeatureFlagParameterValue(raw *string) interface{} {
 	if raw == nil {
 		return nil
 	}
 
-	var parsed interface{}
-	if err := json.Unmarshal([]byte(*raw), &parsed); err == nil {
-		return parsed
+	trimmed := strings.TrimLeftFunc(*raw, unicode.IsSpace)
+	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+		var parsed interface{}
+		if err := json.Unmarshal([]byte(*raw), &parsed); err == nil {
+			return parsed
+		}
 	}
 
 	return *raw
+}
+
+// parseFeatureFlagVariantValue parses the JSON-encoded value returned by the enhanced feature flag endpoint.
+func parseFeatureFlagVariantValue(raw *string) (interface{}, error) {
+	if raw == nil {
+		return nil, nil
+	}
+
+	var parsed interface{}
+	if err := json.Unmarshal([]byte(*raw), &parsed); err != nil {
+		return nil, err
+	}
+
+	return parsed, nil
 }
 
 // toInterfaceSlice converts a slice of strings into a slice of interface{} for inclusion in the

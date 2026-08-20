@@ -99,6 +99,8 @@ const (
 	FeatureFlagSectionName                string = "feature_flags"
 	FeatureManagementSectionName          string = "feature_management"
 	FeatureFlagIdKey                      string = "id"
+	KeyValueResourceType                  string = "kv"
+	FeatureFlagResourceType               string = "ff"
 	PreservedSecretTypeTag                string = ".kubernetes.secret.type"
 	CertTypePem                           string = "application/x-pem-file"
 	CertTypePfx                           string = "application/x-pkcs12"
@@ -565,7 +567,7 @@ func (csl *ConfigurationSettingLoader) ProcessFeatureFlags(featureFlags []azappc
 			return nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
 
-		featureFlagReference := fmt.Sprintf("%s/kv/%s", clientEndpoint, *setting.Key)
+		featureFlagReference := fmt.Sprintf("%s/%s/%s", clientEndpoint, KeyValueResourceType, *setting.Key)
 		if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
 			featureFlagReference += fmt.Sprintf("?label=%s", *setting.Label)
 		}
@@ -579,12 +581,15 @@ func (csl *ConfigurationSettingLoader) ProcessFeatureFlags(featureFlags []azappc
 			continue
 		}
 
-		featureFlagReference := fmt.Sprintf("%s/ff/%s", clientEndpoint, *featureFlag.Name)
+		featureFlagReference := fmt.Sprintf("%s/%s/%s", clientEndpoint, FeatureFlagResourceType, *featureFlag.Name)
 		if featureFlag.Label != nil && strings.TrimSpace(*featureFlag.Label) != "" {
 			featureFlagReference += fmt.Sprintf("?label=%s", *featureFlag.Label)
 		}
 
-		convertedFF := convertToMicrosoftSchema(featureFlag)
+		convertedFF, err := convertToMicrosoftSchema(featureFlag)
+		if err != nil {
+			return nil, fmt.Errorf("Enhanced feature flag '%s': %w", *featureFlag.Name, err)
+		}
 		populateTelemetryMetadata(convertedFF, featureFlag.ETag, featureFlagReference)
 		mergedFeatureFlags = append(mergedFeatureFlags, convertedFF)
 	}

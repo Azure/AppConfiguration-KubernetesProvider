@@ -1,0 +1,74 @@
+{{- if and (semverCompare ">=1.30-0" .Capabilities.KubeVersion.Version) .Values.workloadIdentity.enabled .Values.serviceAccountAuthorization.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: azureappconfigurationprovider-serviceaccount-authorization.azconfig.io
+  labels:
+    {{- include "az-appconfig-k8s-provider.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - azconfig.io
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - azureappconfigurationproviders
+      scope: Namespaced
+  variables:
+  - name: appConfigurationServiceAccounts
+    expression: >-
+      has(object.spec.auth) &&
+      has(object.spec.auth.workloadIdentity) &&
+      has(object.spec.auth.workloadIdentity.serviceAccountName)
+        ? [object.spec.auth.workloadIdentity.serviceAccountName]
+        : []
+  - name: defaultKeyVaultServiceAccounts
+    expression: >-
+      has(object.spec.secret) &&
+      has(object.spec.secret.auth) &&
+      has(object.spec.secret.auth.workloadIdentity) &&
+      has(object.spec.secret.auth.workloadIdentity.serviceAccountName)
+        ? [object.spec.secret.auth.workloadIdentity.serviceAccountName]
+        : []
+  - name: perVaultServiceAccounts
+    expression: >-
+      has(object.spec.secret) &&
+      has(object.spec.secret.auth) &&
+      has(object.spec.secret.auth.keyVaults)
+        ? object.spec.secret.auth.keyVaults
+            .filter(keyVault, has(keyVault.workloadIdentity) && has(keyVault.workloadIdentity.serviceAccountName))
+            .map(keyVault, keyVault.workloadIdentity.serviceAccountName)
+        : []
+  - name: serviceAccountNames
+    expression: >-
+      variables.appConfigurationServiceAccounts +
+      variables.defaultKeyVaultServiceAccounts +
+      variables.perVaultServiceAccounts
+  validations:
+  - expression: >-
+      variables.serviceAccountNames.all(serviceAccountName,
+        authorizer.group('').resource('serviceaccounts')
+          .namespace(request.namespace).name(serviceAccountName)
+          .check('use').allowed() ||
+        authorizer.group('').resource('serviceaccounts').subresource('token')
+          .namespace(request.namespace).name(serviceAccountName)
+          .check('create').allowed())
+    message: The requesting principal is not authorized to use every referenced ServiceAccount.
+    reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: azureappconfigurationprovider-serviceaccount-authorization.azconfig.io
+  labels:
+    {{- include "az-appconfig-k8s-provider.labels" . | nindent 4 }}
+spec:
+  policyName: azureappconfigurationprovider-serviceaccount-authorization.azconfig.io
+  validationActions:
+    {{- toYaml .Values.serviceAccountAuthorization.validationActions | nindent 4 }}
+{{- end }}

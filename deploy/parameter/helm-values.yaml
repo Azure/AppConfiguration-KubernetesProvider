@@ -22,6 +22,15 @@ workloadIdentity:
   enabled: true
   globalServiceAccountEnabled: false
 
+# On Kubernetes 1.30 or later, the default actions deny unauthorized
+# ServiceAccount references and record the denial in the Kubernetes audit log.
+# The policy is not installed on earlier Kubernetes versions.
+serviceAccountAuthorization:
+  enabled: true
+  validationActions:
+  - Deny
+  - Audit
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true

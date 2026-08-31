@@ -1,5 +1,0 @@
-nameReference:
-- kind: ValidatingAdmissionPolicy
-  fieldSpecs:
-  - kind: ValidatingAdmissionPolicyBinding
-    path: spec/policyName

@@ -17,8 +17,9 @@ import (
 //go:generate mockgen -destination=mocks/mock_settings_client.go -package mocks . SettingsClient
 
 type SettingsResponse struct {
-	Settings []azappconfig.Setting
-	Etags    map[acpv1.ComparableSelector][]*azcore.ETag
+	Settings             []azappconfig.Setting
+	Etags                map[acpv1.ComparableSelector][]*azcore.ETag
+	EnhancedFeatureFlags []azappconfig.FeatureFlag
 }
 
 type EtagSettingsClient struct {
@@ -35,11 +36,21 @@ type SelectorSettingsClient struct {
 	selectors []acpv1.Selector
 }
 
-type SettingsClient interface {
-	GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error)
+// EnhancedFeatureFlagEtagsClient is used to check if the enhanced feature flags have changed
+type EnhancedFeatureFlagEtagsClient struct {
+	etags map[acpv1.ComparableSelector][]*azcore.ETag
 }
 
-func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
+// EnhancedFeatureFlagSettingsClient loads enhanced feature flags
+type EnhancedFeatureFlagSettingsClient struct {
+	enhancedFeatureFlagSelectors []acpv1.Selector
+}
+
+type SettingsClient interface {
+	GetSettings(ctx context.Context, client AppConfigurationClient) (*SettingsResponse, error)
+}
+
+func (s *EtagSettingsClient) GetSettings(ctx context.Context, client AppConfigurationClient) (*SettingsResponse, error) {
 	nullString := "\x00"
 	settingsResponse := &SettingsResponse{}
 	for comparableFilter, pageEtags := range s.etags {
@@ -90,7 +101,7 @@ func (s *EtagSettingsClient) GetSettings(ctx context.Context, client *azappconfi
 	return settingsResponse, nil
 }
 
-func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
+func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client AppConfigurationClient) (*SettingsResponse, error) {
 	sentinelSetting, err := client.GetSetting(ctx, s.sentinel.Key, &azappconfig.GetSettingOptions{Label: s.sentinel.Label, OnlyIfChanged: s.etag})
 	if err != nil {
 		var respErr *azcore.ResponseError
@@ -121,7 +132,7 @@ func (s *SentinelSettingsClient) GetSettings(ctx context.Context, client *azappc
 	}, nil
 }
 
-func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappconfig.Client) (*SettingsResponse, error) {
+func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client AppConfigurationClient) (*SettingsResponse, error) {
 	settings := make([]azappconfig.Setting, 0)
 	pageEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
 
@@ -162,7 +173,7 @@ func (s *SelectorSettingsClient) GetSettings(ctx context.Context, client *azappc
 	}, nil
 }
 
-func loadSnapshotSettings(ctx context.Context, client *azappconfig.Client, snapshotName string) ([]azappconfig.Setting, error) {
+func loadSnapshotSettings(ctx context.Context, client AppConfigurationClient, snapshotName string) ([]azappconfig.Setting, error) {
 	settings := make([]azappconfig.Setting, 0)
 	snapshot, err := client.GetSnapshot(ctx, snapshotName, nil)
 	if err != nil {
@@ -188,4 +199,84 @@ func loadSnapshotSettings(ctx context.Context, client *azappconfig.Client, snaps
 	}
 
 	return settings, nil
+}
+
+func (s *EnhancedFeatureFlagSettingsClient) GetSettings(ctx context.Context, client AppConfigurationClient) (*SettingsResponse, error) {
+	enhancedFeatureFlags := make([]azappconfig.FeatureFlag, 0)
+	pageEtags := make(map[acpv1.ComparableSelector][]*azcore.ETag)
+
+	for _, filter := range s.enhancedFeatureFlagSelectors {
+		if filter.KeyFilter != nil {
+			selector := azappconfig.FeatureFlagSelector{
+				NameFilter:  filter.KeyFilter,
+				LabelFilter: filter.LabelFilter,
+				TagsFilter:  filter.TagFilters,
+				Fields:      azappconfig.AllFeatureFlagFields(),
+			}
+			pager := client.NewListFeatureFlagsPager(selector, nil)
+			latestEtags := make([]*azcore.ETag, 0)
+
+			for pager.More() {
+				page, err := pager.NextPage(ctx)
+				if err != nil {
+					return nil, err
+				} else if page.FeatureFlags != nil {
+					enhancedFeatureFlags = append(enhancedFeatureFlags, page.FeatureFlags...)
+					latestEtags = append(latestEtags, page.ETag)
+				}
+			}
+			// update the etags for the filter
+			pageEtags[acpv1.MakeComparable(filter)] = latestEtags
+		}
+	}
+
+	return &SettingsResponse{
+		EnhancedFeatureFlags: enhancedFeatureFlags,
+		Etags:                pageEtags,
+	}, nil
+}
+
+func (s *EnhancedFeatureFlagEtagsClient) GetSettings(ctx context.Context, client AppConfigurationClient) (*SettingsResponse, error) {
+	settingsResponse := &SettingsResponse{}
+	for comparableFilter, pageEtags := range s.etags {
+		filter := acpv1.FromComparable(comparableFilter)
+		if filter.KeyFilter != nil {
+			selector := azappconfig.FeatureFlagSelector{
+				NameFilter:  filter.KeyFilter,
+				LabelFilter: filter.LabelFilter,
+				TagsFilter:  filter.TagFilters,
+				Fields:      azappconfig.AllFeatureFlagFields(),
+			}
+
+			conditions := make([]azcore.MatchConditions, 0, len(pageEtags))
+			for _, etag := range pageEtags {
+				conditions = append(conditions, azcore.MatchConditions{IfNoneMatch: etag})
+			}
+
+			pager := client.NewListFeatureFlagsPager(selector, &azappconfig.ListFeatureFlagsOptions{
+				MatchConditions: conditions,
+			})
+
+			pageCount := 0
+			for pager.More() {
+				pageCount++
+				page, err := pager.NextPage(ctx)
+				if err != nil {
+					return nil, err
+				}
+				// A conditional request returns a nil ETag for an unchanged (304) page.
+				if page.ETag != nil {
+					settingsResponse.Etags = make(map[acpv1.ComparableSelector][]*azcore.ETag)
+					return settingsResponse, nil
+				}
+			}
+
+			if pageCount != len(pageEtags) {
+				settingsResponse.Etags = make(map[acpv1.ComparableSelector][]*azcore.ETag)
+				return settingsResponse, nil
+			}
+		}
+	}
+
+	return settingsResponse, nil
 }

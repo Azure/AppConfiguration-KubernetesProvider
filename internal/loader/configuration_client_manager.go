@@ -39,8 +39,8 @@ import (
 type ConfigurationClientManager struct {
 	ReplicaDiscoveryEnabled   bool
 	LoadBalancingEnabled      bool
-	StaticClientWrappers      []*ConfigurationClientWrapper
-	DynamicClientWrappers     []*ConfigurationClientWrapper
+	StaticClientWrappers      []*AppConfigurationClientWrapper
+	DynamicClientWrappers     []*AppConfigurationClientWrapper
 	validDomain               string
 	endpoint                  string
 	credential                azcore.TokenCredential
@@ -51,15 +51,15 @@ type ConfigurationClientManager struct {
 	lastSuccessfulEndpoint    string
 }
 
-type ConfigurationClientWrapper struct {
+type AppConfigurationClientWrapper struct {
 	Endpoint       string
-	Client         *azappconfig.Client
+	Client         AppConfigurationClient
 	BackOffEndTime metav1.Time
 	FailedAttempts int
 }
 
 type ClientManager interface {
-	GetClients(ctx context.Context) ([]*ConfigurationClientWrapper, error)
+	GetClients(ctx context.Context) ([]*AppConfigurationClientWrapper, error)
 	RefreshClients(ctx context.Context)
 }
 
@@ -114,7 +114,7 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 	}
 
 	var err error
-	var staticClient *azappconfig.Client
+	var staticClient AppConfigurationClient
 	if provider.Spec.ConnectionStringReference != nil {
 		connectionString, err := getConnectionStringParameter(ctx, types.NamespacedName{Namespace: provider.Namespace, Name: *provider.Spec.ConnectionStringReference})
 		if err != nil {
@@ -132,21 +132,21 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 		if manager.id, err = parseConnectionString(connectionString, IdSection); err != nil {
 			return nil, err
 		}
-		if staticClient, err = azappconfig.NewClientFromConnectionString(connectionString, newClientOptions()); err != nil {
+		if staticClient, err = NewAppConfigurationClientFromConnectionString(connectionString, newClientOptions()); err != nil {
 			return nil, err
 		}
 	} else {
 		if manager.credential, err = CreateTokenCredential(ctx, provider.Spec.Auth, provider.Namespace); err != nil {
 			return nil, err
 		}
-		if staticClient, err = azappconfig.NewClient(*provider.Spec.Endpoint, manager.credential, newClientOptions()); err != nil {
+		if staticClient, err = NewAppConfigurationClient(*provider.Spec.Endpoint, manager.credential, newClientOptions()); err != nil {
 			return nil, err
 		}
 		manager.endpoint = *provider.Spec.Endpoint
 	}
 
 	manager.validDomain = getValidDomain(manager.endpoint)
-	manager.StaticClientWrappers = []*ConfigurationClientWrapper{{
+	manager.StaticClientWrappers = []*AppConfigurationClientWrapper{{
 		Endpoint:       manager.endpoint,
 		Client:         staticClient,
 		BackOffEndTime: metav1.Time{},
@@ -156,9 +156,9 @@ func NewConfigurationClientManager(ctx context.Context, provider acpv1.AzureAppC
 	return manager, nil
 }
 
-func (manager *ConfigurationClientManager) GetClients(ctx context.Context) ([]*ConfigurationClientWrapper, error) {
+func (manager *ConfigurationClientManager) GetClients(ctx context.Context) ([]*AppConfigurationClientWrapper, error) {
 	currentTime := metav1.Now()
-	clients := make([]*ConfigurationClientWrapper, 0)
+	clients := make([]*AppConfigurationClientWrapper, 0)
 	for _, clientWrapper := range manager.StaticClientWrappers {
 		if currentTime.After(clientWrapper.BackOffEndTime.Time) {
 			clients = append(clients, clientWrapper)
@@ -227,7 +227,7 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.C
 			srvTargetHosts[i], srvTargetHosts[j] = srvTargetHosts[j], srvTargetHosts[i]
 		}
 
-		newDynamicClients := make([]*ConfigurationClientWrapper, 0)
+		newDynamicClients := make([]*AppConfigurationClientWrapper, 0)
 		for _, host := range srvTargetHosts {
 			if isValidEndpoint(host, manager.validDomain) {
 				targetEndpoint := "https://" + host
@@ -239,7 +239,7 @@ func (manager *ConfigurationClientManager) DiscoverFallbackClients(ctx context.C
 					klog.Warningf("build fallback clients failed, %s", err.Error())
 					return
 				}
-				newDynamicClients = append(newDynamicClients, &ConfigurationClientWrapper{
+				newDynamicClients = append(newDynamicClients, &AppConfigurationClientWrapper{
 					Endpoint:       targetEndpoint,
 					Client:         client,
 					BackOffEndTime: metav1.Time{},
@@ -298,9 +298,9 @@ func QuerySrvTargetHost(ctx context.Context, host string) ([]string, error) {
 	return results, nil
 }
 
-func (manager *ConfigurationClientManager) newConfigurationClient(endpoint string) (*azappconfig.Client, error) {
+func (manager *ConfigurationClientManager) newConfigurationClient(endpoint string) (AppConfigurationClient, error) {
 	if manager.credential != nil {
-		return azappconfig.NewClient(endpoint, manager.credential, newClientOptions())
+		return NewAppConfigurationClient(endpoint, manager.credential, newClientOptions())
 	}
 
 	connectionStr := buildConnectionString(endpoint, manager.secret, manager.id)
@@ -308,7 +308,7 @@ func (manager *ConfigurationClientManager) newConfigurationClient(endpoint strin
 		return nil, fmt.Errorf("failed to build connection string for fallback client")
 	}
 
-	return azappconfig.NewClientFromConnectionString(connectionStr, newClientOptions())
+	return NewAppConfigurationClientFromConnectionString(connectionStr, newClientOptions())
 }
 
 func isValidEndpoint(host string, validDomain string) bool {

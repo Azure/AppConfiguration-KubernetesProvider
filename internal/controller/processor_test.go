@@ -36,6 +36,9 @@ var _ = Describe("AppConfiguationProvider processor", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockConfigurationSettings = mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
+		// The enhanced feature flag endpoint is checked whenever the feature flag page ETags
+		// are unchanged; default to reporting no change so existing scenarios are unaffected.
+		mockConfigurationSettings.EXPECT().CheckIfEnhancedFeatureFlagsChanged(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
 	})
 
 	AfterEach(func() {

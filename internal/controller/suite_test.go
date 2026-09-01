@@ -88,6 +88,9 @@ var _ = BeforeSuite(func() {
 
 	mockCtrl = gomock.NewController(GinkgoT())
 	mockConfigurationSettings = mocks.NewMockConfigurationSettingsRetriever(mockCtrl)
+	// The dedicated feature flag endpoint is checked whenever the classic feature flag page ETags
+	// are unchanged; default to reporting no change so existing scenarios are unaffected.
+	mockConfigurationSettings.EXPECT().CheckIfEnhancedFeatureFlagsChanged(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
 
 	err = (&AzureAppConfigurationProviderReconciler{
 		Client:                  k8sManager.GetClient(),

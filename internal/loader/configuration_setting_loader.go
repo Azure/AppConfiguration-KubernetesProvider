@@ -46,11 +46,12 @@ type ConfigurationSettingLoader struct {
 type TargetKeyValueSettings struct {
 	ConfigMapSettings map[string]string
 	// Multiple secrets could be managed
-	SecretSettings   map[string]corev1.Secret
-	K8sSecrets       map[string]*TargetK8sSecretMetadata
-	KeyValueETags    map[acpv1.ComparableSelector][]*azcore.ETag
-	FeatureFlagETags map[acpv1.ComparableSelector][]*azcore.ETag
-	SentinelETags    map[acpv1.Sentinel]*azcore.ETag
+	SecretSettings           map[string]corev1.Secret
+	K8sSecrets               map[string]*TargetK8sSecretMetadata
+	KeyValueETags            map[acpv1.ComparableSelector][]*azcore.ETag
+	SentinelETags            map[acpv1.Sentinel]*azcore.ETag
+	FeatureFlagETags         map[acpv1.ComparableSelector][]*azcore.ETag
+	EnhancedFeatureFlagETags map[acpv1.ComparableSelector][]*azcore.ETag
 }
 
 type TargetK8sSecretMetadata struct {
@@ -60,19 +61,21 @@ type TargetK8sSecretMetadata struct {
 }
 
 type RawSettings struct {
-	KeyValueSettings     map[string]*string
-	IsJsonContentTypeMap map[string]bool
-	FeatureFlagSettings  map[string]interface{}
-	SecretSettings       map[string]corev1.Secret
-	K8sSecrets           map[string]*TargetK8sSecretMetadata
-	KeyValueETags        map[acpv1.ComparableSelector][]*azcore.ETag
-	FeatureFlagETags     map[acpv1.ComparableSelector][]*azcore.ETag
+	KeyValueSettings         map[string]*string
+	IsJsonContentTypeMap     map[string]bool
+	FeatureFlagSettings      map[string]interface{}
+	SecretSettings           map[string]corev1.Secret
+	K8sSecrets               map[string]*TargetK8sSecretMetadata
+	KeyValueETags            map[acpv1.ComparableSelector][]*azcore.ETag
+	FeatureFlagETags         map[acpv1.ComparableSelector][]*azcore.ETag
+	EnhancedFeatureFlagETags map[acpv1.ComparableSelector][]*azcore.ETag
 }
 
 type ConfigurationSettingsRetriever interface {
 	CreateTargetSettings(ctx context.Context, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	CheckAndRefreshSentinels(ctx context.Context, provider *acpv1.AzureAppConfigurationProvider, eTags map[acpv1.Sentinel]*azcore.ETag) (bool, map[acpv1.Sentinel]*azcore.ETag, error)
 	CheckPageETags(ctx context.Context, eTags map[acpv1.ComparableSelector][]*azcore.ETag) (bool, error)
+	CheckIfEnhancedFeatureFlagsChanged(ctx context.Context, eTags map[acpv1.ComparableSelector][]*azcore.ETag) (bool, error)
 	RefreshKeyValueSettings(ctx context.Context, existingConfigMapSettings *map[string]string, resolveSecretReference SecretReferenceResolver) (*TargetKeyValueSettings, error)
 	RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSettings *map[string]string) (*TargetKeyValueSettings, error)
 	ResolveSecretReferences(ctx context.Context, kvReferencesToResolve map[string]*TargetK8sSecretMetadata, kvResolver SecretReferenceResolver) (*TargetKeyValueSettings, error)
@@ -95,6 +98,9 @@ const (
 	FeatureFlagKeyPrefix                  string = ".appconfig.featureflag/"
 	FeatureFlagSectionName                string = "feature_flags"
 	FeatureManagementSectionName          string = "feature_management"
+	FeatureFlagIdKey                      string = "id"
+	KeyValueResourceType                  string = "kv"
+	FeatureFlagResourceType               string = "ff"
 	PreservedSecretTypeTag                string = ".kubernetes.secret.type"
 	CertTypePem                           string = "application/x-pem-file"
 	CertTypePfx                           string = "application/x-pkcs12"
@@ -133,9 +139,24 @@ func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context,
 	}
 
 	if csl.Spec.FeatureFlag != nil {
-		if rawSettings.FeatureFlagSettings, rawSettings.FeatureFlagETags, err = csl.getFeatureFlagSettings(ctx); err != nil {
+		featureFlags, featureFlagETags, err := csl.loadFeatureFlags(ctx)
+		if err != nil {
 			return nil, err
 		}
+
+		enhancedFeatureFlags, enhancedFeatureFlagETags, err := csl.loadEnhancedFeatureFlags(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		deduplicatedFeatureFlags, err := csl.ProcessFeatureFlags(featureFlags, enhancedFeatureFlags)
+		if err != nil {
+			return nil, err
+		}
+
+		rawSettings.FeatureFlagETags = featureFlagETags
+		rawSettings.EnhancedFeatureFlagETags = enhancedFeatureFlagETags
+		rawSettings.FeatureFlagSettings = deduplicatedFeatureFlags
 	}
 
 	typedSettings, err := createTypedSettings(rawSettings, csl.Spec.Target.ConfigMapData)
@@ -144,12 +165,13 @@ func (csl *ConfigurationSettingLoader) CreateTargetSettings(ctx context.Context,
 	}
 
 	return &TargetKeyValueSettings{
-		ConfigMapSettings: typedSettings,
-		SecretSettings:    rawSettings.SecretSettings,
-		K8sSecrets:        rawSettings.K8sSecrets,
-		KeyValueETags:     rawSettings.KeyValueETags,
-		FeatureFlagETags:  rawSettings.FeatureFlagETags,
-		SentinelETags:     initializedSentinelETags,
+		ConfigMapSettings:        typedSettings,
+		SecretSettings:           rawSettings.SecretSettings,
+		K8sSecrets:               rawSettings.K8sSecrets,
+		KeyValueETags:            rawSettings.KeyValueETags,
+		EnhancedFeatureFlagETags: rawSettings.EnhancedFeatureFlagETags,
+		FeatureFlagETags:         rawSettings.FeatureFlagETags,
+		SentinelETags:            initializedSentinelETags,
 	}, nil
 }
 
@@ -180,7 +202,17 @@ func (csl *ConfigurationSettingLoader) RefreshKeyValueSettings(ctx context.Conte
 }
 
 func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Context, existingConfigMapSetting *map[string]string) (*TargetKeyValueSettings, error) {
-	latestFeatureFlagSettings, latestFeatureFlagETags, err := csl.getFeatureFlagSettings(ctx)
+	featureFlags, featureFlagETags, err := csl.loadFeatureFlags(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	enhancedFeatureFlags, enhancedFeatureFlagETags, err := csl.loadEnhancedFeatureFlags(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	latestFeatureFlags, err := csl.ProcessFeatureFlags(featureFlags, enhancedFeatureFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +222,7 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 		return nil, err
 	}
 
-	existingSettings[FeatureManagementSectionName] = latestFeatureFlagSettings
+	existingSettings[FeatureManagementSectionName] = latestFeatureFlags
 	typedStr, err := marshalJsonYaml(existingSettings, csl.Spec.Target.ConfigMapData)
 	if err != nil {
 		return nil, err
@@ -200,7 +232,8 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 		ConfigMapSettings: map[string]string{
 			csl.Spec.Target.ConfigMapData.Key: typedStr,
 		},
-		FeatureFlagETags: latestFeatureFlagETags,
+		EnhancedFeatureFlagETags: enhancedFeatureFlagETags,
+		FeatureFlagETags:         featureFlagETags,
 	}, nil
 }
 
@@ -208,8 +241,8 @@ func (csl *ConfigurationSettingLoader) RefreshFeatureFlagSettings(ctx context.Co
 type settingProcessContext struct {
 	rawSettings                      *RawSettings
 	resolver                         *SecretReferenceResolver
-	allowSnapshotRef                 bool                // false inside a snapshot's resolved settings to prevent nested resolution
-	snapshotClient                   *azappconfig.Client // lazily initialized when the first snapshot reference is resolved
+	allowSnapshotRef                 bool                   // false inside a snapshot's resolved settings to prevent nested resolution
+	snapshotClient                   AppConfigurationClient // lazily initialized when the first snapshot reference is resolved
 	useAIConfiguration               bool
 	useAIChatCompletionConfiguration bool
 }
@@ -383,8 +416,6 @@ func (csl *ConfigurationSettingLoader) processSettings(ctx context.Context, sett
 			if err := csl.processSettings(ctx, snapshotSettings, nestedCtx); err != nil {
 				return err
 			}
-			processCtx.useAIConfiguration = processCtx.useAIConfiguration || nestedCtx.useAIConfiguration
-			processCtx.useAIChatCompletionConfiguration = processCtx.useAIChatCompletionConfiguration || nestedCtx.useAIChatCompletionConfiguration
 		default:
 			processCtx.rawSettings.KeyValueSettings[trimmedKey] = setting.Value
 			processCtx.rawSettings.IsJsonContentTypeMap[trimmedKey] = isJsonContentType(setting.ContentType)
@@ -468,7 +499,24 @@ func (csl *ConfigurationSettingLoader) CheckPageETags(ctx context.Context, eTags
 	return settingsResponse.Etags != nil, nil
 }
 
-func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Context) (map[string]interface{}, map[acpv1.ComparableSelector][]*azcore.ETag, error) {
+func (csl *ConfigurationSettingLoader) CheckIfEnhancedFeatureFlagsChanged(ctx context.Context, eTags map[acpv1.ComparableSelector][]*azcore.ETag) (bool, error) {
+	settingsClient := csl.SettingsClient
+	if settingsClient == nil {
+		settingsClient = &EnhancedFeatureFlagEtagsClient{
+			etags: eTags,
+		}
+	}
+
+	settingsResponse, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+	if err != nil {
+		return false, err
+	}
+
+	// a non-nil Etags map signals that the enhanced feature flag endpoint page ETags changed
+	return settingsResponse.Etags != nil, nil
+}
+
+func (csl *ConfigurationSettingLoader) loadFeatureFlags(ctx context.Context) ([]azappconfig.Setting, map[acpv1.ComparableSelector][]*azcore.ETag, error) {
 	featureFlagFilters := GetFeatureFlagFilters(csl.Spec)
 	settingsClient := csl.SettingsClient
 	if settingsClient == nil {
@@ -476,47 +524,104 @@ func (csl *ConfigurationSettingLoader) getFeatureFlagSettings(ctx context.Contex
 			selectors: featureFlagFilters,
 		}
 	}
+
 	settingsResponse, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	settingsLength := len(settingsResponse.Settings)
-	featureFlagExist := make(map[string]bool, settingsLength)
-	deduplicatedFeatureFlags := make([]interface{}, 0)
+	return settingsResponse.Settings, settingsResponse.Etags, nil
+}
+
+func (csl *ConfigurationSettingLoader) loadEnhancedFeatureFlags(ctx context.Context) ([]azappconfig.FeatureFlag, map[acpv1.ComparableSelector][]*azcore.ETag, error) {
+	settingsClient := csl.SettingsClient
+	if settingsClient == nil {
+		settingsClient = &EnhancedFeatureFlagSettingsClient{
+			enhancedFeatureFlagSelectors: GetEnhancedFeatureFlagFilters(csl.Spec),
+		}
+	}
+
+	settingsResponse, err := csl.ExecuteFailoverPolicy(ctx, settingsClient)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	csl.TracingFeatures.UseEnhancedFeatureFlag = len(settingsResponse.EnhancedFeatureFlags) > 0
+	return settingsResponse.EnhancedFeatureFlags, settingsResponse.Etags, nil
+}
+
+func (csl *ConfigurationSettingLoader) ProcessFeatureFlags(featureFlags []azappconfig.Setting, enhancedFeatureFlags []azappconfig.FeatureFlag) (map[string]interface{}, error) {
 	clientEndpoint := ""
 	if manager, ok := csl.ClientManager.(*ConfigurationClientManager); ok {
 		// use primary client endpoint in feature flag reference
 		clientEndpoint = manager.StaticClientWrappers[0].Endpoint
 	}
 
-	// if settings returned like this: [{"id": "Beta"...}, {"id": "Alpha"...}, {"id": "Beta"...}], we need to deduplicate it to [{"id": "Alpha"...}, {"id": "Beta"...}], the last one wins
-	for i := settingsLength - 1; i >= 0; i-- {
-		key := *settingsResponse.Settings[i].Key
-		if featureFlagExist[key] {
+	mergedFeatureFlags := make([]map[string]interface{}, 0, len(featureFlags)+len(enhancedFeatureFlags))
+	for _, setting := range featureFlags {
+		if setting.Key == nil || setting.Value == nil {
 			continue
 		}
-		featureFlagExist[key] = true
-		var out map[string]interface{}
-		err := json.Unmarshal([]byte(*settingsResponse.Settings[i].Value), &out)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
+		var ff map[string]interface{}
+		if err := json.Unmarshal([]byte(*setting.Value), &ff); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal feature flag settings: %s", err.Error())
 		}
-		populateTelemetryMetadata(out, settingsResponse.Settings[i], clientEndpoint)
-		deduplicatedFeatureFlags = append(deduplicatedFeatureFlags, out)
+
+		featureFlagReference := fmt.Sprintf("%s/%s/%s", clientEndpoint, KeyValueResourceType, *setting.Key)
+		if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
+			featureFlagReference += fmt.Sprintf("?label=%s", *setting.Label)
+		}
+
+		populateTelemetryMetadata(ff, setting.ETag, featureFlagReference)
+		mergedFeatureFlags = append(mergedFeatureFlags, ff)
 	}
 
-	// reverse the deduplicateFeatureFlags to keep the order
-	for i, j := 0, len(deduplicatedFeatureFlags)-1; i < j; i, j = i+1, j-1 {
-		deduplicatedFeatureFlags[i], deduplicatedFeatureFlags[j] = deduplicatedFeatureFlags[j], deduplicatedFeatureFlags[i]
+	for _, featureFlag := range enhancedFeatureFlags {
+		if featureFlag.Name == nil {
+			continue
+		}
+
+		featureFlagReference := fmt.Sprintf("%s/%s/%s", clientEndpoint, FeatureFlagResourceType, *featureFlag.Name)
+		if featureFlag.Label != nil && strings.TrimSpace(*featureFlag.Label) != "" {
+			featureFlagReference += fmt.Sprintf("?label=%s", *featureFlag.Label)
+		}
+
+		convertedFF, err := convertToMicrosoftSchema(featureFlag)
+		if err != nil {
+			return nil, fmt.Errorf("Enhanced feature flag '%s': %w", *featureFlag.Name, err)
+		}
+		populateTelemetryMetadata(convertedFF, featureFlag.ETag, featureFlagReference)
+		mergedFeatureFlags = append(mergedFeatureFlags, convertedFF)
+	}
+
+	// Deduplicate by id keeping the last occurrence so enhanced feature flags supersede classic ones.
+	return deduplicateFeatureFlags(mergedFeatureFlags), nil
+}
+
+func deduplicateFeatureFlags(featureFlags []map[string]interface{}) map[string]interface{} {
+	seen := make(map[string]bool, len(featureFlags))
+	deduplicated := make([]interface{}, 0, len(featureFlags))
+
+	for i := len(featureFlags) - 1; i >= 0; i-- {
+		id, _ := featureFlags[i][FeatureFlagIdKey].(string)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		deduplicated = append(deduplicated, featureFlags[i])
+	}
+
+	// reverse to restore the original order
+	for i, j := 0, len(deduplicated)-1; i < j; i, j = i+1, j-1 {
+		deduplicated[i], deduplicated[j] = deduplicated[j], deduplicated[i]
 	}
 
 	// featureFlagSection = {"feature_flags": [{...}, {...}]}
-	var featureFlagSection = map[string]interface{}{
-		FeatureFlagSectionName: deduplicatedFeatureFlags,
+	featureFlagSection := map[string]interface{}{
+		FeatureFlagSectionName: deduplicated,
 	}
 
-	return featureFlagSection, settingsResponse.Etags, nil
+	return featureFlagSection
 }
 
 func (csl *ConfigurationSettingLoader) ResolveSecretReferences(
@@ -700,7 +805,7 @@ func (csl *ConfigurationSettingLoader) ExecuteFailoverPolicy(ctx context.Context
 	return nil, fmt.Errorf("all app configuration clients failed to get settings: %v", errors)
 }
 
-func updateClientBackoffStatus(clientWrapper *ConfigurationClientWrapper, successful bool) {
+func updateClientBackoffStatus(clientWrapper *AppConfigurationClientWrapper, successful bool) {
 	if successful {
 		clientWrapper.BackOffEndTime = metav1.Time{}
 		// Reset FailedAttempts when client succeeded
@@ -774,16 +879,20 @@ func GetKeyValueFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1
 	return deduplicateFilters(normalizeFilter(acpSpec.Configuration.Selectors))
 }
 
-func GetFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
-	featureFlagFilters := make([]acpv1.Selector, 0)
+func GetEnhancedFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
+	if acpSpec.FeatureFlag == nil {
+		return make([]acpv1.Selector, 0)
+	}
 
-	if acpSpec.FeatureFlag != nil {
-		featureFlagFilters = deduplicateFilters(normalizeFilter(acpSpec.FeatureFlag.Selectors))
-		for i := 0; i < len(featureFlagFilters); i++ {
-			if featureFlagFilters[i].KeyFilter != nil {
-				prefixedFeatureFlagFilter := FeatureFlagKeyPrefix + *featureFlagFilters[i].KeyFilter
-				featureFlagFilters[i].KeyFilter = &prefixedFeatureFlagFilter
-			}
+	return deduplicateFilters(normalizeFilter(acpSpec.FeatureFlag.Selectors))
+}
+
+func GetFeatureFlagFilters(acpSpec acpv1.AzureAppConfigurationProviderSpec) []acpv1.Selector {
+	featureFlagFilters := GetEnhancedFeatureFlagFilters(acpSpec)
+	for i := 0; i < len(featureFlagFilters); i++ {
+		if featureFlagFilters[i].KeyFilter != nil {
+			prefixedFeatureFlagFilter := FeatureFlagKeyPrefix + *featureFlagFilters[i].KeyFilter
+			featureFlagFilters[i].KeyFilter = &prefixedFeatureFlagFilter
 		}
 	}
 
@@ -1058,7 +1167,7 @@ func MergeSecret(secret map[string]corev1.Secret, newSecret map[string]corev1.Se
 }
 
 // rotates the slice to the left by k positions
-func rotate(clients []*ConfigurationClientWrapper, k int) {
+func rotate(clients []*AppConfigurationClientWrapper, k int) {
 	n := len(clients)
 	k = k % n
 	if k == 0 {
@@ -1072,7 +1181,7 @@ func rotate(clients []*ConfigurationClientWrapper, k int) {
 	reverseClients(clients, n-k, n-1)
 }
 
-func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
+func reverseClients(clients []*AppConfigurationClientWrapper, start, end int) {
 	for start < end {
 		clients[start], clients[end] = clients[end], clients[start]
 		start++
@@ -1080,18 +1189,7 @@ func reverseClients(clients []*ConfigurationClientWrapper, start, end int) {
 	}
 }
 
-func generateFeatureFlagReference(setting azappconfig.Setting, endpoint string) string {
-	featureFlagReference := fmt.Sprintf("%s/kv/%s", endpoint, *setting.Key)
-
-	// Check if the label is present and not empty
-	if setting.Label != nil && strings.TrimSpace(*setting.Label) != "" {
-		featureFlagReference += fmt.Sprintf("?label=%s", *setting.Label)
-	}
-
-	return featureFlagReference
-}
-
-func populateTelemetryMetadata(featureFlag map[string]interface{}, setting azappconfig.Setting, endpoint string) {
+func populateTelemetryMetadata(featureFlag map[string]interface{}, eTag *azcore.ETag, featureFlagRef string) {
 	if telemetry, ok := featureFlag[TelemetryKey].(map[string]interface{}); ok {
 		if enabled, ok := telemetry[EnabledKey].(bool); ok && enabled {
 			metadata, _ := telemetry[MetadataKey].(map[string]interface{})
@@ -1100,8 +1198,10 @@ func populateTelemetryMetadata(featureFlag map[string]interface{}, setting azapp
 			}
 
 			// Set the new metadata
-			metadata[ETagKey] = *setting.ETag
-			metadata[FeatureFlagReferenceKey] = generateFeatureFlagReference(setting, endpoint)
+			if eTag != nil {
+				metadata[ETagKey] = *eTag
+			}
+			metadata[FeatureFlagReferenceKey] = featureFlagRef
 			telemetry[MetadataKey] = metadata
 		}
 	}

@@ -1,5 +1,5 @@
 ---
-description: Triage new issues by labeling them by type and priority, identifying duplicates, asking clarifying questions when descriptions are unclear, and assigning them to the right team members.
+description: Triage new issues by labeling them by type, identifying duplicates, asking clarifying questions when descriptions are unclear, and assigning them to the right team members.
 on:
   issues:
     types: [opened, reopened]
@@ -34,10 +34,6 @@ safe-outputs:
       - wontfix
       - help wanted
       - good first issue
-      - priority/critical
-      - priority/high
-      - priority/medium
-      - priority/low
     max: 3
   noop:
 ---
@@ -60,23 +56,14 @@ Analyze the issue title and body and apply one of these labels:
 - **documentation** — Documentation is missing or incorrect
 - **invalid** — The issue is not actionable (e.g., spam, gibberish, unrelated)
 
-### 2. Assess Priority
-
-Assign a priority label based on impact and urgency:
-
-- **priority/critical** — Data loss, security vulnerability, complete outage, or production blocker
-- **priority/high** — Significant functionality broken, affects many users, no workaround
-- **priority/medium** — Partial functionality impacted, workaround exists, affects some users
-- **priority/low** — Minor issue, cosmetic, or rarely encountered edge case
-
-### 3. Check for Duplicates
+### 2. Check for Duplicates
 
 Search existing open and recently closed issues for similar topics. If you find a likely duplicate:
 - Apply the **duplicate** label
 - Add a comment referencing the original issue (e.g., "This appears to be a duplicate of #123. Please follow that issue for updates.")
-- Do NOT assign or set priority for duplicates
+- Do NOT assign or set labels for duplicates
 
-### 4. Request Clarification When Needed
+### 3. Request Clarification When Needed
 
 If the issue lacks sufficient information to triage or reproduce, add a comment asking for clarification. Examples of missing information:
 - No steps to reproduce for a bug
@@ -91,7 +78,7 @@ Ask focused, specific questions. Example comment:
 > - Steps to reproduce the issue
 > - Expected behavior and what you observed instead
 
-### 5. Assign to Team Members
+### 4. Assign to Team Members
 
 Assign the issue to appropriate team members based on these guidelines:
 

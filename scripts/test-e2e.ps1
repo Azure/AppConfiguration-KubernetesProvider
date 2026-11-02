@@ -157,9 +157,10 @@ try {
         "-ginkgo.junit-report=$(Join-Path $outputDirectory 'junit.xml')"
     ) | Tee-Object -FilePath (Join-Path $outputDirectory "tests.log")
 
+    # Keep wildcard filters in option=value arguments to avoid Unix argument expansion.
     $remainingSettings = Invoke-Tool az @(
         "appconfig", "kv", "list", "--endpoint", $endpoint, "--auth-mode", "login",
-        "--key", "e2e/$runID/*", "--label", "*", "--fields", "key", "label", "--output", "json", "--only-show-errors"
+        "--key=e2e/$runID/*", "--label=*", "--fields", "key", "label", "--output", "json", "--only-show-errors"
     ) | ConvertFrom-Json
     if (@($remainingSettings).Count -ne 0) {
         throw "Azure test settings remain after cleanup. Inspect the run prefix e2e/$runID/."

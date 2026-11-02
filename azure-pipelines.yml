@@ -141,7 +141,7 @@ stages:
               )
               Invoke-Checked az @(
                   "appconfig", "kv", "list", "--endpoint", $endpoint, "--auth-mode", "login",
-                  "--key", "e2e/ado-preflight-$(Build.BuildId)/*", "--fields", "key", "--output", "json"
+                  "--key=e2e/ado-preflight-$(Build.BuildId)/*", "--fields", "key", "--output", "json"
               )
               & ./scripts/test-e2e.ps1 `
                   -KubeContext $context `

@@ -36,66 +36,6 @@ var _ = Describe("AppConfiguationProvider controller", func() {
 	)
 
 	Describe("When create AzureAppConfigurationProvider object", Ordered, func() {
-		It("Should update AzureAppConfigurationProvider Status to COMPLETE after reconcile finish", func() {
-			By("By creating a new AzureAppConfigurationProvider")
-			mapResult := make(map[string]string)
-			mapResult["testKey"] = "testValue"
-
-			allSettings := &loader.TargetKeyValueSettings{
-				ConfigMapSettings: mapResult,
-			}
-
-			mockConfigurationSettings.EXPECT().CreateTargetSettings(gomock.Any(), gomock.Any()).Return(allSettings, nil)
-
-			ctx := context.Background()
-			providerName := "test-appconfigurationprovider"
-			configMapName := "configmap-to-be-created"
-			configProvider := &acpv1.AzureAppConfigurationProvider{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "appconfig.kubernetes.config/v1",
-					Kind:       "AzureAppConfigurationProvider",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      providerName,
-					Namespace: ProviderNamespace,
-				},
-				Spec: acpv1.AzureAppConfigurationProviderSpec{
-					Endpoint:                &EndpointName,
-					ReplicaDiscoveryEnabled: false,
-					Target: acpv1.ConfigurationGenerationParameters{
-						ConfigMapName: configMapName,
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, configProvider)).Should(Succeed())
-
-			providerLookupKey := types.NamespacedName{Name: providerName, Namespace: ProviderNamespace}
-			createdProvider := &acpv1.AzureAppConfigurationProvider{}
-
-			// We'll need to retry getting this newly created AppConfiguationProvider, given that creation may not immediately happen.
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, providerLookupKey, createdProvider)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-
-			configmapLookupKey := types.NamespacedName{Name: configMapName, Namespace: ProviderNamespace}
-			configmap := &corev1.ConfigMap{}
-
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, configmapLookupKey, configmap)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-
-			Expect(*createdProvider.Spec.Endpoint).Should(Equal(EndpointName))
-			Expect(createdProvider.Spec.Target.ConfigMapName).Should(Equal(configMapName))
-			Expect(configmap.Name).Should(Equal(configMapName))
-			Expect(configmap.Namespace).Should(Equal(ProviderNamespace))
-			Expect(configmap.Data["testKey"]).Should(Equal("testValue"))
-			Expect(createdProvider.Status.Phase).Should(Equal(acpv1.PhaseComplete))
-
-			_ = k8sClient.Delete(ctx, configProvider)
-		})
-
 		It("Should create new configMap", func() {
 			By("By getting multiple configuration settings from AppConfig")
 			mapResult := make(map[string]string)

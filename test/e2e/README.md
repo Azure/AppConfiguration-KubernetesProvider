@@ -3,14 +3,15 @@
 These opt-in tests exercise a deployed provider image against real App
 Configuration and Kubernetes services. They cover:
 
-- Initial ConfigMap creation, including label selection and prefix trimming.
+- Initial ConfigMap creation, including label selection, prefix trimming, and
+  the provider reaching `Complete` status.
 - Refresh from `v1` to `v2` without changing the provider resource.
 - A selector change with refresh disabled, including removal of previously
   selected keys.
 
-Assertions poll for the exact ConfigMap data, with a two-minute deadline. The
-refresh interval is ten seconds. These are test settings, not product latency
-guarantees.
+Assertions poll for the exact ConfigMap data and initial `Complete` status, with
+a two-minute deadline per wait. The refresh interval is ten seconds. These are
+test settings, not product latency guarantees.
 
 ## Prerequisites
 

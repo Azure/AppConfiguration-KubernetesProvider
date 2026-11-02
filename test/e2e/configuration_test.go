@@ -56,13 +56,18 @@ var _ = Describe("Live configuration projection", Serial, func() {
 		}, NodeTimeout(2*time.Minute))
 	})
 
-	It("creates a ConfigMap with exactly the selected initial values", func(ctx SpecContext) {
+	It("creates a ConfigMap with exactly the selected initial values and completes reconciliation", func(ctx SpecContext) {
 		f.addSetting(ctx, "Message", "baseline", "v1")
 		f.addSetting(ctx, "Color", "baseline", "blue")
 		f.addSetting(ctx, "Message", "other", "not-selected")
 		f.createProvider(ctx, "baseline", false)
 
 		f.waitForData(ctx, map[string]string{"Message": "v1", "Color": "blue"})
+		Eventually(func() (acpv1.AppConfigurationSyncPhase, error) {
+			observed := &acpv1.AzureAppConfigurationProvider{}
+			err := kubeClient.Get(ctx, client.ObjectKeyFromObject(f.provider), observed)
+			return observed.Status.Phase, err
+		}).WithContext(ctx).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Equal(acpv1.PhaseComplete))
 	}, SpecTimeout(4*time.Minute))
 
 	It("refreshes the same ConfigMap after an Azure value changes", func(ctx SpecContext) {

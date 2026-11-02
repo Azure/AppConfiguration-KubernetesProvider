@@ -9,8 +9,167 @@ pr:
 - release/*
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: ubuntu-24.04
 
-steps:
-- script: echo "Hello from Azure Pipelines"
-  displayName: Hello world
+stages:
+- stage: Build
+  displayName: Build and offline tests
+  jobs:
+  - job: GoTests
+    timeoutInMinutes: 20
+    steps:
+    - checkout: self
+    - bash: |
+        set -euo pipefail
+        version="$(awk '$1 == "go" { print $2 }' go.mod)"
+        test -n "$version"
+        echo "##vso[task.setvariable variable=GoVersion]$version"
+      displayName: Read Go version
+    - task: GoTool@0
+      inputs:
+        version: $(GoVersion)
+      displayName: Install Go
+    - bash: |
+        set -euo pipefail
+        go build -o out/manager ./cmd/main.go
+        GOBIN="$(Agent.TempDirectory)/envtest" go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.22
+        assets="$("$(Agent.TempDirectory)/envtest/setup-envtest" use 1.30.0 -p path)"
+        export KUBEBUILDER_ASSETS="$assets"
+        CGO_ENABLED=0 go test ./... -count=1 -coverprofile cover.out
+        go test -tags=e2e ./test/e2e -run '^TestLiveConfiguration$' -count=1
+        go vet -tags=e2e ./test/e2e
+      displayName: Build and run offline tests
+
+- stage: LiveE2E
+  displayName: Live AKS functional tests
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.Reason'], 'Manual'))
+  lockBehavior: sequential
+  jobs:
+  - job: LiveTests
+    timeoutInMinutes: 45
+    cancelTimeoutInMinutes: 5
+    steps:
+    - checkout: self
+    - bash: |
+        set -euo pipefail
+        mkdir -p artifacts/e2e
+        version="$(awk '$1 == "go" { print $2 }' go.mod)"
+        test -n "$version"
+        echo "##vso[task.setvariable variable=GoVersion]$version"
+      displayName: Prepare test output and Go version
+    - task: GoTool@0
+      inputs:
+        version: $(GoVersion)
+      displayName: Install Go
+    - task: HelmInstaller@1
+      inputs:
+        helmVersionToInstall: 3.22.1
+      displayName: Install Helm 3
+    - bash: |
+        set -euo pipefail
+        tools="$(Agent.TempDirectory)/e2e-tools"
+        mkdir -p "$tools"
+        az aks install-cli \
+          --client-version v1.36.5 \
+          --kubelogin-version v0.2.22 \
+          --install-location "$tools/kubectl" \
+          --kubelogin-install-location "$tools/kubelogin"
+        echo "##vso[task.prependpath]$tools"
+      displayName: Install kubectl and kubelogin
+    - task: AzureCLI@2
+      displayName: Authenticate, deploy candidate, and run live tests
+      inputs:
+        azureSubscription: K8s Provider GitHub PR Integration Test
+        visibleAzLogin: false
+        useGlobalConfig: false
+        scriptType: pscore
+        scriptLocation: inlineScript
+        workingDirectory: $(Build.SourcesDirectory)
+        inlineScript: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          function Invoke-Checked {
+              param([string]$Command, [string[]]$Arguments)
+              & $Command @Arguments
+              if ($LASTEXITCODE -ne 0) {
+                  throw "$Command $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
+              }
+          }
+
+          $context = "k8sprovider-integrationtest-aks"
+          $endpoint = "https://appconfig-k8sprovider-integrationtest.azconfig.io"
+          $tempRoot = Join-Path $env:AGENT_TEMPDIRECTORY "acp-e2e-$([guid]::NewGuid().ToString('N'))"
+          New-Item -ItemType Directory -Path $tempRoot | Out-Null
+          $oldKubeconfig = $env:KUBECONFIG
+          $oldDockerConfig = $env:DOCKER_CONFIG
+          $env:KUBECONFIG = Join-Path $tempRoot "kubeconfig"
+          $env:DOCKER_CONFIG = Join-Path $tempRoot "docker"
+          New-Item -ItemType Directory -Path $env:DOCKER_CONFIG | Out-Null
+
+          try {
+              Write-Host "Source revision: $(Build.SourceVersion)"
+              Invoke-Checked az @(
+                  "account", "show", "--query",
+                  "{subscription:id,tenant:tenantId,identity:user.name}", "--output", "json"
+              )
+              if ([string]::IsNullOrWhiteSpace($env:AZURE_CONFIG_DIR)) {
+                  throw "AzureCLI@2 did not provide an isolated Azure CLI configuration directory."
+              }
+              Invoke-Checked az @(
+                  "aks", "get-credentials", "--resource-group", "k8sprovider-integrationtest",
+                  "--name", $context, "--file", $env:KUBECONFIG, "--format", "exec"
+              )
+              Invoke-Checked kubelogin @(
+                  "convert-kubeconfig", "--login", "azurecli",
+                  "--kubeconfig", $env:KUBECONFIG, "--azure-config-dir", $env:AZURE_CONFIG_DIR
+              )
+              Invoke-Checked kubectl @(
+                  "--context", $context, "--request-timeout=30s",
+                  "wait", "--for=condition=Ready", "nodes", "--all", "--timeout=120s"
+              )
+              foreach ($resource in @("customresourcedefinitions.apiextensions.k8s.io", "clusterroles.rbac.authorization.k8s.io", "namespaces")) {
+                  Invoke-Checked kubectl @(
+                      "--context", $context, "--request-timeout=30s",
+                      "auth", "can-i", "create", $resource, "--quiet"
+                  )
+              }
+              Invoke-Checked kubectl @(
+                  "--context", $context, "--request-timeout=30s",
+                  "get", "serviceaccount", "k8s-provider-sa", "--namespace", "e2e", "--output", "name"
+              )
+              Invoke-Checked az @(
+                  "appconfig", "kv", "list", "--endpoint", $endpoint, "--auth-mode", "login",
+                  "--key", "e2e/ado-preflight-$(Build.BuildId)/*", "--fields", "key", "--output", "json"
+              )
+              & ./scripts/test-e2e.ps1 `
+                  -KubeContext $context `
+                  -AppConfigEndpoint $endpoint `
+                  -AcrName "appconfige2etest" `
+                  -ImageRepository "kubernetes-provider-e2e" `
+                  -TestNamespace "e2e" `
+                  -ServiceAccount "k8s-provider-sa"
+          }
+          finally {
+              $env:KUBECONFIG = $oldKubeconfig
+              $env:DOCKER_CONFIG = $oldDockerConfig
+              Remove-Item -LiteralPath $tempRoot -Recurse -Force
+          }
+    - task: PublishTestResults@2
+      displayName: Publish live test results
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFormat: JUnit
+        testResultsFiles: '**/junit.xml'
+        searchFolder: $(Build.SourcesDirectory)/artifacts/e2e
+        failTaskOnFailedTests: true
+        failTaskOnFailureToPublishResults: true
+        failTaskOnMissingResultsFile: true
+        testRunTitle: Kubernetes Provider live E2E
+    - task: PublishPipelineArtifact@1
+      displayName: Publish live test diagnostics
+      condition: always()
+      inputs:
+        targetPath: $(Build.SourcesDirectory)/artifacts/e2e
+        artifact: e2e

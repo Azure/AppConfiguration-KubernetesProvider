@@ -28,12 +28,6 @@ The software may collect information about you and your use of the software and 
 
 ## Contributing
 
-### Live functional tests
-
-The opt-in [live E2E tests](test/e2e/README.md) build and deploy a candidate image
-to an existing AKS test cluster, then verify ConfigMap creation, configuration
-refresh, and selector changes against a real App Configuration store.
-
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
 Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
 the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
